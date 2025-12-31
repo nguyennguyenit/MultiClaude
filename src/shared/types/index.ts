@@ -95,3 +95,6 @@ export interface AppSettings {
   themeMode: ThemeMode
   colorTheme: ColorTheme
 }
+
+// Notification types
+export * from './notification'

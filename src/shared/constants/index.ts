@@ -1,2 +1,4 @@
 export * from './ipc-channels'
 export * from './themes'
+export * from './terminal-themes'
+export * from './notification'
