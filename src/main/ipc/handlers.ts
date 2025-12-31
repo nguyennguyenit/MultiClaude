@@ -4,21 +4,25 @@ import { IPC_CHANNELS } from '@shared/constants'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { ProjectStore } from '../project/project-store'
+import type { NotificationManager } from '../notification'
 
 interface Managers {
   terminalManager: TerminalManager
   gitManager: GitManager
   projectStore: ProjectStore
+  notificationManager: NotificationManager
 }
 
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
-  const { terminalManager, gitManager, projectStore } = managers
+  const { terminalManager, gitManager, projectStore, notificationManager } = managers
 
-  // Forward terminal output to renderer (check if window is destroyed first)
+  // Forward terminal output to renderer + notification detection
   terminalManager.on('output', ({ terminalId, data }) => {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.TERMINAL_OUTPUT, { terminalId, data })
     }
+    // Pattern detection for notifications
+    notificationManager.processOutput(terminalId, data)
   })
 
   terminalManager.on('exit', ({ terminalId, exitCode }) => {
@@ -149,5 +153,50 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   // App handlers
   ipcMain.handle(IPC_CHANNELS.APP_GET_PATH, async (_, name: string) => {
     return app.getPath(name as any)
+  })
+
+  // Notification handlers
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS, () => {
+    return notificationManager.getSettings()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_SETTINGS, (_, settings) => {
+    return notificationManager.updateSettings(settings)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, (_, { botToken, chatId }) => {
+    notificationManager.setTelegram(botToken, chatId)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_DISCORD, (_, { webhookUrl }) => {
+    notificationManager.setDiscord(webhookUrl)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, () => {
+    return notificationManager.getSettings().telegramConfigured
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_DISCORD_STATUS, () => {
+    return notificationManager.getSettings().discordConfigured
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_TEST_TELEGRAM, async (_, { botToken, chatId }) => {
+    return notificationManager.testTelegram(botToken, chatId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_TEST_DISCORD, async (_, { webhookUrl }) => {
+    return notificationManager.testDiscord(webhookUrl)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_TELEGRAM, () => {
+    notificationManager.clearTelegram()
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_DISCORD, () => {
+    notificationManager.clearDiscord()
+    return true
   })
 }

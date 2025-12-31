@@ -1,0 +1,91 @@
+import { app, BrowserWindow, dialog } from 'electron'
+import path from 'path'
+import { TerminalManager } from './terminal/terminal-manager'
+import { GitManager } from './git/git-manager'
+import { ProjectStore } from './project/project-store'
+import { NotificationManager } from './notification'
+import { registerIpcHandlers } from './ipc/handlers'
+
+// Singleton instances
+let mainWindow: BrowserWindow | null = null
+let terminalManager: TerminalManager | null = null
+let gitManager: GitManager | null = null
+let projectStore: ProjectStore | null = null
+let notificationManager: NotificationManager | null = null
+
+// Vite dev server URL (injected by vite-plugin-electron)
+const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 800,
+    minHeight: 600,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    },
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#1e1e1e',
+      symbolColor: '#d4d4d4',
+      height: 40
+    },
+    backgroundColor: '#1e1e1e'
+  })
+
+  // Initialize managers
+  terminalManager = new TerminalManager()
+  gitManager = new GitManager()
+  projectStore = new ProjectStore()
+  notificationManager = new NotificationManager()
+  notificationManager.setWindow(mainWindow)
+
+  // Register IPC handlers
+  registerIpcHandlers(mainWindow, {
+    terminalManager,
+    gitManager,
+    projectStore,
+    notificationManager
+  })
+
+  // Load the app
+  if (VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(VITE_DEV_SERVER_URL)
+    mainWindow.webContents.openDevTools()
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+}
+
+app.whenReady().then(() => {
+  createWindow()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
+  })
+})
+
+app.on('window-all-closed', () => {
+  // Cleanup
+  terminalManager?.destroyAll()
+  notificationManager?.destroy()
+
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error)
+  dialog.showErrorBox('Error', error.message)
+})
