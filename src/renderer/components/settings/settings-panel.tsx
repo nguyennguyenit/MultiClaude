@@ -1,10 +1,16 @@
+import { useState } from 'react'
 import { ThemeSelector } from './theme-selector'
+import { NotificationSettings } from './notification-settings'
+
+type SettingsTab = 'appearance' | 'notifications'
 
 interface SettingsPanelProps {
   onClose: () => void
 }
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+
   return (
     <div className="border-t border-[var(--mc-border)] bg-[var(--mc-bg-secondary)] p-3">
       <div className="flex items-center justify-between mb-3">
@@ -18,7 +24,51 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           </svg>
         </button>
       </div>
-      <ThemeSelector />
+
+      {/* Tab buttons */}
+      <div className="flex gap-1 mb-3">
+        <TabButton
+          active={activeTab === 'appearance'}
+          onClick={() => setActiveTab('appearance')}
+        >
+          Appearance
+        </TabButton>
+        <TabButton
+          active={activeTab === 'notifications'}
+          onClick={() => setActiveTab('notifications')}
+        >
+          Notifications
+        </TabButton>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'appearance' && <ThemeSelector />}
+      {activeTab === 'notifications' && <NotificationSettings />}
     </div>
+  )
+}
+
+function TabButton({
+  children,
+  active,
+  onClick
+}: {
+  children: React.ReactNode
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        px-3 py-1 text-xs rounded
+        ${active
+          ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)]'
+          : 'bg-[var(--mc-bg-hover)] text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-active)]'
+        }
+      `}
+    >
+      {children}
+    </button>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Sidebar } from './components/sidebar'
 import { TerminalTabs, TerminalGrid } from './components/terminal'
-import { useAppStore, useSettingsStore } from './stores'
+import { useAppStore, useSettingsStore, setupNotificationListener } from './stores'
 import { COLOR_THEMES } from '@shared/constants'
 
 function App() {
@@ -21,6 +21,12 @@ function App() {
   // Load settings on mount
   useEffect(() => {
     loadSettings()
+  }, [])
+
+  // Setup notification listener
+  useEffect(() => {
+    const cleanup = setupNotificationListener()
+    return cleanup
   }, [])
 
   // Apply theme classes to document

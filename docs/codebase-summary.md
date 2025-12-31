@@ -30,24 +30,34 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 
 #### Settings
 - **SettingsStore** (Zustand): Theme preferences in-memory + localStorage
-- **NotificationSettings**: Event toggles, sound config, external platform credentials
+- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications)
+- **ThemeSelector**: Color theme and dark/light mode selection
 - Themes: 7 color themes + light/dark/system mode
 
 #### Notifications
-**Phase 1 - Types & Constants:**
+**Phase 1 - Completed: Types & Constants**
 - **NotificationEventType**: 'taskComplete' | 'taskFailed' | 'reviewNeeded'
 - **SoundPreset**: 'default' | 'minimal' | 'retro'
 - **NotificationSettings**: Event toggles, sound config, Telegram/Discord flags
 - **TelegramCredentials**, **DiscordCredentials**: Secure credential interfaces
 - **DETECTION_PATTERNS**: Regex patterns for automatic event detection
 
-**Phase 2 - Core Implementation:**
+**Phase 2 - Completed: Core Backend**
 - **NotificationManager**: Central orchestrator for all notification types
 - **SecureStorage**: Electron safeStorage wrapper for credential encryption (Telegram/Discord)
 - **PatternDetector**: Terminal output pattern matching with 300ms debounce
 - **TelegramNotifier**: Telegram Bot API integration via HTTP
 - **DiscordNotifier**: Discord Webhook integration with URL validation
 - 12 IPC handlers for credential management, testing, and retrieval
+
+**Phase 3 - Completed: Renderer UI**
+- **NotificationStore** (Zustand): Settings state management with sound caching
+- **NotificationSettings**: Main settings UI with event toggles, sound preset selector
+- **TelegramConfigModal**: Modal for Telegram botToken/chatId configuration
+- **DiscordConfigModal**: Modal for Discord webhookUrl configuration
+- Sound playback with audio element caching (auto, success, error, info types)
+- Settings persistence via IPC with local optimistic updates
+- Integrated into SettingsPanel with tabbed navigation
 
 ## File Organization
 
@@ -78,8 +88,18 @@ src/
 │   │   ├── terminal/        # Terminal UI
 │   │   ├── sidebar/         # Project/settings sidebar
 │   │   └── settings/        # Settings panels
+│   │       ├── settings-panel.tsx
+│   │       ├── theme-selector.tsx
+│   │       ├── notification-settings.tsx
+│   │       ├── telegram-config-modal.tsx
+│   │       ├── discord-config-modal.tsx
+│   │       └── index.ts
 │   ├── hooks/               # Custom React hooks
 │   ├── stores/              # Zustand stores
+│   │   ├── app-store.ts
+│   │   ├── settings-store.ts
+│   │   ├── notification-store.ts
+│   │   └── index.ts
 │   └── styles/              # CSS
 ├── preload/                 # IPC bridge
 │   └── index.ts
@@ -214,5 +234,13 @@ interface NotificationSettings {
 - **IPC Handlers**: 12 handlers covering settings, Telegram/Discord management, testing
 - **Main Process Integration**: NotificationManager lifecycle, terminal output forwarding, app cleanup
 
-**Next Phase:**
-- Phase 3: Renderer UI for notification settings panel, credential input forms, test triggers
+**Phase 3 - Completed: Renderer UI**
+- **NotificationStore**: Zustand store with async settings loading/saving, sound caching
+- **NotificationSettings**: Event toggles (taskComplete, taskFailed, reviewNeeded), sound preset selector
+- **TelegramConfigModal**: Secure credential input and management (configure/clear buttons)
+- **DiscordConfigModal**: Webhook URL input and management
+- **Sound Playback**: Audio element caching for efficient sound playback
+- **Settings Panel Integration**: Notification tab in tabbed settings UI (Appearance/Notifications)
+- **App Integration**: setupNotificationListener() called in App component on mount
+
+**Feature Status**: Feature complete and fully integrated
