@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Sidebar } from './components/sidebar'
-import { TerminalTabs, TerminalView } from './components/terminal'
+import { TerminalTabs, TerminalGrid } from './components/terminal'
 import { useAppStore, useSettingsStore } from './stores'
 import { COLOR_THEMES } from '@shared/constants'
 
@@ -11,6 +11,7 @@ function App() {
     addTerminal,
     setProjects,
     setActiveProject,
+    setActiveTerminal,
     sidebarOpen,
     toggleSidebar
   } = useAppStore()
@@ -87,10 +88,10 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)]">
       {/* Title Bar */}
-      <div className="h-10 bg-[#323232] flex items-center px-4 titlebar-drag">
+      <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag">
         <button
           onClick={toggleSidebar}
-          className="p-1 hover:bg-[#4d4d4d] rounded titlebar-no-drag mr-2"
+          className="p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag mr-2"
           title="Toggle Sidebar"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,22 +109,11 @@ function App() {
           <TerminalTabs />
 
           <div className="flex-1 relative">
-            {terminals.map((terminal) => (
-              <TerminalView
-                key={terminal.id}
-                terminalId={terminal.id}
-                isActive={terminal.id === activeTerminalId}
-              />
-            ))}
-
-            {terminals.length === 0 && (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <div className="text-center">
-                  <p className="mb-2">No terminals open</p>
-                  <p className="text-sm">Click the + button to create one</p>
-                </div>
-              </div>
-            )}
+            <TerminalGrid
+              terminals={terminals}
+              activeTerminalId={activeTerminalId}
+              onTerminalClick={setActiveTerminal}
+            />
           </div>
         </div>
       </div>

@@ -33,6 +33,11 @@ multiclaude/
 │   │   ├── App.tsx
 │   │   ├── components/
 │   │   │   ├── terminal/
+│   │   │   │   ├── terminal-grid.tsx    # Auto-split grid layout
+│   │   │   │   ├── terminal-pane.tsx    # Resizable pane wrapper
+│   │   │   │   ├── terminal-view.tsx    # xterm.js renderer
+│   │   │   │   ├── terminal-tabs.tsx    # Tab bar
+│   │   │   │   └── index.ts
 │   │   │   ├── sidebar/
 │   │   │   ├── settings/
 │   │   │   └── projects/
@@ -59,6 +64,7 @@ multiclaude/
 - `@xterm/xterm`: Terminal rendering
 - `@xterm/addon-fit`: Auto-resize terminal
 - `@xterm/addon-webgl`: GPU-accelerated rendering
+- `react-resizable-panels`: Auto-split terminal grid layout
 - `zustand`: State management
 - `tailwindcss`: Styling
 
@@ -69,3 +75,22 @@ multiclaude/
 3. **JSON Store for Persistence**: Simple file-based storage for sessions/projects
 4. **GitHub CLI for Auth**: Use `gh` CLI for OAuth flow (proven, maintained)
 5. **localStorage for Settings**: Theme preferences persisted in renderer via Zustand + localStorage
+6. **Auto-Split Terminal Grid**: All terminals visible simultaneously in resizable grid layout
+
+## Terminal Grid Layout
+
+The terminal grid auto-splits based on terminal count:
+
+| Terminals | Layout |
+|-----------|--------|
+| 1 | 1x1 |
+| 2 | 1x2 |
+| 3-4 | 2x2 |
+| 5-6 | 2x3 |
+| 7-9 | 3x3 |
+| 10-12 | 3x4 |
+
+**Components:**
+- `TerminalGrid`: Calculates grid dimensions, renders nested `react-resizable-panels`
+- `TerminalPane`: Wrapper with click-to-focus, ResizeObserver for debounced fit
+- `TerminalView`: xterm.js renderer with WebGL addon

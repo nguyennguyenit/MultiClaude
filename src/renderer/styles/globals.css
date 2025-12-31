@@ -127,3 +127,41 @@ body {
 /* Theme: Forest */
 .theme-forest.light { --mc-accent: #16A34A; --mc-bg-primary: #DCFCE7; }
 .theme-forest.dark { --mc-accent: #4ADE80; --mc-bg-primary: #052E16; }
+
+/* ============================================
+   Terminal Grid - Resize Handles & Pane Styles
+   ============================================ */
+
+/* Resize handle base */
+.terminal-resize-handle {
+  background: var(--mc-border);
+  transition: background 0.15s ease;
+}
+
+.terminal-resize-handle:hover,
+.terminal-resize-handle:active {
+  background: var(--mc-accent);
+}
+
+/* Horizontal resize handle (between columns) */
+.terminal-resize-handle-horizontal {
+  width: 4px;
+  cursor: col-resize;
+}
+
+/* Vertical resize handle (between rows) */
+.terminal-resize-handle-vertical {
+  height: 4px;
+  cursor: row-resize;
+}
+
+/* Terminal pane wrapper */
+.terminal-pane {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Active pane focus indicator */
+.terminal-pane-active {
+  box-shadow: inset 0 0 0 2px var(--mc-accent);
+}
