@@ -1,10 +1,15 @@
 import { app, BrowserWindow, dialog } from 'electron'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { TerminalManager } from './terminal/terminal-manager'
 import { GitManager } from './git/git-manager'
 import { ProjectStore } from './project/project-store'
 import { NotificationManager } from './notification'
 import { registerIpcHandlers } from './ipc/handlers'
+
+// ES module compatibility for __dirname
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Singleton instances
 let mainWindow: BrowserWindow | null = null
