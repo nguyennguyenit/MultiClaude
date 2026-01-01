@@ -1,5 +1,6 @@
 import { useEffect, memo } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
+import { useAppStore } from '../../stores'
 
 interface TerminalViewProps {
   terminalId: string
@@ -14,6 +15,7 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     terminalId,
     initialOutput
   })
+  const appendOutput = useAppStore((state) => state.appendOutput)
 
   // Initialize terminal on mount
   useEffect(() => {
@@ -25,10 +27,11 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     const unsubscribe = window.electron.terminal.onOutput(({ terminalId: id, data }) => {
       if (id === terminalId) {
         write(data)
+        appendOutput(terminalId, data)
       }
     })
     return unsubscribe
-  }, [terminalId, write])
+  }, [terminalId, write, appendOutput])
 
   // Focus when becomes active
   useEffect(() => {
