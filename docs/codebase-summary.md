@@ -19,9 +19,17 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
 
+#### Sidebar & UI Components
+- **Sidebar**: Left-side navigation with Features (Git/GitHub), Tools (terminal management), and Settings
+  - Features: Git status display/initialization and GitHub authentication/repo creation
+  - Tools: New Terminal, Start Claude, Kill All with terminal counting
+  - Settings toggle at bottom
+- **ProjectTabs**: Top tab bar for switching between projects with keyboard shortcuts (Alt+1-9)
+
 #### Project Management
 - **ProjectStore**: electron-store persistence for projects
 - File-based storage with project metadata (id, name, path, gitRemote)
+- Active project tracked via AppStore (activeProjectId)
 
 #### Git Integration
 - **GitManager**: Git operations via simple-git
@@ -292,6 +300,10 @@ interface ProjectTerminal {
   - Props added: `onAddTerminal`, `onCloseTerminal`, `onStartClaude`
   - Empty state with "New Terminal" button when no terminals
 
-**Phase 4 - Pending: Integration**
-- Project switching with terminal layout restore
-- Session persistence for terminal layouts
+**Phase 4 - Completed: Sidebar Refactor**
+- Removed Projects section from sidebar (now in ProjectTabs component)
+- Added Tools section with: New Terminal, Start Claude, Kill All
+- Sidebar layout reorganized: Features (Git/GitHub) → Tools → Settings
+- New Terminal: Creates terminal in active project with correct cwd/projectId
+- Start Claude: Invokes Claude Code in active terminal (disabled if no terminal selected)
+- Kill All: Terminates all terminals in active project with count display
