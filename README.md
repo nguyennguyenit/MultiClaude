@@ -80,6 +80,7 @@ src/
 |--------|----------|
 | Copy | Select text (auto-copies on selection) |
 | Paste | Right-click |
+| Insert File Path | Drag-and-drop file from file manager |
 
 ## License
 

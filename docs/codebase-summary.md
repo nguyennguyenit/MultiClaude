@@ -113,6 +113,8 @@ src/
 │   │       ├── discord-config-modal.tsx
 │   │       └── index.ts
 │   ├── hooks/               # Custom React hooks
+│   │   ├── use-file-drop.ts # Drag-drop file paths into terminal
+│   │   └── index.ts
 │   ├── stores/              # Zustand stores
 │   │   ├── app-store.ts
 │   │   ├── settings-store.ts

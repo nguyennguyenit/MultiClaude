@@ -1,5 +1,6 @@
 import { useEffect, memo } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
+import { useFileDrop } from '../../hooks/use-file-drop'
 import { useAppStore } from '../../stores'
 
 interface TerminalViewProps {
@@ -16,6 +17,13 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     initialOutput
   })
   const appendOutput = useAppStore((state) => state.appendOutput)
+
+  // File drop handler - write dropped file paths to PTY
+  const { isDragOver, dropHandlers } = useFileDrop({
+    onDrop: (paths) => {
+      window.electron.terminal.write(terminalId, paths[0])
+    }
+  })
 
   // Initialize terminal on mount
   useEffect(() => {
@@ -49,8 +57,9 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
   return (
     <div
       ref={containerRef}
-      className="terminal-container"
+      className={`terminal-container${isDragOver ? ' terminal-drop-active' : ''}`}
       style={{ height: '100%', width: '100%' }}
+      {...dropHandlers}
     />
   )
 })
