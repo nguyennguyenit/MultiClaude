@@ -1,0 +1,87 @@
+{
+  "name": "multiclaude",
+  "version": "1.0.0",
+  "description": "Multi-agent terminal manager for Claude Code",
+  "main": "dist/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && electron-builder",
+    "build:unpack": "npm run build -- --dir",
+    "preview": "vite preview",
+    "electron:dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennguyenit/MultiClaude.git"
+  },
+  "keywords": [
+    "electron",
+    "terminal",
+    "claude",
+    "multi-agent"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "electron": "^33.3.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.17.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "vite-plugin-electron": "^0.28.8",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "wait-on": "^8.0.1"
+  },
+  "dependencies": {
+    "@lydell/node-pty": "^1.0.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
+    "electron-store": "^8.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-resizable-panels": "^4.1.1",
+    "simple-git": "^3.27.0",
+    "zustand": "^5.0.2"
+  },
+  "build": {
+    "appId": "com.multiclaude.app",
+    "productName": "MultiClaude",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  }
+}
