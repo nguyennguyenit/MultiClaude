@@ -95,6 +95,8 @@ src/
 │   │   ├── telegram-notifier.ts
 │   │   ├── discord-notifier.ts
 │   │   └── index.ts
+│   ├── clipboard/           # Clipboard operations
+│   │   └── clipboard-handler.ts
 │   └── ipc/                 # IPC handlers
 │       └── handlers.ts
 ├── renderer/                # React UI
@@ -157,6 +159,9 @@ src/
 
 ### Session & App
 - `session:save`, `session:restore`, `app:get-path`
+
+### Clipboard
+- `clipboard:save-image` - Save clipboard image to temp file, returns path or null
 
 ## Key Data Structures
 

@@ -52,7 +52,10 @@ export const IPC_CHANNELS = {
 
   // YOLO Mode channels
   YOLO_MODE_GET: 'yolo:get',
-  YOLO_MODE_SET: 'yolo:set'
+  YOLO_MODE_SET: 'yolo:set',
+
+  // Clipboard channels
+  CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

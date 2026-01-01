@@ -6,6 +6,7 @@ import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { ProjectStore } from '../project/project-store'
 import type { NotificationManager } from '../notification'
+import { saveClipboardImage } from '../clipboard/clipboard-handler'
 
 interface Managers {
   terminalManager: TerminalManager
@@ -270,5 +271,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
+  })
+
+  // Clipboard handlers
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, () => {
+    return saveClipboardImage()
   })
 }

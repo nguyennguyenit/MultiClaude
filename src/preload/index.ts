@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants'
 import type { Terminal, Project, GitStatus, GitHubAuth, AppSession, NotificationSettings, NotificationEvent, NotificationTestResult } from '@shared/types'
 
@@ -57,6 +57,12 @@ export interface ElectronAPI {
   yolo: {
     get: (projectPath: string) => Promise<boolean>
     set: (projectPath: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  }
+  clipboard: {
+    saveImage: () => Promise<string | null>
+  }
+  utils: {
+    getFilePath: (file: File) => string
   }
 }
 
@@ -130,6 +136,12 @@ const api: ElectronAPI = {
   yolo: {
     get: (projectPath) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_GET, projectPath),
     set: (projectPath, enabled) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_SET, { projectPath, enabled })
+  },
+  clipboard: {
+    saveImage: () => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE)
+  },
+  utils: {
+    getFilePath: (file) => webUtils.getPathForFile(file)
   }
 }
 
