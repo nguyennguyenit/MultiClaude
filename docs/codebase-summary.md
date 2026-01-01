@@ -87,6 +87,9 @@ src/
 │   ├── components/
 │   │   ├── terminal/        # Terminal UI
 │   │   ├── sidebar/         # Project/settings sidebar
+│   │   ├── project-tabs/    # Project tab bar
+│   │   │   ├── project-tabs.tsx
+│   │   │   └── index.ts
 │   │   └── settings/        # Settings panels
 │   │       ├── settings-panel.tsx
 │   │       ├── theme-selector.tsx
@@ -268,9 +271,15 @@ interface ProjectTerminal {
 - **AppStore.projectTerminals**: `Record<string, ProjectTerminalLayout>` state in Zustand
 - **Store Methods**: `setProjectTerminals(projectId, layout)`, `getProjectTerminals(projectId)`
 
-**Phase 2 - Pending: UI Components**
-- Tab bar UI for per-project terminal switching
-- Grid position management and persistence
+**Phase 2 - Completed: UI Components**
+- **ProjectTabs**: Tab bar component for per-project terminal switching
+  - Props: `projects`, `activeProjectId`, `onSelectProject`, `onAddProject`
+  - Displays up to 9 visible tabs with keyboard shortcut badges (Alt+1-9)
+  - Overflow dropdown for 10+ projects with click-outside/Escape dismissal
+  - Add project (+) button for creating new projects
+  - Empty state message when no projects exist
+  - Active tab highlight with visual distinction
+  - Located at `src/renderer/components/project-tabs/`
 
 **Phase 3 - Pending: Integration**
 - Project switching with terminal layout restore
