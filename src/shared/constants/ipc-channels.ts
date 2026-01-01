@@ -8,6 +8,7 @@ export const IPC_CHANNELS = {
   TERMINAL_RESIZE: 'terminal:resize',
   TERMINAL_LIST: 'terminal:list',
   TERMINAL_INVOKE_CLAUDE: 'terminal:invoke-claude',
+  TERMINAL_TITLE_CHANGE: 'terminal:title-change',
 
   // Project channels
   PROJECT_LIST: 'project:list',
@@ -47,7 +48,11 @@ export const IPC_CHANNELS = {
   NOTIFICATION_TEST_DISCORD: 'notification:test-discord',
   NOTIFICATION_CLEAR_TELEGRAM: 'notification:clear-telegram',
   NOTIFICATION_CLEAR_DISCORD: 'notification:clear-discord',
-  NOTIFICATION_EVENT: 'notification:event'
+  NOTIFICATION_EVENT: 'notification:event',
+
+  // YOLO Mode channels
+  YOLO_MODE_GET: 'yolo:get',
+  YOLO_MODE_SET: 'yolo:set'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

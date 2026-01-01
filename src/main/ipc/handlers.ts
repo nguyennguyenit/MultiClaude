@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
-import { readdirSync } from 'fs'
+import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
+import { join } from 'path'
 import { IPC_CHANNELS } from '@shared/constants'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
@@ -28,6 +29,13 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   terminalManager.on('exit', ({ terminalId, exitCode }) => {
     if (!window.isDestroyed()) {
       window.webContents.send('terminal:exit', { terminalId, exitCode })
+    }
+  })
+
+  // Forward terminal title changes to renderer
+  terminalManager.on('titleChange', ({ terminalId, title }) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, { terminalId, title })
     }
   })
 
@@ -198,5 +206,69 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_DISCORD, () => {
     notificationManager.clearDiscord()
     return true
+  })
+
+  // YOLO Mode settings.local.json content
+  const yoloSettingsContent = {
+    permissions: {
+      allow: [],
+      deny: [
+        "Bash(rm ~/)",
+        "Bash(rm /)",
+        "Bash(prisma db push)",
+        "Bash(npx prisma db push)",
+        "Bash(npm run db:push)",
+        "Bash(bun run db:push)",
+        "Bash(pnpm run db:push)",
+        "Bash(rm -rf /:*)",
+        "Bash(rm -rf ~:*)",
+        "Bash(sudo rm -rf :*::*)",
+        "Bash(dd if=/dev/zero of=/dev/sd*:*)",
+        "Bash(mkfs.:*::*)",
+        "Bash(fdisk:*)",
+        "Bash(parted:*)",
+        "Bash(chown -R /:*)",
+        "Bash(chmod -R 0 /:*)",
+        "Bash(shutdown:*)",
+        "Bash(reboot:*)",
+        "Bash(systemctl poweroff:*)",
+        "Bash(git reset --hard:*)",
+        "Bash(git clean -fdx:*)",
+        "Bash(git push --force:*)",
+        "Bash(docker system prune -af:*)",
+        "Bash(docker volume rm -f :*::*)",
+        "Bash(prisma migrate reset:*)"
+      ]
+    }
+  }
+
+  // YOLO Mode handlers
+  ipcMain.handle(IPC_CHANNELS.YOLO_MODE_GET, async (_, projectPath: string) => {
+    const settingsPath = join(projectPath, '.claude', 'settings.local.json')
+    return existsSync(settingsPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.YOLO_MODE_SET, async (_, { projectPath, enabled }: { projectPath: string; enabled: boolean }) => {
+    const claudeDir = join(projectPath, '.claude')
+    const settingsPath = join(claudeDir, 'settings.local.json')
+
+    try {
+      if (enabled) {
+        // Create .claude directory if it doesn't exist
+        if (!existsSync(claudeDir)) {
+          mkdirSync(claudeDir, { recursive: true })
+        }
+        // Write settings.local.json
+        writeFileSync(settingsPath, JSON.stringify(yoloSettingsContent, null, 2))
+      } else {
+        // Remove settings.local.json if it exists
+        if (existsSync(settingsPath)) {
+          unlinkSync(settingsPath)
+        }
+      }
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
   })
 }

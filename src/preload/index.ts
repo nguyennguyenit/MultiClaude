@@ -13,6 +13,7 @@ export interface ElectronAPI {
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
+    onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
   }
   project: {
     list: () => Promise<Project[]>
@@ -53,6 +54,10 @@ export interface ElectronAPI {
     clearDiscord: () => Promise<boolean>
     onEvent: (callback: (event: NotificationEvent) => void) => () => void
   }
+  yolo: {
+    get: (projectPath: string) => Promise<boolean>
+    set: (projectPath: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  }
 }
 
 const api: ElectronAPI = {
@@ -72,6 +77,11 @@ const api: ElectronAPI = {
       const listener = (_: any, data: any) => callback(data)
       ipcRenderer.on('terminal:exit', listener)
       return () => ipcRenderer.removeListener('terminal:exit', listener)
+    },
+    onTitleChange: (callback) => {
+      const listener = (_: any, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, listener)
     }
   },
   project: {
@@ -116,6 +126,10 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_EVENT, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_EVENT, listener)
     }
+  },
+  yolo: {
+    get: (projectPath) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_GET, projectPath),
+    set: (projectPath, enabled) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_SET, { projectPath, enabled })
   }
 }
 
