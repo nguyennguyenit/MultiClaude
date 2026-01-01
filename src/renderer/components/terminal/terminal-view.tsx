@@ -1,6 +1,7 @@
-import { useEffect, memo } from 'react'
+import { useEffect, memo, useRef } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
 import { useFileDrop } from '../../hooks/use-file-drop'
+import { useClipboardPaste } from '../../hooks/use-clipboard-paste'
 import { useAppStore } from '../../stores'
 
 interface TerminalViewProps {
@@ -17,12 +18,20 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     initialOutput
   })
   const appendOutput = useAppStore((state) => state.appendOutput)
+  const wrapperRef = useRef<HTMLDivElement>(null)
 
   // File drop handler - write dropped file paths to PTY
   const { isDragOver, dropHandlers } = useFileDrop({
     onDrop: (paths) => {
       window.electron.terminal.write(terminalId, paths[0])
     }
+  })
+
+  // Clipboard paste handler - save image and insert path
+  useClipboardPaste({
+    terminalId,
+    containerRef: wrapperRef,
+    isActive
   })
 
   // Initialize terminal on mount
@@ -56,10 +65,28 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
 
   return (
     <div
-      ref={containerRef}
-      className={`terminal-container${isDragOver ? ' terminal-drop-active' : ''}`}
-      style={{ height: '100%', width: '100%' }}
+      ref={wrapperRef}
+      className="terminal-container-wrapper"
+      style={{ height: '100%', width: '100%', position: 'relative' }}
       {...dropHandlers}
-    />
+    >
+      <div
+        ref={containerRef}
+        className="terminal-container"
+        style={{ height: '100%', width: '100%' }}
+      />
+      {/* Drop overlay - captures drop events above xterm canvas */}
+      {isDragOver && (
+        <div
+          className="terminal-drop-overlay"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 10,
+            pointerEvents: 'all'
+          }}
+        />
+      )}
+    </div>
   )
 })

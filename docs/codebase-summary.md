@@ -115,7 +115,8 @@ src/
 │   │       ├── discord-config-modal.tsx
 │   │       └── index.ts
 │   ├── hooks/               # Custom React hooks
-│   │   ├── use-file-drop.ts # Drag-drop file paths into terminal
+│   │   ├── use-file-drop.ts       # Drag-drop file paths into terminal
+│   │   ├── use-clipboard-paste.ts # Ctrl+V image paste → temp file → insert path
 │   │   └── index.ts
 │   ├── stores/              # Zustand stores
 │   │   ├── app-store.ts
