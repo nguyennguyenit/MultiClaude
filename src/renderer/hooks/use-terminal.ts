@@ -172,12 +172,16 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     })
 
     // Restore previous output if available
+    // Note: We write to terminal display only, not appending to store
+    // since initialOutput already came from the store
     if (initialOutput) {
       terminal.write(initialOutput)
+      // Skip initial resize when restoring - prevents shell prompt redraw duplicates
+      // The resize will happen naturally when fit() is called
+    } else {
+      // Initial resize only for fresh terminals
+      window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
     }
-
-    // Initial resize
-    window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
   }, [terminalId, initialOutput, onResize])
 
   // Write data to terminal

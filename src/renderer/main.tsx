@@ -4,12 +4,13 @@ import App from './App'
 import './styles/globals.css'
 
 // Prevent Electron's default file drop behavior (navigating to file)
-// This MUST be at document level to prevent the browser from handling drops
-document.addEventListener('dragover', (e) => {
+// Note: On Linux, DOM drag events may not fire from file manager drops
+// File drops are handled via IPC from main process (will-navigate intercept)
+document.body.addEventListener('dragover', (e) => {
   e.preventDefault()
 }, { capture: true })
 
-document.addEventListener('drop', (e) => {
+document.body.addEventListener('drop', (e) => {
   e.preventDefault()
 }, { capture: true })
 

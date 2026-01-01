@@ -29,11 +29,33 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounterRef = useRef(0)
+  // Skip appending output right after restore to prevent duplicates from shell prompt redraws
+  const skipAppendRef = useRef(!!initialOutput)
 
   // Initialize terminal on mount
   useEffect(() => {
     initTerminal()
   }, [initTerminal])
+
+  // After terminal init settles, allow appending output (for restore case)
+  useEffect(() => {
+    if (!skipAppendRef.current) return
+    const timer = setTimeout(() => {
+      skipAppendRef.current = false
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Listen for file drops via IPC (main process intercepts will-navigate for file:// URLs)
+  // This is a fallback for when DOM drag events don't fire (Linux file manager issue)
+  useEffect(() => {
+    const unsubscribe = window.electron.onFileDrop((filePath) => {
+      if (!isActive) return
+      const formatted = formatPath(filePath)
+      window.electron.terminal.write(terminalId, formatted)
+    })
+    return unsubscribe
+  }, [terminalId, isActive])
 
   // Drag-drop handlers for file path insertion
   // Use capture phase to intercept events before they reach xterm's internal elements
@@ -41,7 +63,10 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     const wrapper = wrapperRef.current
     if (!wrapper) return
 
+    const currentTerminalId = terminalId
+
     const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault()
       e.stopPropagation()
       dragCounterRef.current++
       if (dragCounterRef.current === 1) {
@@ -50,6 +75,7 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     }
 
     const handleDragOver = (e: DragEvent) => {
+      e.preventDefault()
       e.stopPropagation()
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'copy'
@@ -66,6 +92,7 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     }
 
     const handleDrop = (e: DragEvent) => {
+      e.preventDefault()
       e.stopPropagation()
       setIsDragOver(false)
       dragCounterRef.current = 0
@@ -82,14 +109,13 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
           if (filePath) {
             paths.push(formatPath(filePath))
           }
-        } catch {
-          // Failed to get file path - ignore
+        } catch (err) {
+          console.error('[DragDrop] Error:', err)
         }
       }
 
       if (paths.length > 0) {
-        const text = paths.join(' ')
-        window.electron.terminal.write(terminalId, text)
+        window.electron.terminal.write(currentTerminalId, paths.join(' '))
       }
     }
 
@@ -112,7 +138,10 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     const unsubscribe = window.electron.terminal.onOutput(({ terminalId: id, data }) => {
       if (id === terminalId) {
         write(data)
-        appendOutput(terminalId, data)
+        // Skip appending during restore period to prevent duplicate prompts
+        if (!skipAppendRef.current) {
+          appendOutput(terminalId, data)
+        }
       }
     })
     return unsubscribe

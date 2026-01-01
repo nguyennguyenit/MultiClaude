@@ -64,6 +64,18 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
+  // Handle file drops - Electron on Linux may not fire DOM drag events
+  // Intercept navigation attempts from file drops and send file paths via IPC
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // Check if this is a file:// URL (file drop trying to navigate)
+    if (url.startsWith('file://')) {
+      event.preventDefault()
+      const filePath = decodeURIComponent(url.replace('file://', ''))
+      console.log('[main] File drop intercepted:', filePath)
+      mainWindow?.webContents.send('file-dropped', { filePath })
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })

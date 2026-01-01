@@ -64,6 +64,7 @@ export interface ElectronAPI {
   utils: {
     getFilePath: (file: File) => string
   }
+  onFileDrop: (callback: (filePath: string) => void) => () => void
 }
 
 const api: ElectronAPI = {
@@ -142,6 +143,11 @@ const api: ElectronAPI = {
   },
   utils: {
     getFilePath: (file) => webUtils.getPathForFile(file)
+  },
+  onFileDrop: (callback) => {
+    const listener = (_: unknown, data: { filePath: string }) => callback(data.filePath)
+    ipcRenderer.on('file-dropped', listener)
+    return () => ipcRenderer.removeListener('file-dropped', listener)
   }
 }
 
