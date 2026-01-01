@@ -16,8 +16,8 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
 - **TerminalView**: xterm.js renderer with WebGL addon
-- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count)
-- **TerminalPane**: Resizable wrapper with focus handling
+- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals
+- **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
 
 #### Project Management
 - **ProjectStore**: electron-store persistence for projects
@@ -281,6 +281,17 @@ interface ProjectTerminal {
   - Active tab highlight with visual distinction
   - Located at `src/renderer/components/project-tabs/`
 
-**Phase 3 - Pending: Integration**
+**Phase 3 - Completed: Terminal Header Bar & Add Cell**
+- **TerminalPane Header Bar**: 24px header with editable title (double-click), Claude badge, Start Claude button, Close button
+  - Title editing: Enter to save, Escape to cancel, blur to commit
+  - Props added: `onClose`, `onStartClaude`, `onTitleChange`
+  - Claude mode indicator badge when `isClaudeMode` is true
+- **TerminalGrid Add Cell**: Placeholder cell for adding new terminals
+  - Shown when terminal count < 9
+  - Positioned in last row (or new row if last row full)
+  - Props added: `onAddTerminal`, `onCloseTerminal`, `onStartClaude`
+  - Empty state with "New Terminal" button when no terminals
+
+**Phase 4 - Pending: Integration**
 - Project switching with terminal layout restore
 - Session persistence for terminal layouts
