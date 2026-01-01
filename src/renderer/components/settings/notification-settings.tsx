@@ -178,15 +178,15 @@ function Toggle({
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
       className={`
-        relative w-8 h-4 rounded-full transition-colors
+        relative w-8 h-4 rounded-full transition-colors overflow-hidden
         ${checked ? 'bg-[var(--mc-accent)]' : 'bg-[var(--mc-bg-hover)]'}
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
       `}
     >
       <span
         className={`
-          absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform
-          ${checked ? 'translate-x-4' : 'translate-x-0.5'}
+          absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition-transform
+          ${checked ? 'translate-x-4' : 'translate-x-0'}
         `}
       />
     </button>

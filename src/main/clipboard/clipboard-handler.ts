@@ -1,4 +1,3 @@
-import { clipboard } from 'electron'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -24,15 +23,14 @@ function generateFilename(): string {
 }
 
 /**
- * Save clipboard image to temp folder
- * @returns File path if image exists, null otherwise
+ * Save image from base64 data to temp folder
+ * @param base64Data - Base64 encoded image data (without data URL prefix)
+ * @returns File path if successful, null otherwise
  */
-export function saveClipboardImage(): string | null {
+export function saveClipboardImage(base64Data: string): string | null {
   try {
-    const image = clipboard.readImage()
-
-    // Check if clipboard has an image
-    if (image.isEmpty()) {
+    if (!base64Data) {
+      console.log('[clipboard] No image data provided')
       return null
     }
 
@@ -40,10 +38,11 @@ export function saveClipboardImage(): string | null {
     const filename = generateFilename()
     const filePath = join(dir, filename)
 
-    // Get PNG buffer and write to file
-    const buffer = image.toPNG()
+    // Convert base64 to buffer and write to file
+    const buffer = Buffer.from(base64Data, 'base64')
     writeFileSync(filePath, buffer)
 
+    console.log('[clipboard] Image saved:', filePath)
     return filePath
   } catch (error) {
     console.error('Failed to save clipboard image:', error)

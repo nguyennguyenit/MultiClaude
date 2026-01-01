@@ -82,25 +82,43 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       const items = e.clipboardData?.items
       if (!items) return
 
-      // Check for image in clipboard
-      let hasImage = false
+      // Look for image in clipboard items
+      let imageItem: DataTransferItem | null = null
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.startsWith('image/')) {
-          hasImage = true
+          imageItem = items[i]
           break
         }
       }
 
       // If no image, let xterm handle text paste normally
-      if (!hasImage) return
+      if (!imageItem) return
 
       // Prevent default paste behavior
       e.preventDefault()
       e.stopPropagation()
 
       try {
-        // Save clipboard image via IPC and get file path
-        const filePath = await window.electron.clipboard.saveImage()
+        // Get image blob from clipboard event
+        const blob = imageItem.getAsFile()
+        if (!blob) return
+
+        // Convert blob to base64
+        const reader = new FileReader()
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string
+            // Remove data URL prefix to get pure base64
+            const base64 = result.split(',')[1]
+            resolve(base64)
+          }
+          reader.onerror = reject
+        })
+        reader.readAsDataURL(blob)
+        const base64Data = await base64Promise
+
+        // Save image via IPC and get file path
+        const filePath = await window.electron.clipboard.saveImage(base64Data)
         if (filePath) {
           // Quote path if contains special characters
           const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)

@@ -20,9 +20,13 @@ export const SOUND_PRESETS: { id: SoundPreset; name: string; description: string
   { id: 'retro', name: 'Retro', description: '8-bit style sounds' }
 ]
 
-// Pattern detection (placeholder - update after research)
+// Pattern detection for Claude Code terminal output
+// These patterns match Claude Code's specific output format
 export const DETECTION_PATTERNS = {
-  taskComplete: /✓.*completed|Task completed|Done!|finished successfully/i,
-  taskFailed: /✗.*failed|Error:|Task failed|FAILED/i,
-  reviewNeeded: /review needed|waiting for review|needs review|please review/i
+  // Claude Code shows "✓ Task completed" or similar when done
+  taskComplete: /✓\s*(Task\s+)?completed|Task\s+completed\s+successfully|finished\s+successfully/i,
+  // Match specific task failure indicators, not generic "Error:" which appears everywhere
+  // Claude Code shows "✗ Task failed" or "Task failed:" when a task actually fails
+  taskFailed: /✗\s*(Task\s+)?failed|^Task\s+failed[:\s]|command\s+failed\s+with\s+exit\s+code/i,
+  reviewNeeded: /review\s+needed|waiting\s+for\s+review|needs\s+review|please\s+review/i
 }

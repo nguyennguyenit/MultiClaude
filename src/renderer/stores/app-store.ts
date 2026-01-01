@@ -12,6 +12,7 @@ interface AppState {
   addTerminal: (terminal: Terminal) => void
   removeTerminal: (id: string) => void
   setActiveTerminal: (id: string | null) => void
+  updateTerminalTitle: (id: string, title: string) => void
   appendOutput: (id: string, data: string) => void
 
   // Projects
@@ -56,6 +57,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   setActiveTerminal: (id) => set({ activeTerminalId: id }),
+
+  updateTerminalTitle: (id, title) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, title } : t
+      )
+    })),
 
   appendOutput: (id, data) =>
     set((state) => ({

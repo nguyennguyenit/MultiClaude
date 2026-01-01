@@ -9,7 +9,8 @@ interface DetectionResult {
 
 export class PatternDetector extends EventEmitter {
   private debounceMap: Map<string, number> = new Map()
-  private debounceMs = 300
+  // 5 second debounce to prevent notification spam from repeated patterns
+  private debounceMs = 5000
 
   // Check terminal output for notification patterns
   detect(terminalId: string, output: string): DetectionResult | null {

@@ -75,12 +75,13 @@ export function useFileDrop(options: UseFileDropOptions): UseFileDropReturn {
     const files = e.dataTransfer?.files
     if (!files || files.length === 0) return
 
-    // Extract paths from dropped files (Electron provides .path)
+    // Extract paths using Electron's webUtils API (works with contextIsolation)
     const paths: string[] = []
     for (let i = 0; i < files.length; i++) {
-      const file = files[i] as File & { path?: string }
-      if (file.path) {
-        paths.push(formatPath(file.path))
+      const file = files[i]
+      const filePath = window.electron.utils.getFilePath(file)
+      if (filePath) {
+        paths.push(formatPath(filePath))
       }
     }
 

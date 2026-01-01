@@ -7,6 +7,8 @@ export interface Terminal {
   claudeSessionId?: string
   projectId?: string
   createdAt: Date
+  // Allow OSC title updates only after activity starts (e.g., Claude mode)
+  allowTitleUpdate?: boolean
 }
 
 export interface TerminalState {

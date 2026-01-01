@@ -274,7 +274,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Clipboard handlers
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, () => {
-    return saveClipboardImage()
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, (_, base64Data: string) => {
+    return saveClipboardImage(base64Data)
   })
 }

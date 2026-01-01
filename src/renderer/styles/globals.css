@@ -53,6 +53,13 @@ body {
   background: color-mix(in srgb, var(--mc-accent) 8%, transparent);
 }
 
+/* Drop overlay - appears during drag, captures drop above xterm canvas */
+.terminal-drop-overlay {
+  background: color-mix(in srgb, var(--mc-accent) 12%, transparent);
+  border: 2px dashed var(--mc-accent);
+  border-radius: 4px;
+}
+
 .terminal-container .xterm {
   padding: 8px;
   height: 100%;

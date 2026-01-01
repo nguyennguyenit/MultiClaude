@@ -59,7 +59,7 @@ export interface ElectronAPI {
     set: (projectPath: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
   }
   clipboard: {
-    saveImage: () => Promise<string | null>
+    saveImage: (base64Data: string) => Promise<string | null>
   }
   utils: {
     getFilePath: (file: File) => string
@@ -138,7 +138,7 @@ const api: ElectronAPI = {
     set: (projectPath, enabled) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_SET, { projectPath, enabled })
   },
   clipboard: {
-    saveImage: () => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE)
+    saveImage: (base64Data: string) => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, base64Data)
   },
   utils: {
     getFilePath: (file) => webUtils.getPathForFile(file)
