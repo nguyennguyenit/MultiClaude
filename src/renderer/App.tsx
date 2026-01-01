@@ -1,14 +1,20 @@
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { Sidebar } from './components/sidebar'
-import { TerminalTabs, TerminalGrid } from './components/terminal'
+import { ProjectTabs } from './components/project-tabs'
+import { TerminalGrid } from './components/terminal'
 import { useAppStore, useSettingsStore, setupNotificationListener } from './stores'
+import { useKeyboardShortcuts } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
 
 function App() {
   const {
     terminals,
+    projects,
+    activeProjectId,
     activeTerminalId,
     addTerminal,
+    removeTerminal,
+    addProject,
     setProjects,
     setActiveProject,
     setActiveTerminal,
@@ -17,6 +23,52 @@ function App() {
   } = useAppStore()
 
   const { settings, loadSettings } = useSettingsStore()
+
+  // Get active project for terminal creation
+  const activeProject = projects.find(p => p.id === activeProjectId)
+
+  // Filter terminals for active project
+  const projectTerminals = activeProjectId
+    ? terminals.filter(t => t.projectId === activeProjectId)
+    : terminals
+
+  // Handler: Add new project via folder picker
+  const handleAddProject = useCallback(async () => {
+    const path = await window.electron.project.openFolder()
+    if (!path) return
+
+    const name = path.split('/').pop() || 'Untitled'
+    const project = await window.electron.project.create({ name, path })
+    addProject(project)
+    setActiveProject(project.id)
+  }, [addProject, setActiveProject])
+
+  // Handler: Add new terminal in active project
+  const handleAddTerminal = useCallback(async () => {
+    const terminal = await window.electron.terminal.create({
+      cwd: activeProject?.path,
+      projectId: activeProject?.id
+    })
+    addTerminal(terminal)
+  }, [activeProject, addTerminal])
+
+  // Handler: Close active terminal
+  const handleCloseTerminal = useCallback(async () => {
+    if (!activeTerminalId) return
+    await window.electron.terminal.destroy(activeTerminalId)
+    removeTerminal(activeTerminalId)
+  }, [activeTerminalId, removeTerminal])
+
+  // Handler: Start Claude in terminal
+  const handleStartClaude = useCallback(async (terminalId: string) => {
+    await window.electron.terminal.invokeClaude(terminalId)
+  }, [])
+
+  // Setup keyboard shortcuts
+  useKeyboardShortcuts({
+    onAddTerminal: handleAddTerminal,
+    onCloseTerminal: handleCloseTerminal
+  })
 
   // Load settings on mount
   useEffect(() => {
@@ -51,25 +103,12 @@ function App() {
   useEffect(() => {
     const init = async () => {
       // Load projects
-      const projects = await window.electron.project.list()
-      setProjects(projects)
+      const loadedProjects = await window.electron.project.list()
+      setProjects(loadedProjects)
 
-      // Restore session
-      const session = await window.electron.session.restore()
-      if (session?.terminals?.length) {
-        // Recreate terminals from session
-        for (const termSession of session.terminals) {
-          const terminal = await window.electron.terminal.create({
-            cwd: termSession.cwd,
-            projectId: termSession.projectId
-          })
-          addTerminal(terminal)
-        }
-      } else {
-        // Create initial terminal
-        const terminal = await window.electron.terminal.create()
-        addTerminal(terminal)
-      }
+      // Always create a single initial terminal on startup
+      const terminal = await window.electron.terminal.create()
+      addTerminal(terminal)
     }
     init()
   }, [])
@@ -107,20 +146,27 @@ function App() {
         <span className="text-sm font-medium">MultiClaude</span>
       </div>
 
+      {/* Project Tabs */}
+      <ProjectTabs
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={setActiveProject}
+        onAddProject={handleAddProject}
+      />
+
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <TerminalTabs />
-
-          <div className="flex-1 relative">
-            <TerminalGrid
-              terminals={terminals}
-              activeTerminalId={activeTerminalId}
-              onTerminalClick={setActiveTerminal}
-            />
-          </div>
+        <div className="flex-1 min-w-0">
+          <TerminalGrid
+            terminals={projectTerminals}
+            activeTerminalId={activeTerminalId}
+            onTerminalClick={setActiveTerminal}
+            onAddTerminal={handleAddTerminal}
+            onCloseTerminal={handleCloseTerminal}
+            onStartClaude={handleStartClaude}
+          />
         </div>
       </div>
     </div>

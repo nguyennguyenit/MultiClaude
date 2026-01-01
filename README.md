@@ -66,8 +66,16 @@ src/
 3. **Start Claude**: Click "Start Claude" to invoke Claude Code in the active terminal
 4. **Git Integration**: Initialize git, connect to GitHub, push changes from the sidebar
 
-### Terminal Shortcuts
+### Keyboard Shortcuts
 
+#### Global Shortcuts
+| Action | Shortcut |
+|--------|----------|
+| Switch to Project 1-9 | Alt+1 to Alt+9 |
+| New Terminal | Ctrl+N |
+| Close Active Terminal | Ctrl+W |
+
+#### Terminal Shortcuts
 | Action | Shortcut |
 |--------|----------|
 | Copy | Select text (auto-copies on selection) |

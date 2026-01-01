@@ -307,3 +307,18 @@ interface ProjectTerminal {
 - New Terminal: Creates terminal in active project with correct cwd/projectId
 - Start Claude: Invokes Claude Code in active terminal (disabled if no terminal selected)
 - Kill All: Terminates all terminals in active project with count display
+
+**Phase 5 - Completed: Layout Refactor & Keyboard Shortcuts**
+- **App Layout**: Removed TerminalTabs, ProjectTabs moved to top below header bar
+  - Layout hierarchy: Header → ProjectTabs → [Sidebar | TerminalGrid]
+  - TerminalGrid filters terminals by `activeProjectId` for per-project isolation
+- **useKeyboardShortcuts Hook**: Global keyboard shortcuts via `useKeyboardShortcuts()` in App.tsx
+  - Alt+1~9: Switch to project by index (1st-9th project in projects list)
+  - Ctrl+N: Create new terminal in active project
+  - Ctrl+W: Close active terminal
+- **Session Management**: Simplified startup - always creates single initial terminal (removed session restoration)
+- **Handlers**: App.tsx now contains handlers for project/terminal operations
+  - `handleAddProject`: Opens folder picker, creates project, sets as active
+  - `handleAddTerminal`: Creates terminal with active project's cwd/projectId
+  - `handleCloseTerminal`: Destroys terminal and removes from state
+  - `handleStartClaude`: Invokes Claude Code in specified terminal
