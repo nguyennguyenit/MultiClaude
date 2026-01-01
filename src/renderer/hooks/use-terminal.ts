@@ -78,57 +78,70 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     })
 
     // Ctrl+V paste - detect image in clipboard and save to temp file
-    terminal.element?.addEventListener('paste', async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items
-      if (!items) return
+    // Use attachCustomKeyEventHandler to intercept Ctrl+V before paste event
+    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      // Only handle Ctrl+V / Cmd+V keydown
+      if (e.type !== 'keydown') return true
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
 
-      // Look for image in clipboard items
-      let imageItem: DataTransferItem | null = null
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith('image/')) {
-          imageItem = items[i]
-          break
-        }
-      }
+      // Check clipboard for image using Clipboard API
+      navigator.clipboard.read().then(async (clipboardItems) => {
+        let hasImage = false
 
-      // If no image, let xterm handle text paste normally
-      if (!imageItem) return
+        for (const item of clipboardItems) {
+          // Check for image types
+          const imageType = item.types.find(t => t.startsWith('image/'))
+          if (imageType) {
+            hasImage = true
+            try {
+              const blob = await item.getType(imageType)
 
-      // Prevent default paste behavior
-      e.preventDefault()
-      e.stopPropagation()
+              // Convert blob to base64
+              const reader = new FileReader()
+              const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => {
+                  const result = reader.result as string
+                  const base64 = result.split(',')[1]
+                  resolve(base64)
+                }
+                reader.onerror = reject
+              })
+              reader.readAsDataURL(blob)
+              const base64Data = await base64Promise
 
-      try {
-        // Get image blob from clipboard event
-        const blob = imageItem.getAsFile()
-        if (!blob) return
-
-        // Convert blob to base64
-        const reader = new FileReader()
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const result = reader.result as string
-            // Remove data URL prefix to get pure base64
-            const base64 = result.split(',')[1]
-            resolve(base64)
+              // Save image via IPC and get file path
+              const filePath = await window.electron.clipboard.saveImage(base64Data)
+              if (filePath) {
+                const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
+                  ? `"${filePath.replace(/"/g, '\\"')}"`
+                  : filePath
+                window.electron.terminal.write(terminalId, formatted)
+              }
+            } catch (err) {
+              console.error('Failed to process clipboard image:', err)
+            }
+            break
           }
-          reader.onerror = reject
-        })
-        reader.readAsDataURL(blob)
-        const base64Data = await base64Promise
-
-        // Save image via IPC and get file path
-        const filePath = await window.electron.clipboard.saveImage(base64Data)
-        if (filePath) {
-          // Quote path if contains special characters
-          const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
-            ? `"${filePath.replace(/"/g, '\\"')}"`
-            : filePath
-          window.electron.terminal.write(terminalId, formatted)
         }
-      } catch (error) {
-        console.error('Failed to save clipboard image:', error)
-      }
+
+        // If no image found, paste text normally
+        if (!hasImage) {
+          try {
+            const text = await navigator.clipboard.readText()
+            if (text) terminal.paste(text)
+          } catch {
+            // Clipboard permission denied
+          }
+        }
+      }).catch(() => {
+        // Clipboard API failed, fall back to normal paste
+        navigator.clipboard.readText().then(text => {
+          if (text) terminal.paste(text)
+        }).catch(() => {})
+      })
+
+      // Prevent default handling - we handle paste ourselves
+      return false
     })
 
     // Handle input
