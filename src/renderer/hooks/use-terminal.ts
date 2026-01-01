@@ -77,6 +77,42 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       }
     })
 
+    // Ctrl+V paste - detect image in clipboard and save to temp file
+    terminal.element?.addEventListener('paste', async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      // Check for image in clipboard
+      let hasImage = false
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          hasImage = true
+          break
+        }
+      }
+
+      // If no image, let xterm handle text paste normally
+      if (!hasImage) return
+
+      // Prevent default paste behavior
+      e.preventDefault()
+      e.stopPropagation()
+
+      try {
+        // Save clipboard image via IPC and get file path
+        const filePath = await window.electron.clipboard.saveImage()
+        if (filePath) {
+          // Quote path if contains special characters
+          const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
+            ? `"${filePath.replace(/"/g, '\\"')}"`
+            : filePath
+          window.electron.terminal.write(terminalId, formatted)
+        }
+      } catch (error) {
+        console.error('Failed to save clipboard image:', error)
+      }
+    })
+
     // Handle input
     terminal.onData((data) => {
       window.electron.terminal.write(terminalId, data)

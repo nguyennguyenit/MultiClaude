@@ -1,7 +1,6 @@
-import { useEffect, memo, useRef } from 'react'
+import { useEffect, memo } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
 import { useFileDrop } from '../../hooks/use-file-drop'
-import { useClipboardPaste } from '../../hooks/use-clipboard-paste'
 import { useAppStore } from '../../stores'
 
 interface TerminalViewProps {
@@ -18,20 +17,12 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     initialOutput
   })
   const appendOutput = useAppStore((state) => state.appendOutput)
-  const wrapperRef = useRef<HTMLDivElement>(null)
 
   // File drop handler - write dropped file paths to PTY
   const { isDragOver, dropHandlers } = useFileDrop({
     onDrop: (paths) => {
       window.electron.terminal.write(terminalId, paths[0])
     }
-  })
-
-  // Clipboard paste handler - save image and insert path
-  useClipboardPaste({
-    terminalId,
-    containerRef: wrapperRef,
-    isActive
   })
 
   // Initialize terminal on mount
@@ -65,7 +56,6 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
 
   return (
     <div
-      ref={wrapperRef}
       className="terminal-container-wrapper"
       style={{ height: '100%', width: '100%', position: 'relative' }}
       {...dropHandlers}
