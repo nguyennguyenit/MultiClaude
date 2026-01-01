@@ -26,10 +26,17 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
   - Settings toggle at bottom
 - **ProjectTabs**: Top tab bar for switching between projects with keyboard shortcuts (Alt+1-9)
 
-#### Project Management
-- **ProjectStore**: electron-store persistence for projects
-- File-based storage with project metadata (id, name, path, gitRemote)
-- Active project tracked via AppStore (activeProjectId)
+#### Project Management & Persistence
+- **ProjectStore**: electron-store persistence layer for projects and terminal layouts
+  - Projects: CRUD operations with metadata (id, name, path, gitRemote)
+  - Active project tracking (activeProjectId)
+  - **Terminal Layout Persistence**: Per-project terminal layout storage
+    - `saveTerminalLayout(projectId, layout)`: Store layout snapshot
+    - `loadTerminalLayout(projectId)`: Retrieve saved layout
+    - `deleteTerminalLayout(projectId)`: Clean up on project deletion
+    - `getAllTerminalLayouts()`: Bulk layout retrieval
+  - Session management: Save/load/clear AppSession
+- File-based storage under electron-store (`multiclaude-data`)
 
 #### Git Integration
 - **GitManager**: Git operations via simple-git
@@ -322,3 +329,12 @@ interface ProjectTerminal {
   - `handleAddTerminal`: Creates terminal with active project's cwd/projectId
   - `handleCloseTerminal`: Destroys terminal and removes from state
   - `handleStartClaude`: Invokes Claude Code in specified terminal
+
+**Phase 6 - Completed: Terminal Layout Persistence**
+- **ProjectStore Terminal Layout Methods**: Full CRUD API for persisting terminal layouts
+  - `saveTerminalLayout(projectId, layout)`: Persist layout snapshot on state changes
+  - `loadTerminalLayout(projectId)`: Restore layout on project switch
+  - `deleteTerminalLayout(projectId)`: Auto-cleanup when project deleted
+  - `getAllTerminalLayouts()`: Bulk retrieval for app initialization
+- **Deleted Components**: Removed terminal-tabs.tsx (consolidated into ProjectTabs)
+- **Feature Complete**: Project tabs redesign fully integrated with persistence layer
