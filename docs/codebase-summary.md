@@ -180,9 +180,24 @@ interface NotificationSettings {
 }
 ```
 
+### Project Terminal Layout (Project Tabs Redesign)
+```typescript
+interface ProjectTerminalLayout {
+  projectId: string
+  terminals: ProjectTerminal[]
+}
+
+interface ProjectTerminal {
+  id: string
+  title: string
+  position: number  // 0-8 for grid position
+}
+```
+
 ## State Management
 
-- **Zustand Stores**: SettingsStore (themes, notification settings)
+- **Zustand Stores**: SettingsStore (themes, notification settings), AppStore (terminals, projects, projectTerminals)
+- **AppStore.projectTerminals**: Per-project terminal layouts via `setProjectTerminals()` / `getProjectTerminals()`
 - **electron-store**: ProjectStore (persistent project list)
 - **IPC Channels**: Terminal I/O streaming, real-time events
 - **localStorage**: Theme preferences (auto-synced with Zustand)
@@ -244,3 +259,19 @@ interface NotificationSettings {
 - **App Integration**: setupNotificationListener() called in App component on mount
 
 **Feature Status**: Feature complete and fully integrated
+
+## Project Tabs Redesign Implementation Phases
+
+**Phase 1 - Completed: Data Models**
+- **ProjectTerminalLayout**: Per-project terminal layout storage (projectId + terminals array)
+- **ProjectTerminal**: Terminal entry with id, title, and grid position (0-8)
+- **AppStore.projectTerminals**: `Record<string, ProjectTerminalLayout>` state in Zustand
+- **Store Methods**: `setProjectTerminals(projectId, layout)`, `getProjectTerminals(projectId)`
+
+**Phase 2 - Pending: UI Components**
+- Tab bar UI for per-project terminal switching
+- Grid position management and persistence
+
+**Phase 3 - Pending: Integration**
+- Project switching with terminal layout restore
+- Session persistence for terminal layouts

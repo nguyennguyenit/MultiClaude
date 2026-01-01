@@ -44,6 +44,18 @@ export interface TerminalSession {
   outputBuffer: string
 }
 
+// Per-project terminal layout types
+export interface ProjectTerminalLayout {
+  projectId: string
+  terminals: ProjectTerminal[]
+}
+
+export interface ProjectTerminal {
+  id: string
+  title: string
+  position: number // 0-8 for grid position
+}
+
 export interface AppSession {
   terminals: TerminalSession[]
   activeTerminalId: string | null
