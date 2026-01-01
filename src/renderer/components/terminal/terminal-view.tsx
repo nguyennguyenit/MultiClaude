@@ -82,13 +82,14 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
           if (filePath) {
             paths.push(formatPath(filePath))
           }
-        } catch (err) {
-          console.error('Failed to get file path:', err)
+        } catch {
+          // Failed to get file path - ignore
         }
       }
 
       if (paths.length > 0) {
-        window.electron.terminal.write(terminalId, paths.join(' '))
+        const text = paths.join(' ')
+        window.electron.terminal.write(terminalId, text)
       }
     }
 

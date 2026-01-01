@@ -26,9 +26,22 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const disposedRef = useRef(false)
 
   const initTerminal = useCallback(() => {
+    if (disposedRef.current) return
     if (!containerRef.current || terminalRef.current) return
+
+    const container = containerRef.current
+
+    // Ensure container is in DOM and has layout
+    if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+      // Container not ready, defer to next frame
+      requestAnimationFrame(() => {
+        if (!disposedRef.current) initTerminal()
+      })
+      return
+    }
 
     const terminal = new XTerm({
       cursorBlink: true,
@@ -42,17 +55,31 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
 
-    terminal.open(containerRef.current)
+    terminal.open(container)
 
-    // Try WebGL addon for better performance
-    try {
-      const webglAddon = new WebglAddon()
-      terminal.loadAddon(webglAddon)
-    } catch (e) {
-      console.warn('WebGL addon failed to load:', e)
-    }
+    terminalRef.current = terminal
+    fitAddonRef.current = fitAddon
 
-    fitAddon.fit()
+    // Defer WebGL addon and fit to ensure terminal is fully initialized
+    // Use setTimeout to run after xterm's internal setTimeout completes
+    setTimeout(() => {
+      // Guard against disposed terminal
+      if (disposedRef.current || !terminalRef.current) return
+
+      // Try WebGL addon for better performance
+      try {
+        const webglAddon = new WebglAddon()
+        terminal.loadAddon(webglAddon)
+      } catch (e) {
+        console.warn('WebGL addon failed to load:', e)
+      }
+
+      try {
+        fitAddon.fit()
+      } catch {
+        // Ignore fit errors
+      }
+    }, 50)
 
     // Auto-copy on selection complete
     terminal.element?.addEventListener('mouseup', async () => {
@@ -78,38 +105,30 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     })
 
     // Ctrl+V paste - detect image in clipboard and save to temp file
-    // Use attachCustomKeyEventHandler to intercept Ctrl+V before paste event
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      // Only handle Ctrl+V / Cmd+V keydown
       if (e.type !== 'keydown') return true
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
 
-      // Check clipboard for image using Clipboard API
       navigator.clipboard.read().then(async (clipboardItems) => {
         let hasImage = false
 
         for (const item of clipboardItems) {
-          // Check for image types
           const imageType = item.types.find(t => t.startsWith('image/'))
           if (imageType) {
             hasImage = true
             try {
               const blob = await item.getType(imageType)
-
-              // Convert blob to base64
               const reader = new FileReader()
               const base64Promise = new Promise<string>((resolve, reject) => {
                 reader.onload = () => {
                   const result = reader.result as string
-                  const base64 = result.split(',')[1]
-                  resolve(base64)
+                  resolve(result.split(',')[1])
                 }
                 reader.onerror = reject
               })
               reader.readAsDataURL(blob)
               const base64Data = await base64Promise
 
-              // Save image via IPC and get file path
               const filePath = await window.electron.clipboard.saveImage(base64Data)
               if (filePath) {
                 const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
@@ -124,7 +143,6 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
           }
         }
 
-        // If no image found, paste text normally
         if (!hasImage) {
           try {
             const text = await navigator.clipboard.readText()
@@ -134,13 +152,11 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
           }
         }
       }).catch(() => {
-        // Clipboard API failed, fall back to normal paste
         navigator.clipboard.readText().then(text => {
           if (text) terminal.paste(text)
         }).catch(() => {})
       })
 
-      // Prevent default handling - we handle paste ourselves
       return false
     })
 
@@ -154,9 +170,6 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-
-    terminalRef.current = terminal
-    fitAddonRef.current = fitAddon
 
     // Restore previous output if available
     if (initialOutput) {
@@ -172,9 +185,16 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     terminalRef.current?.write(data)
   }, [])
 
-  // Fit terminal to container
+  // Fit terminal to container (with safety check for initialization)
   const fit = useCallback(() => {
-    fitAddonRef.current?.fit()
+    // Only fit if terminal is fully initialized (has valid dimensions)
+    if (!terminalRef.current || !fitAddonRef.current) return
+    try {
+      fitAddonRef.current.fit()
+    } catch (e) {
+      // Terminal not ready yet - dimensions not available
+      // This can happen during initialization race conditions
+    }
   }, [])
 
   // Focus terminal
@@ -189,10 +209,29 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
 
   // Cleanup on unmount
   useEffect(() => {
+    // Reset disposed flag on mount
+    disposedRef.current = false
+
     return () => {
-      terminalRef.current?.dispose()
+      // Set disposed flag before any cleanup to prevent race conditions
+      disposedRef.current = true
+
+      // Capture refs before nullifying
+      const terminal = terminalRef.current
+      const fitAddon = fitAddonRef.current
       terminalRef.current = null
       fitAddonRef.current = null
+
+      // Delay disposal to allow xterm's internal setTimeout callbacks to complete
+      // xterm.js uses setTimeout(0) internally for Viewport refresh
+      setTimeout(() => {
+        try {
+          fitAddon?.dispose()
+          terminal?.dispose()
+        } catch {
+          // Terminal may already be disposed or in invalid state
+        }
+      }, 100)
     }
   }, [])
 
