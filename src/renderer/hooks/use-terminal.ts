@@ -7,6 +7,7 @@ import { getTerminalTheme } from '@shared/constants'
 
 interface UseTerminalOptions {
   terminalId: string
+  initialOutput?: string
   onResize?: (cols: number, rows: number) => void
 }
 
@@ -21,7 +22,7 @@ function getCurrentTerminalTheme() {
   return getTerminalTheme(settings.colorTheme, isDark)
 }
 
-export function useTerminal({ terminalId, onResize }: UseTerminalOptions) {
+export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminalOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -90,9 +91,14 @@ export function useTerminal({ terminalId, onResize }: UseTerminalOptions) {
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
+    // Restore previous output if available
+    if (initialOutput) {
+      terminal.write(initialOutput)
+    }
+
     // Initial resize
     window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
-  }, [terminalId, onResize])
+  }, [terminalId, initialOutput, onResize])
 
   // Write data to terminal
   const write = useCallback((data: string) => {

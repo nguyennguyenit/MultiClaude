@@ -6,6 +6,7 @@ interface TerminalPaneProps {
   title: string
   isActive: boolean
   isClaudeMode?: boolean
+  initialOutput?: string
   onActivate: () => void
   onClose: () => void
   onStartClaude: () => void
@@ -18,6 +19,7 @@ export const TerminalPane = memo(function TerminalPane({
   title,
   isActive,
   isClaudeMode = false,
+  initialOutput,
   onActivate,
   onClose,
   onStartClaude,
@@ -155,6 +157,7 @@ export const TerminalPane = memo(function TerminalPane({
         <TerminalView
           terminalId={terminalId}
           isActive={isActive}
+          initialOutput={initialOutput}
           onFitReady={handleTerminalFit}
         />
       </div>

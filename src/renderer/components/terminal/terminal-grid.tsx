@@ -43,9 +43,7 @@ export const TerminalGrid = memo(function TerminalGrid({
   onCloseTerminal,
   onStartClaude
 }: TerminalGridProps) {
-  // Show add button if less than 9 terminals
-  const showAddCell = terminals.length < 9 && onAddTerminal
-
+  // Empty state with add button
   if (terminals.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-[var(--mc-text-muted)]">
@@ -65,21 +63,14 @@ export const TerminalGrid = memo(function TerminalGrid({
     )
   }
 
-  // Include add cell in grid calculation
-  const itemCount = showAddCell ? terminals.length + 1 : terminals.length
-  const { cols } = calculateGrid(itemCount)
+  // Calculate grid based only on actual terminals (no placeholder)
+  const { cols } = calculateGrid(terminals.length)
   const rows = splitIntoRows(terminals, cols)
-
-  // Calculate if add cell should be in current row or new row
-  const lastRowIndex = rows.length - 1
-  const lastRowHasSpace = rows[lastRowIndex]?.length < cols
 
   return (
     <Group orientation="vertical" className="h-full">
       {rows.map((rowTerminals, rowIndex) => {
-        const isLastRow = rowIndex === lastRowIndex
-        const showAddInThisRow = isLastRow && showAddCell && lastRowHasSpace
-        const cellCount = showAddInThisRow ? rowTerminals.length + 1 : rowTerminals.length
+        const cellCount = rowTerminals.length
 
         return (
           <Fragment key={`row-${rowIndex}`}>
@@ -93,6 +84,7 @@ export const TerminalGrid = memo(function TerminalGrid({
                         title={terminal.title}
                         isActive={terminal.id === activeTerminalId}
                         isClaudeMode={terminal.isClaudeMode}
+                        initialOutput={terminal.output}
                         onActivate={() => onTerminalClick(terminal.id)}
                         onClose={() => onCloseTerminal?.(terminal.id)}
                         onStartClaude={() => onStartClaude?.(terminal.id)}
@@ -104,28 +96,6 @@ export const TerminalGrid = memo(function TerminalGrid({
                     )}
                   </Fragment>
                 ))}
-
-                {/* Add terminal cell */}
-                {showAddInThisRow && (
-                  <>
-                    {rowTerminals.length > 0 && (
-                      <Separator className="terminal-resize-handle terminal-resize-handle-horizontal" />
-                    )}
-                    <Panel defaultSize={100 / cellCount}>
-                      <div
-                        className="h-full flex items-center justify-center bg-[var(--mc-bg-secondary)] border border-dashed border-[var(--mc-border)] rounded cursor-pointer hover:border-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors"
-                        onClick={onAddTerminal}
-                      >
-                        <div className="text-center text-[var(--mc-text-muted)]">
-                          <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                          </svg>
-                          <span className="text-sm">Add Terminal</span>
-                        </div>
-                      </div>
-                    </Panel>
-                  </>
-                )}
               </Group>
             </Panel>
             {/* Resize handle between rows (not after last) */}
@@ -135,26 +105,6 @@ export const TerminalGrid = memo(function TerminalGrid({
           </Fragment>
         )
       })}
-
-      {/* Add cell as new row if last row is full */}
-      {showAddCell && !lastRowHasSpace && (
-        <>
-          <Separator className="terminal-resize-handle terminal-resize-handle-vertical" />
-          <Panel defaultSize={100 / (rows.length + 1)}>
-            <div
-              className="h-full flex items-center justify-center bg-[var(--mc-bg-secondary)] border border-dashed border-[var(--mc-border)] rounded cursor-pointer hover:border-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors"
-              onClick={onAddTerminal}
-            >
-              <div className="text-center text-[var(--mc-text-muted)]">
-                <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                </svg>
-                <span className="text-sm">Add Terminal</span>
-              </div>
-            </div>
-          </Panel>
-        </>
-      )}
     </Group>
   )
 })

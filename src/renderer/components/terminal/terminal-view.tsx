@@ -4,13 +4,15 @@ import { useTerminal } from '../../hooks/use-terminal'
 interface TerminalViewProps {
   terminalId: string
   isActive: boolean
+  initialOutput?: string
   /** Callback to expose fit function to parent for resize handling */
   onFitReady?: (fit: () => void) => void
 }
 
-export const TerminalView = memo(function TerminalView({ terminalId, isActive, onFitReady }: TerminalViewProps) {
+export const TerminalView = memo(function TerminalView({ terminalId, isActive, initialOutput, onFitReady }: TerminalViewProps) {
   const { containerRef, initTerminal, write, fit, focus } = useTerminal({
-    terminalId
+    terminalId,
+    initialOutput
   })
 
   // Initialize terminal on mount
