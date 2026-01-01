@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react'
 import { Sidebar } from './components/sidebar'
 import { ProjectTabs } from './components/project-tabs'
 import { TerminalGrid } from './components/terminal'
+import { WelcomeScreen } from './components/welcome-screen'
 import { useAppStore, useSettingsStore, setupNotificationListener } from './stores'
 import { useKeyboardShortcuts } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
@@ -14,7 +15,9 @@ function App() {
     activeTerminalId,
     addTerminal,
     removeTerminal,
+    updateTerminalTitle,
     addProject,
+    removeProject,
     setProjects,
     setActiveProject,
     setActiveTerminal,
@@ -43,6 +46,12 @@ function App() {
     setActiveProject(project.id)
   }, [addProject, setActiveProject])
 
+  // Handler: Delete project
+  const handleDeleteProject = useCallback(async (id: string) => {
+    await window.electron.project.delete(id)
+    removeProject(id)
+  }, [removeProject])
+
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async () => {
     const terminal = await window.electron.terminal.create({
@@ -52,11 +61,12 @@ function App() {
     addTerminal(terminal)
   }, [activeProject, addTerminal])
 
-  // Handler: Close active terminal
-  const handleCloseTerminal = useCallback(async () => {
-    if (!activeTerminalId) return
-    await window.electron.terminal.destroy(activeTerminalId)
-    removeTerminal(activeTerminalId)
+  // Handler: Close terminal by id (or active terminal if no id provided)
+  const handleCloseTerminal = useCallback(async (terminalId?: string) => {
+    const idToClose = terminalId ?? activeTerminalId
+    if (!idToClose) return
+    await window.electron.terminal.destroy(idToClose)
+    removeTerminal(idToClose)
   }, [activeTerminalId, removeTerminal])
 
   // Handler: Start Claude in terminal
@@ -99,19 +109,21 @@ function App() {
     root.classList.add(`theme-${settings.colorTheme}`)
   }, [settings.themeMode, settings.colorTheme])
 
-  // Load saved projects and session on mount
+  // Load saved projects on mount
   useEffect(() => {
     const init = async () => {
-      // Load projects
       const loadedProjects = await window.electron.project.list()
       setProjects(loadedProjects)
-
-      // Always create a single initial terminal on startup
-      const terminal = await window.electron.terminal.create()
-      addTerminal(terminal)
     }
     init()
   }, [])
+
+  // Create initial terminal when project is selected and no terminals exist
+  useEffect(() => {
+    if (activeProjectId && projectTerminals.length === 0) {
+      handleAddTerminal()
+    }
+  }, [activeProjectId, projectTerminals.length, handleAddTerminal])
 
   // Handle terminal exit
   useEffect(() => {
@@ -120,6 +132,14 @@ function App() {
     })
     return unsubscribe
   }, [])
+
+  // Handle terminal title changes (from OSC escape sequences)
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onTitleChange(({ terminalId, title }) => {
+      updateTerminalTitle(terminalId, title)
+    })
+    return unsubscribe
+  }, [updateTerminalTitle])
 
   // Save session before close
   useEffect(() => {
@@ -152,22 +172,28 @@ function App() {
         activeProjectId={activeProjectId}
         onSelectProject={setActiveProject}
         onAddProject={handleAddProject}
+        onDeleteProject={handleDeleteProject}
       />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar />
-
-        <div className="flex-1 min-w-0">
-          <TerminalGrid
-            terminals={projectTerminals}
-            activeTerminalId={activeTerminalId}
-            onTerminalClick={setActiveTerminal}
-            onAddTerminal={handleAddTerminal}
-            onCloseTerminal={handleCloseTerminal}
-            onStartClaude={handleStartClaude}
-          />
-        </div>
+        {activeProjectId ? (
+          <>
+            <Sidebar />
+            <div className="flex-1 min-w-0">
+              <TerminalGrid
+                terminals={projectTerminals}
+                activeTerminalId={activeTerminalId}
+                onTerminalClick={setActiveTerminal}
+                onAddTerminal={handleAddTerminal}
+                onCloseTerminal={handleCloseTerminal}
+                onStartClaude={handleStartClaude}
+              />
+            </div>
+          </>
+        ) : (
+          <WelcomeScreen onAddProject={handleAddProject} />
+        )}
       </div>
     </div>
   )
