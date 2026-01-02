@@ -11,6 +11,7 @@ interface TerminalPaneProps {
   onClose: () => void
   onStartClaude: () => void
   onTitleChange?: (newTitle: string) => void
+  onInsertFilePath?: (paths: string[]) => void
 }
 
 /** Wrapper for TerminalView with header bar, resize handling, and focus indicator */
@@ -23,7 +24,8 @@ export const TerminalPane = memo(function TerminalPane({
   onActivate,
   onClose,
   onStartClaude,
-  onTitleChange
+  onTitleChange,
+  onInsertFilePath
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeTimeoutRef = useRef<number | undefined>(undefined)
@@ -42,6 +44,29 @@ export const TerminalPane = memo(function TerminalPane({
   const handleTerminalFit = useCallback((fitFn: () => void) => {
     terminalFitRef.current = fitFn
   }, [])
+
+  // File picker handler
+  const handleInsertFilePath = useCallback(async () => {
+    const paths = await window.electron.filePicker.open()
+    if (paths && paths.length > 0) {
+      onInsertFilePath?.(paths)
+    }
+  }, [onInsertFilePath])
+
+  // Keyboard shortcut for file picker (Ctrl+Shift+I)
+  useEffect(() => {
+    if (!isActive) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+        e.preventDefault()
+        handleInsertFilePath()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isActive, handleInsertFilePath])
 
   // Debounced fit on container resize
   useEffect(() => {
@@ -118,6 +143,22 @@ export const TerminalPane = memo(function TerminalPane({
             Claude
           </span>
         )}
+
+        {/* Insert file path button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleInsertFilePath()
+          }}
+          className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+          title="Insert file path (Ctrl+Shift+I)"
+          aria-label="Insert file path"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </button>
 
         {/* Start Claude button */}
         <button

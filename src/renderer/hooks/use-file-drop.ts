@@ -73,7 +73,10 @@ export function useFileDrop(options: UseFileDropOptions): UseFileDropReturn {
     setDragCounter(0)
 
     const files = e.dataTransfer?.files
-    if (!files || files.length === 0) return
+    if (!files || files.length === 0) {
+      console.warn('FileDrop: No files found in dataTransfer.')
+      return
+    }
 
     // Extract paths using Electron's webUtils API (works with contextIsolation)
     const paths: string[] = []
@@ -82,6 +85,8 @@ export function useFileDrop(options: UseFileDropOptions): UseFileDropReturn {
       const filePath = window.electron.utils.getFilePath(file)
       if (filePath) {
         paths.push(formatPath(filePath))
+      } else {
+        console.warn(`FileDrop: Could not get path for file: ${file.name}. It might be a security restriction or an unsupported file type.`)
       }
     }
 
