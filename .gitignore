@@ -43,3 +43,6 @@ new-feature/
 
 # Generated analysis files
 repomix-output.xml
+
+# Test coverage
+coverage/

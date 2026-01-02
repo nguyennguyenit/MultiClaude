@@ -26,7 +26,10 @@
     "claude",
     "multi-agent"
   ],
-  "author": "",
+  "author": {
+    "name": "nguyennguyenit",
+    "email": "nguyennguyenit@users.noreply.github.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.10.2",
