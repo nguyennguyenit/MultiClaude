@@ -37,3 +37,9 @@ yarn-error.log*
 
 # Plans and reports (local only)
 plans/
+
+# Local feature planning folder
+new-feature/
+
+# Generated analysis files
+repomix-output.xml
