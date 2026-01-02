@@ -277,4 +277,15 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, (_, base64Data: string) => {
     return saveClipboardImage(base64Data)
   })
+
+  // File picker handler
+  ipcMain.handle(IPC_CHANNELS.FILE_PICKER_OPEN, async () => {
+    const result = await dialog.showOpenDialog(window, {
+      properties: ['openFile', 'multiSelections']
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    return result.filePaths
+  })
 }

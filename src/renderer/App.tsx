@@ -74,6 +74,18 @@ function App() {
     await window.electron.terminal.invokeClaude(terminalId)
   }, [])
 
+  // Handler: Insert file path into terminal
+  const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
+    const formatted = paths.map(p => {
+      // Quote paths with special characters
+      if (/[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(p)) {
+        return `"${p.replace(/"/g, '\\"')}"`
+      }
+      return p
+    }).join(' ')
+    window.electron.terminal.write(terminalId, formatted)
+  }, [])
+
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onAddTerminal: handleAddTerminal,
@@ -188,6 +200,7 @@ function App() {
                 onAddTerminal={handleAddTerminal}
                 onCloseTerminal={handleCloseTerminal}
                 onStartClaude={handleStartClaude}
+                onInsertFilePath={handleInsertFilePath}
               />
             </div>
           </>

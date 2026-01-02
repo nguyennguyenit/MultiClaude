@@ -32,7 +32,6 @@ function YoloToggle({ enabled, onChange, disabled }: { enabled: boolean; onChang
 export function Sidebar() {
   const {
     activeProjectId,
-    activeTerminalId,
     terminals,
     sidebarOpen,
     addTerminal,
@@ -82,11 +81,6 @@ export function Sidebar() {
       projectId: activeProject?.id
     })
     addTerminal(terminal)
-  }
-
-  const handleStartClaude = async () => {
-    if (!activeTerminalId) return
-    await window.electron.terminal.invokeClaude(activeTerminalId)
   }
 
   const handleYoloToggle = async (enabled: boolean) => {
@@ -271,19 +265,6 @@ export function Sidebar() {
                 disabled={!activeProject}
               />
             </div>
-
-            {/* Start Claude */}
-            <button
-              onClick={handleStartClaude}
-              disabled={!activeTerminalId}
-              className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-[var(--mc-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed rounded text-left"
-            >
-              <svg className="w-4 h-4 text-[var(--mc-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Start Claude</span>
-            </button>
 
             {/* Kill All */}
             <button

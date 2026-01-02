@@ -55,7 +55,10 @@ export const IPC_CHANNELS = {
   YOLO_MODE_SET: 'yolo:set',
 
   // Clipboard channels
-  CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image'
+  CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image',
+
+  // File picker channels
+  FILE_PICKER_OPEN: 'file-picker:open'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

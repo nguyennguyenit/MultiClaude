@@ -61,6 +61,9 @@ export interface ElectronAPI {
   clipboard: {
     saveImage: (base64Data: string) => Promise<string | null>
   }
+  filePicker: {
+    open: () => Promise<string[] | null>
+  }
   utils: {
     getFilePath: (file: File) => string
   }
@@ -140,6 +143,9 @@ const api: ElectronAPI = {
   },
   clipboard: {
     saveImage: (base64Data: string) => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, base64Data)
+  },
+  filePicker: {
+    open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)
   },
   utils: {
     getFilePath: (file) => webUtils.getPathForFile(file)
