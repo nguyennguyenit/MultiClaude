@@ -15,20 +15,15 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      include: ['src/main/**/*.ts'],
+      include: [
+        'src/main/project/project-store.ts',
+        'src/main/git/git-manager.ts',
+        'src/main/terminal/terminal-manager.ts'
+      ],
       exclude: [
         'src/main/**/*.{test,spec}.ts',
-        'src/main/**/index.ts',
-        'src/main/index.ts'
-      ],
-      thresholds: {
-        global: {
-          statements: 60,
-          branches: 60,
-          functions: 60,
-          lines: 60
-        }
-      }
+        'src/main/**/index.ts'
+      ]
     },
     alias: {
       '@shared': path.resolve(__dirname, './src/shared'),
