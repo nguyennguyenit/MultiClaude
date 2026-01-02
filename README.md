@@ -10,6 +10,8 @@ Multi-agent terminal manager for Claude Code. Run multiple Claude Code instances
 - **Project Management**: Add, switch between, and manage multiple projects
 - **Session Persistence**: Terminals automatically restore on app restart
 - **Theme Settings**: Light/Dark/System mode + 7 color themes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest)
+- **Notifications**: Get notified when tasks complete/fail via native OS, Telegram, or Discord
+- **Clipboard Images**: Paste images from clipboard directly into terminal (auto-saves and inserts path)
 
 ## Quick Start
 
@@ -40,17 +42,19 @@ npm run build
 
 ```
 src/
-├── main/           # Electron main process
-│   ├── terminal/   # PTY terminal management
-│   ├── git/        # Git operations
-│   ├── project/    # Project store
-│   └── ipc/        # IPC handlers
-├── renderer/       # React UI
-│   ├── components/ # UI components
-│   ├── hooks/      # Custom hooks
-│   └── stores/     # Zustand stores
-├── preload/        # Electron preload script
-└── shared/         # Shared types and constants
+├── main/             # Electron main process
+│   ├── terminal/     # PTY terminal management
+│   ├── git/          # Git operations
+│   ├── project/      # Project store
+│   ├── notification/ # Telegram/Discord notifications
+│   ├── clipboard/    # Clipboard image handling
+│   └── ipc/          # IPC handlers
+├── renderer/         # React UI
+│   ├── components/   # UI components
+│   ├── hooks/        # Custom hooks
+│   └── stores/       # Zustand stores
+├── preload/          # Electron preload script
+└── shared/           # Shared types and constants
 ```
 
 ## Requirements
@@ -79,8 +83,22 @@ src/
 | Action | Shortcut |
 |--------|----------|
 | Copy | Select text (auto-copies on selection) |
-| Paste | Right-click |
+| Paste | Right-click or Ctrl+V |
+| Paste Image | Ctrl+V (image from clipboard, saves to temp and inserts path) |
 | Insert File Path | Drag-and-drop file from file manager |
+
+## Notifications
+
+Configure notifications in Settings to get alerted when Claude tasks complete or fail:
+
+- **Native OS**: Desktop notifications (always enabled)
+- **Telegram**: Configure bot token and chat ID
+- **Discord**: Configure webhook URL
+
+Detected events:
+- Task Complete (e.g., "I've finished...")
+- Task Failed (e.g., "Error:", "failed")
+- Review Needed (e.g., "Please review", "waiting for")
 
 ## License
 
