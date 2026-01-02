@@ -1,0 +1,1 @@
+export { registerIpcHandlers } from './handlers'
