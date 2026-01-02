@@ -80,6 +80,9 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 src/
 ├── main/                     # Electron main process
 │   ├── index.ts             # App window creation, menu
+│   ├── __tests__/           # Test setup and specs
+│   │   ├── setup.ts         # Global mocks (electron-store, node-pty)
+│   │   └── *.spec.ts        # Test files
 │   ├── terminal/            # PTY management
 │   │   ├── terminal-manager.ts
 │   │   └── pty-handler.ts
@@ -234,6 +237,10 @@ interface ProjectTerminal {
 - **Electron Forge**: Native packaging for Win/Mac/Linux
 - **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
 - **Build**: `npm run build` (creates distributable)
+- **Testing**: Vitest with V8 coverage (60% thresholds)
+  - Run tests: `npm test`
+  - Watch mode: `npm run test:watch`
+  - Coverage: `npm run test:coverage`
 
 ## Dependencies Overview
 

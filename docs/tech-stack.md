@@ -11,6 +11,7 @@
 | **Terminal** | node-pty | ^1.x | PTY process spawning |
 | **Terminal UI** | xterm.js | ^5.x | Terminal rendering |
 | **Styling** | Tailwind CSS | ^4.x | Utility-first CSS |
+| **Testing** | Vitest | ^4.x | Unit/integration testing |
 
 ## Project Structure
 
@@ -67,6 +68,29 @@ multiclaude/
 - `react-resizable-panels`: Auto-split terminal grid layout
 - `zustand`: State management
 - `tailwindcss`: Styling
+
+### Testing
+- `vitest`: Test runner with Vite integration
+- `@vitest/coverage-v8`: Code coverage via V8
+
+## Testing Infrastructure
+
+### Configuration
+- **Config**: `vitest.config.ts` with globals enabled, node environment
+- **Setup**: `src/main/__tests__/setup.ts` for global mocks
+- **Coverage**: V8 provider with 60% thresholds (statements, branches, functions, lines)
+- **Path Aliases**: `@shared`, `@main`, `@renderer` mapped for tests
+
+### Test Commands
+| Command | Description |
+|---------|-------------|
+| `npm test` | Run tests once |
+| `npm run test:watch` | Watch mode |
+| `npm run test:coverage` | Run with coverage report |
+
+### Mocks
+- `electron-store`: In-memory mock store with get/set
+- `@lydell/node-pty`: Mock PTY with stubbed lifecycle methods
 
 ## Architecture Decisions
 
