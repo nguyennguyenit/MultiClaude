@@ -1,6 +1,6 @@
 import simpleGit, { SimpleGit, StatusResult } from 'simple-git'
 import { spawn } from 'child_process'
-import type { GitStatus, GitHubAuth } from '@shared/types'
+import type { GitStatus, GitHubAuth, GitFileStatus, GitCommitResult, GitDiffResult } from '@shared/types'
 
 export class GitManager {
   private getGit(cwd: string): SimpleGit {
@@ -223,5 +223,136 @@ export class GitManager {
         resolve({ success: false, error: err.message })
       })
     })
+  }
+
+  // ========== Git Panel / Commit Workflow Methods ==========
+
+  // Validate file path to prevent path traversal attacks
+  private isValidFilePath(file: string): boolean {
+    const normalized = file.replace(/\\/g, '/')
+    return !normalized.startsWith('/') &&
+           !normalized.startsWith('..') &&
+           !normalized.includes('/../') &&
+           !normalized.includes('/..')
+  }
+
+  async getFileStatus(cwd: string): Promise<GitFileStatus[]> {
+    const git = this.getGit(cwd)
+    try {
+      const status = await git.status()
+      const files: GitFileStatus[] = []
+
+      // Staged files
+      for (const file of status.staged) {
+        files.push({ path: file, status: 'staged', staged: true })
+      }
+
+      // Renamed (staged)
+      for (const { from, to } of status.renamed) {
+        files.push({ path: to, status: 'renamed', staged: true, oldPath: from })
+      }
+
+      // Modified (unstaged)
+      for (const file of status.modified) {
+        if (!status.staged.includes(file)) {
+          files.push({ path: file, status: 'modified', staged: false })
+        }
+      }
+
+      // Deleted (unstaged)
+      for (const file of status.deleted) {
+        if (!status.staged.includes(file)) {
+          files.push({ path: file, status: 'deleted', staged: false })
+        }
+      }
+
+      // Untracked
+      for (const file of status.not_added) {
+        files.push({ path: file, status: 'untracked', staged: false })
+      }
+
+      return files
+    } catch {
+      return []
+    }
+  }
+
+  async stageFile(cwd: string, file: string): Promise<boolean> {
+    if (!this.isValidFilePath(file)) return false
+    const git = this.getGit(cwd)
+    try {
+      await git.add(file)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async unstageFile(cwd: string, file: string): Promise<boolean> {
+    if (!this.isValidFilePath(file)) return false
+    const git = this.getGit(cwd)
+    try {
+      await git.reset(['HEAD', '--', file])
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async stageAll(cwd: string): Promise<boolean> {
+    const git = this.getGit(cwd)
+    try {
+      await git.add('-A')
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async commit(cwd: string, message: string): Promise<GitCommitResult> {
+    const git = this.getGit(cwd)
+    try {
+      const result = await git.commit(message)
+      return { success: true, hash: result.commit }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Commit failed'
+      }
+    }
+  }
+
+  async getDiff(cwd: string, file?: string, staged = false): Promise<GitDiffResult> {
+    const git = this.getGit(cwd)
+    try {
+      const args: string[] = staged ? ['--cached'] : []
+      if (file) args.push('--', file)
+
+      const diff = await git.diff(args)
+      return { success: true, diff }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Diff failed'
+      }
+    }
+  }
+
+  async discardChanges(cwd: string, file: string): Promise<boolean> {
+    if (!this.isValidFilePath(file)) return false
+    const git = this.getGit(cwd)
+    try {
+      const status = await git.status()
+      if (status.not_added.includes(file)) {
+        // Untracked files: use clean
+        await git.clean('f', ['--', file])
+      } else {
+        // Tracked files: use checkout
+        await git.checkout(['--', file])
+      }
+      return true
+    } catch {
+      return false
+    }
   }
 }

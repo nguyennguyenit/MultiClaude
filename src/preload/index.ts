@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants'
-import type { Terminal, Project, GitStatus, GitHubAuth, AppSession, NotificationSettings, NotificationEvent, NotificationTestResult } from '@shared/types'
+import type { Terminal, Project, GitStatus, GitHubAuth, GitFileStatus, GitCommitResult, GitDiffResult, AppSession, NotificationSettings, NotificationEvent, NotificationTestResult } from '@shared/types'
 
 // Type-safe API for renderer
 export interface ElectronAPI {
@@ -28,6 +28,14 @@ export interface ElectronAPI {
     init: (cwd: string) => Promise<boolean>
     addRemote: (cwd: string, url: string, name?: string) => Promise<boolean>
     push: (cwd: string, branch?: string, setUpstream?: boolean) => Promise<boolean>
+    // Commit workflow methods
+    fileStatus: (cwd: string) => Promise<GitFileStatus[]>
+    stageFile: (cwd: string, file: string) => Promise<boolean>
+    unstageFile: (cwd: string, file: string) => Promise<boolean>
+    stageAll: (cwd: string) => Promise<boolean>
+    commit: (cwd: string, message: string) => Promise<GitCommitResult>
+    diff: (cwd: string, file?: string, staged?: boolean) => Promise<GitDiffResult>
+    discard: (cwd: string, file: string) => Promise<boolean>
   }
   github: {
     authStatus: () => Promise<GitHubAuth>
@@ -106,7 +114,15 @@ const api: ElectronAPI = {
     status: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, cwd),
     init: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_INIT, cwd),
     addRemote: (cwd, url, name) => ipcRenderer.invoke(IPC_CHANNELS.GIT_ADD_REMOTE, { cwd, url, name }),
-    push: (cwd, branch, setUpstream) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, { cwd, branch, setUpstream })
+    push: (cwd, branch, setUpstream) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, { cwd, branch, setUpstream }),
+    // Commit workflow methods
+    fileStatus: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_FILE_STATUS, cwd),
+    stageFile: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE_FILE, { cwd, file }),
+    unstageFile: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE_FILE, { cwd, file }),
+    stageAll: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE_ALL, cwd),
+    commit: (cwd, message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, { cwd, message }),
+    diff: (cwd, file, staged) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, { cwd, file, staged }),
+    discard: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, { cwd, file })
   },
   github: {
     authStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_AUTH_STATUS),

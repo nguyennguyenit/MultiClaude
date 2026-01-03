@@ -3,6 +3,7 @@ import { Sidebar } from './components/sidebar'
 import { ProjectTabs } from './components/project-tabs'
 import { TerminalGrid } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
+import { GitPanel } from './components/git-panel'
 import { useAppStore, useSettingsStore, setupNotificationListener } from './stores'
 import { useKeyboardShortcuts } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
@@ -25,7 +26,7 @@ function App() {
     toggleSidebar
   } = useAppStore()
 
-  const { settings, loadSettings } = useSettingsStore()
+  const { settings, loadSettings, gitPanelOpen, setGitPanelOpen } = useSettingsStore()
 
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
@@ -203,6 +204,11 @@ function App() {
                 onInsertFilePath={handleInsertFilePath}
               />
             </div>
+            <GitPanel
+              projectPath={activeProject?.path}
+              isOpen={gitPanelOpen}
+              onToggle={() => setGitPanelOpen(!gitPanelOpen)}
+            />
           </>
         ) : (
           <WelcomeScreen onAddProject={handleAddProject} />

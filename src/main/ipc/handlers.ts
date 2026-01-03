@@ -128,6 +128,35 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.push(cwd, branch, setUpstream)
   })
 
+  // Git commit workflow handlers
+  ipcMain.handle(IPC_CHANNELS.GIT_FILE_STATUS, async (_, cwd: string) => {
+    return gitManager.getFileStatus(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE_FILE, async (_, { cwd, file }: { cwd: string; file: string }) => {
+    return gitManager.stageFile(cwd, file)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE_FILE, async (_, { cwd, file }: { cwd: string; file: string }) => {
+    return gitManager.unstageFile(cwd, file)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE_ALL, async (_, cwd: string) => {
+    return gitManager.stageAll(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_, { cwd, message }: { cwd: string; message: string }) => {
+    return gitManager.commit(cwd, message)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF, async (_, { cwd, file, staged }: { cwd: string; file?: string; staged?: boolean }) => {
+    return gitManager.getDiff(cwd, file, staged)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DISCARD, async (_, { cwd, file }: { cwd: string; file: string }) => {
+    return gitManager.discardChanges(cwd, file)
+  })
+
   // GitHub handlers
   ipcMain.handle(IPC_CHANNELS.GITHUB_AUTH_STATUS, async () => {
     return gitManager.getGitHubAuthStatus()

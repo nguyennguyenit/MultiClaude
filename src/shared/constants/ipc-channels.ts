@@ -23,6 +23,14 @@ export const IPC_CHANNELS = {
   GIT_INIT: 'git:init',
   GIT_ADD_REMOTE: 'git:add-remote',
   GIT_PUSH: 'git:push',
+  // Git commit workflow channels
+  GIT_FILE_STATUS: 'git:file-status',
+  GIT_STAGE_FILE: 'git:stage-file',
+  GIT_UNSTAGE_FILE: 'git:unstage-file',
+  GIT_STAGE_ALL: 'git:stage-all',
+  GIT_COMMIT: 'git:commit',
+  GIT_DIFF: 'git:diff',
+  GIT_DISCARD: 'git:discard',
 
   // GitHub channels
   GITHUB_AUTH_STATUS: 'github:auth-status',

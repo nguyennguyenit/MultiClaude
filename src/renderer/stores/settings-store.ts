@@ -6,8 +6,10 @@ const STORAGE_KEY = 'multiclaude-settings'
 
 interface SettingsState {
   settings: AppSettings
+  gitPanelOpen: boolean
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
+  setGitPanelOpen: (open: boolean) => void
   loadSettings: () => void
 }
 
@@ -33,6 +35,7 @@ function saveToStorage(settings: AppSettings): void {
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
+  gitPanelOpen: false,
 
   setThemeMode: (mode) => {
     const newSettings = { ...get().settings, themeMode: mode }
@@ -45,6 +48,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     saveToStorage(newSettings)
     set({ settings: newSettings })
   },
+
+  setGitPanelOpen: (open) => set({ gitPanelOpen: open }),
 
   loadSettings: () => {
     set({ settings: loadFromStorage() })

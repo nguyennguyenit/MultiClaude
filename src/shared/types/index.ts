@@ -87,6 +87,26 @@ export interface GitHubAuth {
   username?: string
 }
 
+// Git file status for commit workflow panel
+export interface GitFileStatus {
+  path: string
+  status: 'staged' | 'modified' | 'untracked' | 'deleted' | 'renamed' | 'copied'
+  staged: boolean
+  oldPath?: string
+}
+
+export interface GitCommitResult {
+  success: boolean
+  hash?: string
+  error?: string
+}
+
+export interface GitDiffResult {
+  success: boolean
+  diff?: string
+  error?: string
+}
+
 // Theme types
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest'
