@@ -2,6 +2,22 @@
 
 Multi-agent terminal manager for Claude Code. Run multiple Claude Code instances simultaneously, manage projects, and integrate with Git/GitHub.
 
+## Download
+
+Get the latest version from [GitHub Releases](https://github.com/nguyennguyenit/MultiClaude/releases).
+
+| Platform | Download |
+|----------|----------|
+| Linux | `.AppImage` or `.deb` |
+| macOS | `.dmg` |
+| Windows | `.exe` installer |
+
+### First Run Notes
+
+- **macOS**: Right-click the app → Open → Open (to bypass Gatekeeper)
+- **Windows**: Click "More info" → "Run anyway" (for SmartScreen warning)
+- **Linux AppImage**: Make executable with `chmod +x MultiClaude-*.AppImage`
+
 ## Features
 
 - **Multi-Agent Terminals**: Open multiple terminals running Claude Code simultaneously
