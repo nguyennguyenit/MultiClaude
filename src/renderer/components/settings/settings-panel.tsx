@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { ThemeSelector } from './theme-selector'
 import { NotificationSettings } from './notification-settings'
+import { TerminalSettings } from './terminal-settings'
 
-type SettingsTab = 'appearance' | 'notifications'
+type SettingsTab = 'appearance' | 'terminals' | 'notifications'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -34,6 +35,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           Appearance
         </TabButton>
         <TabButton
+          active={activeTab === 'terminals'}
+          onClick={() => setActiveTab('terminals')}
+        >
+          Terminals
+        </TabButton>
+        <TabButton
           active={activeTab === 'notifications'}
           onClick={() => setActiveTab('notifications')}
         >
@@ -43,6 +50,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 
       {/* Tab content */}
       {activeTab === 'appearance' && <ThemeSelector />}
+      {activeTab === 'terminals' && <TerminalSettings />}
       {activeTab === 'notifications' && <NotificationSettings />}
     </div>
   )

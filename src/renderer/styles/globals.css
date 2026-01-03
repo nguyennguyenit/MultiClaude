@@ -179,3 +179,15 @@ body {
 .terminal-pane-active {
   box-shadow: inset 0 0 0 2px var(--mc-accent);
 }
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAppStore } from '../../stores'
+import { useAppStore, useSettingsStore, useToastStore } from '../../stores'
 import { SettingsPanel } from '../settings'
 import type { GitStatus, GitHubAuth } from '@shared/types'
 
@@ -76,6 +76,21 @@ export function Sidebar() {
 
   // Tools handlers
   const handleAddTerminal = async () => {
+    // Get fresh state to check terminal limit
+    const { terminals: allTerminals } = useAppStore.getState()
+    const projectTerminals = activeProjectId
+      ? allTerminals.filter(t => t.projectId === activeProjectId)
+      : allTerminals
+
+    const limit = useSettingsStore.getState().getTerminalLimitValue()
+    if (projectTerminals.length >= limit) {
+      useToastStore.getState().addToast(
+        `Terminal limit reached (${limit}). Close a terminal or increase limit in Settings.`,
+        'warning'
+      )
+      return
+    }
+
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
       projectId: activeProject?.id

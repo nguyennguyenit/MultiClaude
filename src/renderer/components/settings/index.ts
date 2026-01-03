@@ -1,5 +1,6 @@
 export { SettingsPanel } from './settings-panel'
 export { ThemeSelector } from './theme-selector'
+export { TerminalSettings } from './terminal-settings'
 export { NotificationSettings } from './notification-settings'
 export { TelegramConfigModal } from './telegram-config-modal'
 export { DiscordConfigModal } from './discord-config-modal'

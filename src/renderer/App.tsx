@@ -4,7 +4,8 @@ import { ProjectTabs } from './components/project-tabs'
 import { TerminalGrid } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
 import { GitPanel } from './components/git-panel'
-import { useAppStore, useSettingsStore, setupNotificationListener } from './stores'
+import { ToastContainer } from './components/toast-container'
+import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener } from './stores'
 import { useKeyboardShortcuts } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
 
@@ -55,12 +56,28 @@ function App() {
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async () => {
+    // Get fresh state to avoid stale closure
+    const { terminals } = useAppStore.getState()
+    const currentProjectTerminals = activeProjectId
+      ? terminals.filter(t => t.projectId === activeProjectId)
+      : terminals
+
+    // Check terminal limit
+    const limit = useSettingsStore.getState().getTerminalLimitValue()
+    if (currentProjectTerminals.length >= limit) {
+      useToastStore.getState().addToast(
+        `Terminal limit reached (${limit}). Close a terminal or increase limit in Settings.`,
+        'warning'
+      )
+      return
+    }
+
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
       projectId: activeProject?.id
     })
     addTerminal(terminal)
-  }, [activeProject, addTerminal])
+  }, [activeProject, activeProjectId, addTerminal])
 
   // Handler: Close terminal by id (or active terminal if no id provided)
   const handleCloseTerminal = useCallback(async (terminalId?: string) => {
@@ -165,6 +182,9 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)]">
+      {/* Toast notifications */}
+      <ToastContainer />
+
       {/* Title Bar */}
       <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag">
         <button

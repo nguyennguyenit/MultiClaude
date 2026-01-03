@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 
 const STORAGE_KEY = 'multiclaude-settings'
@@ -9,6 +9,8 @@ interface SettingsState {
   gitPanelOpen: boolean
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
+  setTerminalLimit: (limit: TerminalLimit) => void
+  getTerminalLimitValue: () => number
   setGitPanelOpen: (open: boolean) => void
   loadSettings: () => void
 }
@@ -47,6 +49,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const newSettings = { ...get().settings, colorTheme: theme }
     saveToStorage(newSettings)
     set({ settings: newSettings })
+  },
+
+  setTerminalLimit: (limit) => {
+    const newSettings = { ...get().settings, terminalLimit: limit }
+    saveToStorage(newSettings)
+    set({ settings: newSettings })
+  },
+
+  getTerminalLimitValue: () => {
+    const { terminalLimit } = get().settings
+    // Handle undefined or missing terminalLimit (from old localStorage data)
+    if (!terminalLimit) {
+      return 9 // default
+    }
+    if (terminalLimit.preset === 'custom') {
+      return terminalLimit.customValue ?? 9
+    }
+    return terminalLimit.preset
   },
 
   setGitPanelOpen: (open) => set({ gitPanelOpen: open }),

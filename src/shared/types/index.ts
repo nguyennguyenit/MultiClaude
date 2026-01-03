@@ -142,6 +142,13 @@ export interface GitOperationResult {
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest'
 
+// Terminal limit types
+export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
+export interface TerminalLimit {
+  preset: TerminalLimitPreset
+  customValue?: number
+}
+
 export interface ThemePreviewColors {
   bg: string
   accent: string
@@ -159,6 +166,7 @@ export interface ColorThemeDefinition {
 export interface AppSettings {
   themeMode: ThemeMode
   colorTheme: ColorTheme
+  terminalLimit: TerminalLimit
 }
 
 // Notification types
