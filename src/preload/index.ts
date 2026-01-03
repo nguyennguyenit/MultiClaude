@@ -1,6 +1,22 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants'
-import type { Terminal, Project, GitStatus, GitHubAuth, GitFileStatus, GitCommitResult, GitDiffResult, AppSession, NotificationSettings, NotificationEvent, NotificationTestResult } from '@shared/types'
+import type {
+  Terminal,
+  Project,
+  GitStatus,
+  GitHubAuth,
+  GitFileStatus,
+  GitCommitResult,
+  GitDiffResult,
+  GitBranch,
+  GitLogEntry,
+  GitStashEntry,
+  GitOperationResult,
+  AppSession,
+  NotificationSettings,
+  NotificationEvent,
+  NotificationTestResult
+} from '@shared/types'
 
 // Type-safe API for renderer
 export interface ElectronAPI {
@@ -36,10 +52,25 @@ export interface ElectronAPI {
     commit: (cwd: string, message: string) => Promise<GitCommitResult>
     diff: (cwd: string, file?: string, staged?: boolean) => Promise<GitDiffResult>
     discard: (cwd: string, file: string) => Promise<boolean>
+    // Extended operations
+    pull: (cwd: string) => Promise<GitOperationResult>
+    fetch: (cwd: string) => Promise<GitOperationResult>
+    branches: (cwd: string) => Promise<GitBranch[]>
+    createBranch: (cwd: string, name: string, checkout?: boolean) => Promise<GitOperationResult>
+    checkoutBranch: (cwd: string, name: string) => Promise<GitOperationResult>
+    deleteBranch: (cwd: string, name: string, force?: boolean) => Promise<GitOperationResult>
+    merge: (cwd: string, branch: string) => Promise<GitOperationResult>
+    log: (cwd: string, maxCount?: number) => Promise<GitLogEntry[]>
+    stashList: (cwd: string) => Promise<GitStashEntry[]>
+    stashSave: (cwd: string, message?: string) => Promise<GitOperationResult>
+    stashApply: (cwd: string, index?: number) => Promise<GitOperationResult>
+    stashPop: (cwd: string, index?: number) => Promise<GitOperationResult>
+    stashDrop: (cwd: string, index?: number) => Promise<GitOperationResult>
   }
   github: {
     authStatus: () => Promise<GitHubAuth>
     login: () => Promise<{ success: boolean; deviceCode?: string }>
+    logout: () => Promise<GitOperationResult>
     createRepo: (name: string, isPrivate: boolean, cwd?: string) => Promise<{ success: boolean; url?: string; error?: string }>
   }
   session: {
@@ -122,11 +153,26 @@ const api: ElectronAPI = {
     stageAll: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE_ALL, cwd),
     commit: (cwd, message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, { cwd, message }),
     diff: (cwd, file, staged) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, { cwd, file, staged }),
-    discard: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, { cwd, file })
+    discard: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, { cwd, file }),
+    // Extended operations
+    pull: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL, cwd),
+    fetch: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_FETCH, cwd),
+    branches: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCHES, cwd),
+    createBranch: (cwd, name, checkout) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CREATE_BRANCH, { cwd, name, checkout }),
+    checkoutBranch: (cwd, name) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CHECKOUT_BRANCH, { cwd, name }),
+    deleteBranch: (cwd, name, force) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DELETE_BRANCH, { cwd, name, force }),
+    merge: (cwd, branch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_MERGE, { cwd, branch }),
+    log: (cwd, maxCount) => ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, { cwd, maxCount }),
+    stashList: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_LIST, cwd),
+    stashSave: (cwd, message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_SAVE, { cwd, message }),
+    stashApply: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_APPLY, { cwd, index }),
+    stashPop: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_POP, { cwd, index }),
+    stashDrop: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_DROP, { cwd, index })
   },
   github: {
     authStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_AUTH_STATUS),
     login: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_LOGIN),
+    logout: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_LOGOUT),
     createRepo: (name, isPrivate, cwd) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_CREATE_REPO, { name, isPrivate, cwd })
   },
   session: {

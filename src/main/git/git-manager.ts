@@ -1,10 +1,42 @@
-import simpleGit, { SimpleGit, StatusResult } from 'simple-git'
+import simpleGit, { SimpleGit, StatusResult, LogResult, DefaultLogFields } from 'simple-git'
 import { spawn } from 'child_process'
-import type { GitStatus, GitHubAuth, GitFileStatus, GitCommitResult, GitDiffResult } from '@shared/types'
+import { resolve, relative } from 'path'
+import type {
+  GitStatus,
+  GitHubAuth,
+  GitFileStatus,
+  GitCommitResult,
+  GitDiffResult,
+  GitBranch,
+  GitLogEntry,
+  GitStashEntry,
+  GitOperationResult
+} from '@shared/types'
+
+// Valid branch name pattern (alphanumeric, -, _, /, .)
+const VALID_BRANCH_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/
 
 export class GitManager {
   private getGit(cwd: string): SimpleGit {
     return simpleGit(cwd)
+  }
+
+  // Validate file path to prevent path traversal attacks
+  private isValidFilePath(cwd: string, file: string): boolean {
+    const absPath = resolve(cwd, file)
+    const relPath = relative(cwd, absPath)
+    // Must stay within cwd, no .. escapes
+    return !relPath.startsWith('..') && !relPath.startsWith('/') && relPath.length > 0
+  }
+
+  // Validate branch name to prevent injection
+  private isValidBranchName(name: string): boolean {
+    return VALID_BRANCH_REGEX.test(name) && name.length <= 255 && !name.startsWith('-')
+  }
+
+  // Validate stash index
+  private isValidStashIndex(index: number): boolean {
+    return Number.isInteger(index) && index >= 0 && index < 100
   }
 
   async getStatus(cwd: string): Promise<GitStatus> {
@@ -192,8 +224,6 @@ export class GitManager {
         args.push('--push')
       }
 
-      console.log('Running gh command:', 'gh', args.join(' '))
-
       const proc = spawn('gh', args, { cwd: workDir })
       let stdout = ''
       let stderr = ''
@@ -207,7 +237,6 @@ export class GitManager {
       })
 
       proc.on('close', (code) => {
-        console.log('gh exit code:', code, 'stdout:', stdout, 'stderr:', stderr)
         if (code === 0) {
           const urlMatch = stdout.match(/(https:\/\/github\.com\/\S+)/)
           resolve({
@@ -226,15 +255,6 @@ export class GitManager {
   }
 
   // ========== Git Panel / Commit Workflow Methods ==========
-
-  // Validate file path to prevent path traversal attacks
-  private isValidFilePath(file: string): boolean {
-    const normalized = file.replace(/\\/g, '/')
-    return !normalized.startsWith('/') &&
-           !normalized.startsWith('..') &&
-           !normalized.includes('/../') &&
-           !normalized.includes('/..')
-  }
 
   async getFileStatus(cwd: string): Promise<GitFileStatus[]> {
     const git = this.getGit(cwd)
@@ -278,7 +298,7 @@ export class GitManager {
   }
 
   async stageFile(cwd: string, file: string): Promise<boolean> {
-    if (!this.isValidFilePath(file)) return false
+    if (!this.isValidFilePath(cwd, file)) return false
     const git = this.getGit(cwd)
     try {
       await git.add(file)
@@ -289,7 +309,7 @@ export class GitManager {
   }
 
   async unstageFile(cwd: string, file: string): Promise<boolean> {
-    if (!this.isValidFilePath(file)) return false
+    if (!this.isValidFilePath(cwd, file)) return false
     const git = this.getGit(cwd)
     try {
       await git.reset(['HEAD', '--', file])
@@ -339,7 +359,7 @@ export class GitManager {
   }
 
   async discardChanges(cwd: string, file: string): Promise<boolean> {
-    if (!this.isValidFilePath(file)) return false
+    if (!this.isValidFilePath(cwd, file)) return false
     const git = this.getGit(cwd)
     try {
       const status = await git.status()
@@ -354,5 +374,251 @@ export class GitManager {
     } catch {
       return false
     }
+  }
+
+  // ========== Pull/Fetch Operations ==========
+
+  async pull(cwd: string): Promise<GitOperationResult> {
+    const git = this.getGit(cwd)
+    try {
+      const result = await git.pull()
+      return {
+        success: true,
+        message: result.summary.changes > 0
+          ? `Updated: ${result.summary.insertions} insertions, ${result.summary.deletions} deletions`
+          : 'Already up to date'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Pull failed'
+      }
+    }
+  }
+
+  async fetch(cwd: string): Promise<GitOperationResult> {
+    const git = this.getGit(cwd)
+    try {
+      await git.fetch()
+      return { success: true, message: 'Fetch completed' }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Fetch failed'
+      }
+    }
+  }
+
+  // ========== Branch Operations ==========
+
+  async getBranches(cwd: string): Promise<GitBranch[]> {
+    const git = this.getGit(cwd)
+    try {
+      const summary = await git.branch(['-a', '-v'])
+      const branches: GitBranch[] = []
+
+      for (const [name, data] of Object.entries(summary.branches)) {
+        // Skip HEAD entries
+        if (name.includes('HEAD')) continue
+
+        const isRemote = name.startsWith('remotes/')
+        const displayName = isRemote ? name.replace('remotes/', '') : name
+
+        branches.push({
+          name: displayName,
+          current: data.current,
+          commit: data.commit,
+          label: data.label || '',
+          isRemote
+        })
+      }
+
+      return branches
+    } catch {
+      return []
+    }
+  }
+
+  async createBranch(cwd: string, name: string, checkout = true): Promise<GitOperationResult> {
+    if (!this.isValidBranchName(name)) {
+      return { success: false, error: 'Invalid branch name' }
+    }
+    const git = this.getGit(cwd)
+    try {
+      if (checkout) {
+        await git.checkoutLocalBranch(name)
+      } else {
+        await git.branch([name])
+      }
+      return { success: true, message: `Branch '${name}' created` }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create branch'
+      }
+    }
+  }
+
+  async checkoutBranch(cwd: string, name: string): Promise<GitOperationResult> {
+    const git = this.getGit(cwd)
+    try {
+      await git.checkout(name)
+      return { success: true, message: `Switched to '${name}'` }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Checkout failed'
+      }
+    }
+  }
+
+  async deleteBranch(cwd: string, name: string, force = false): Promise<GitOperationResult> {
+    const git = this.getGit(cwd)
+    try {
+      await git.deleteLocalBranch(name, force)
+      return { success: true, message: `Branch '${name}' deleted` }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete branch'
+      }
+    }
+  }
+
+  async mergeBranch(cwd: string, branch: string): Promise<GitOperationResult> {
+    const git = this.getGit(cwd)
+    try {
+      const result = await git.merge([branch])
+      if (result.failed) {
+        return { success: false, error: 'Merge failed with conflicts' }
+      }
+      return { success: true, message: `Merged '${branch}' successfully` }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Merge failed'
+      }
+    }
+  }
+
+  // ========== Commit History ==========
+
+  async getLog(cwd: string, maxCount = 50): Promise<GitLogEntry[]> {
+    const git = this.getGit(cwd)
+    try {
+      const log: LogResult<DefaultLogFields> = await git.log({ maxCount })
+      return log.all.map(entry => ({
+        hash: entry.hash,
+        hashShort: entry.hash.substring(0, 7),
+        author: entry.author_name,
+        email: entry.author_email,
+        date: entry.date,
+        message: entry.message
+      }))
+    } catch {
+      return []
+    }
+  }
+
+  // ========== Stash Operations ==========
+
+  async getStashList(cwd: string): Promise<GitStashEntry[]> {
+    const git = this.getGit(cwd)
+    try {
+      const result = await git.stashList()
+      return result.all.map((entry, index) => ({
+        index,
+        hash: entry.hash,
+        message: entry.message,
+        date: entry.date
+      }))
+    } catch {
+      return []
+    }
+  }
+
+  async stashSave(cwd: string, message?: string): Promise<GitOperationResult> {
+    const git = this.getGit(cwd)
+    try {
+      const args = message ? ['push', '-m', message] : ['push']
+      await git.stash(args)
+      return { success: true, message: 'Changes stashed' }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Stash failed'
+      }
+    }
+  }
+
+  async stashApply(cwd: string, index = 0): Promise<GitOperationResult> {
+    if (!this.isValidStashIndex(index)) {
+      return { success: false, error: 'Invalid stash index' }
+    }
+    const git = this.getGit(cwd)
+    try {
+      await git.stash(['apply', `stash@{${index}}`])
+      return { success: true, message: 'Stash applied' }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Apply failed'
+      }
+    }
+  }
+
+  async stashPop(cwd: string, index = 0): Promise<GitOperationResult> {
+    if (!this.isValidStashIndex(index)) {
+      return { success: false, error: 'Invalid stash index' }
+    }
+    const git = this.getGit(cwd)
+    try {
+      await git.stash(['pop', `stash@{${index}}`])
+      return { success: true, message: 'Stash popped' }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Pop failed'
+      }
+    }
+  }
+
+  async stashDrop(cwd: string, index = 0): Promise<GitOperationResult> {
+    if (!this.isValidStashIndex(index)) {
+      return { success: false, error: 'Invalid stash index' }
+    }
+    const git = this.getGit(cwd)
+    try {
+      await git.stash(['drop', `stash@{${index}}`])
+      return { success: true, message: 'Stash dropped' }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Drop failed'
+      }
+    }
+  }
+
+  // ========== GitHub Logout ==========
+
+  async logoutGitHub(): Promise<GitOperationResult> {
+    return new Promise((resolve) => {
+      const proc = spawn('gh', ['auth', 'logout', '-h', 'github.com'])
+
+      proc.stdin.write('Y\n')
+      proc.stdin.end()
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, message: 'Logged out from GitHub' })
+        } else {
+          resolve({ success: false, error: 'Logout failed' })
+        }
+      })
+
+      proc.on('error', () => {
+        resolve({ success: false, error: 'GitHub CLI not found' })
+      })
+    })
   }
 }

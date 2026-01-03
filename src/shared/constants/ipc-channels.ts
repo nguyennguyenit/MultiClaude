@@ -31,6 +31,20 @@ export const IPC_CHANNELS = {
   GIT_COMMIT: 'git:commit',
   GIT_DIFF: 'git:diff',
   GIT_DISCARD: 'git:discard',
+  // Git extended operations
+  GIT_PULL: 'git:pull',
+  GIT_FETCH: 'git:fetch',
+  GIT_BRANCHES: 'git:branches',
+  GIT_CREATE_BRANCH: 'git:create-branch',
+  GIT_CHECKOUT_BRANCH: 'git:checkout-branch',
+  GIT_DELETE_BRANCH: 'git:delete-branch',
+  GIT_MERGE: 'git:merge',
+  GIT_LOG: 'git:log',
+  GIT_STASH_LIST: 'git:stash-list',
+  GIT_STASH_SAVE: 'git:stash-save',
+  GIT_STASH_APPLY: 'git:stash-apply',
+  GIT_STASH_POP: 'git:stash-pop',
+  GIT_STASH_DROP: 'git:stash-drop',
 
   // GitHub channels
   GITHUB_AUTH_STATUS: 'github:auth-status',

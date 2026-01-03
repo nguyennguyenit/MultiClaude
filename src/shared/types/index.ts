@@ -107,6 +107,37 @@ export interface GitDiffResult {
   error?: string
 }
 
+// New Git types for extended features
+export interface GitBranch {
+  name: string
+  current: boolean
+  commit: string
+  label: string
+  isRemote: boolean
+}
+
+export interface GitLogEntry {
+  hash: string
+  hashShort: string
+  author: string
+  email: string
+  date: string
+  message: string
+}
+
+export interface GitStashEntry {
+  index: number
+  hash: string
+  message: string
+  date: string
+}
+
+export interface GitOperationResult {
+  success: boolean
+  message?: string
+  error?: string
+}
+
 // Theme types
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest'

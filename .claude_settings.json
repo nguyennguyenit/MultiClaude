@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(/home/plateau/Desktop/Claude Code/MultiClaude/**)",
+      "Write(/home/plateau/Desktop/Claude Code/MultiClaude/**)",
+      "Edit(/home/plateau/Desktop/Claude Code/MultiClaude/**)",
+      "Glob(/home/plateau/Desktop/Claude Code/MultiClaude/**)",
+      "Grep(/home/plateau/Desktop/Claude Code/MultiClaude/**)",
+      "Read(/home/plateau/Desktop/Claude Code/MultiClaude/.auto-claude/roadmap/**)",
+      "Write(/home/plateau/Desktop/Claude Code/MultiClaude/.auto-claude/roadmap/**)",
+      "Edit(/home/plateau/Desktop/Claude Code/MultiClaude/.auto-claude/roadmap/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}

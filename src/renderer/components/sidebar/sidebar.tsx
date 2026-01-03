@@ -121,6 +121,14 @@ export function Sidebar() {
     }, 5000)
   }
 
+  const handleGitHubLogout = async () => {
+    if (!confirm('Disconnect from GitHub?')) return
+    const result = await window.electron.github.logout()
+    if (result.success) {
+      setGithubAuth({ isAuthenticated: false })
+    }
+  }
+
   const handleCreateRepo = async () => {
     if (!activeProject || !newRepoName) return
     setIsCreating(true)
@@ -199,9 +207,20 @@ export function Sidebar() {
 
           {githubAuth?.isAuthenticated ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                <span>@{githubAuth.username}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                  <span>@{githubAuth.username}</span>
+                </div>
+                <button
+                  onClick={handleGitHubLogout}
+                  className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-red-400"
+                  title="Disconnect from GitHub"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
               </div>
               {activeProject && gitStatus?.isRepo && !gitStatus?.hasRemote && (
                 <button

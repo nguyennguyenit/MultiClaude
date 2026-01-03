@@ -157,6 +157,59 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.discardChanges(cwd, file)
   })
 
+  // Git extended operations handlers
+  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (_, cwd: string) => {
+    return gitManager.pull(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_FETCH, async (_, cwd: string) => {
+    return gitManager.fetch(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_BRANCHES, async (_, cwd: string) => {
+    return gitManager.getBranches(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CREATE_BRANCH, async (_, { cwd, name, checkout }: { cwd: string; name: string; checkout?: boolean }) => {
+    return gitManager.createBranch(cwd, name, checkout)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CHECKOUT_BRANCH, async (_, { cwd, name }: { cwd: string; name: string }) => {
+    return gitManager.checkoutBranch(cwd, name)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DELETE_BRANCH, async (_, { cwd, name, force }: { cwd: string; name: string; force?: boolean }) => {
+    return gitManager.deleteBranch(cwd, name, force)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_MERGE, async (_, { cwd, branch }: { cwd: string; branch: string }) => {
+    return gitManager.mergeBranch(cwd, branch)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_, { cwd, maxCount }: { cwd: string; maxCount?: number }) => {
+    return gitManager.getLog(cwd, maxCount)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_LIST, async (_, cwd: string) => {
+    return gitManager.getStashList(cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_SAVE, async (_, { cwd, message }: { cwd: string; message?: string }) => {
+    return gitManager.stashSave(cwd, message)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_APPLY, async (_, { cwd, index }: { cwd: string; index?: number }) => {
+    return gitManager.stashApply(cwd, index)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_POP, async (_, { cwd, index }: { cwd: string; index?: number }) => {
+    return gitManager.stashPop(cwd, index)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_DROP, async (_, { cwd, index }: { cwd: string; index?: number }) => {
+    return gitManager.stashDrop(cwd, index)
+  })
+
   // GitHub handlers
   ipcMain.handle(IPC_CHANNELS.GITHUB_AUTH_STATUS, async () => {
     return gitManager.getGitHubAuthStatus()
@@ -168,6 +221,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       shell.openExternal(result.verificationUri)
     }
     return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITHUB_LOGOUT, async () => {
+    return gitManager.logoutGitHub()
   })
 
   ipcMain.handle(IPC_CHANNELS.GITHUB_CREATE_REPO, async (_, { name, isPrivate, cwd }) => {
