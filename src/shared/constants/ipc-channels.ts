@@ -36,6 +36,7 @@ export const IPC_CHANNELS = {
 
   // App channels
   APP_GET_PATH: 'app:get-path',
+  APP_CHECK_FOR_UPDATES: 'app:check-for-updates',
 
   // Notification channels
   NOTIFICATION_GET_SETTINGS: 'notification:get-settings',

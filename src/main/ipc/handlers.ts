@@ -7,6 +7,7 @@ import type { GitManager } from '../git/git-manager'
 import type { ProjectStore } from '../project/project-store'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
+import { checkForUpdatesManually } from '../updater'
 
 interface Managers {
   terminalManager: TerminalManager
@@ -162,6 +163,15 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   // App handlers
   ipcMain.handle(IPC_CHANNELS.APP_GET_PATH, async (_, name: string) => {
     return app.getPath(name as any)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, async () => {
+    try {
+      const result = await checkForUpdatesManually()
+      return { success: true, updateInfo: result?.updateInfo }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
   })
 
   // Notification handlers

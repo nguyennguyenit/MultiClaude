@@ -100,6 +100,9 @@ src/
 │   │   └── index.ts
 │   ├── clipboard/           # Clipboard operations
 │   │   └── clipboard-handler.ts
+│   ├── updater/             # Auto-update
+│   │   ├── auto-updater.ts
+│   │   └── index.ts
 │   └── ipc/                 # IPC handlers
 │       └── handlers.ts
 ├── renderer/                # React UI
@@ -162,7 +165,7 @@ src/
 - **Events**: `notification:event` (broadcast for pattern-detected events)
 
 ### Session & App
-- `session:save`, `session:restore`, `app:get-path`
+- `session:save`, `session:restore`, `app:get-path`, `app:check-for-updates`
 
 ### Clipboard
 - `clipboard:save-image` - Save clipboard image to temp file, returns path or null

@@ -6,6 +6,7 @@ import { GitManager } from './git/git-manager'
 import { ProjectStore } from './project/project-store'
 import { NotificationManager } from './notification'
 import { registerIpcHandlers } from './ipc/handlers'
+import { initAutoUpdater } from './updater'
 
 // ES module compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url)
@@ -55,6 +56,9 @@ function createWindow() {
     projectStore,
     notificationManager
   })
+
+  // Initialize auto-updater
+  initAutoUpdater(mainWindow)
 
   // Load the app
   if (VITE_DEV_SERVER_URL) {
