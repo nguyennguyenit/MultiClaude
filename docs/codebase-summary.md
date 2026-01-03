@@ -237,6 +237,9 @@ interface ProjectTerminal {
 - **Electron Forge**: Native packaging for Win/Mac/Linux
 - **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
 - **Build**: `npm run build` (creates distributable)
+- **Release**: `npm run release` (build + publish to GitHub)
+  - Platform-specific: `release:linux`, `release:win`, `release:mac`
+  - Auto-update via electron-updater from GitHub releases
 - **Testing**: Vitest with V8 coverage (60% thresholds)
   - Run tests: `npm test`
   - Watch mode: `npm run test:watch`
@@ -247,6 +250,7 @@ interface ProjectTerminal {
 ### Main Process
 - `@lydell/node-pty`: PTY process spawning
 - `electron-store`: Simple persistence
+- `electron-updater`: Auto-update via GitHub releases
 - `simple-git`: Git wrapper
 - `github-script`: GH CLI integration
 
