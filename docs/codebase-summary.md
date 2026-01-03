@@ -243,10 +243,21 @@ interface ProjectTerminal {
 - **Release**: `npm run release` (build + publish to GitHub)
   - Platform-specific: `release:linux`, `release:win`, `release:mac`
   - Auto-update via electron-updater from GitHub releases
+- **Versioning**: `npm run version:patch|minor|major` (creates git tag)
 - **Testing**: Vitest with V8 coverage (60% thresholds)
   - Run tests: `npm test`
   - Watch mode: `npm run test:watch`
   - Coverage: `npm run test:coverage`
+
+### GitHub Actions Workflows
+
+- **build.yml**: CI builds on push/PR to master/main, manual release via workflow_dispatch
+  - Matrix build: ubuntu, windows, macos
+  - Artifacts uploaded per platform
+- **release.yml**: Tag-triggered release workflow (on `v*` tags)
+  - Triggers on version tags (e.g., `v1.0.0`)
+  - Builds and publishes to GitHub Releases on all platforms
+  - Uploads: AppImage, deb, dmg, zip, exe
 
 ## Dependencies Overview
 
