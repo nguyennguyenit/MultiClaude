@@ -1,6 +1,6 @@
 {
   "name": "multiclaude",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Multi-agent terminal manager for Claude Code",
   "main": "dist/main/index.js",
   "type": "module",
@@ -85,12 +85,14 @@
     "files": [
       "dist/**/*"
     ],
+    "icon": "build/icon",
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
-      "category": "Development"
+      "category": "Development",
+      "icon": "build/icon.png"
     },
     "deb": {
       "afterInstall": "scripts/postinst.sh"
@@ -99,13 +101,15 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "icon": "build/icon.icns"
     },
     "win": {
       "target": [
         "nsis",
         "portable"
-      ]
+      ],
+      "icon": "build/icon.ico"
     }
   }
 }
