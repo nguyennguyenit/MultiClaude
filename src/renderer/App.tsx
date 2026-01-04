@@ -5,6 +5,7 @@ import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
 import { GitHubView } from './components/github-view'
 import { ToastContainer } from './components/toast-container'
+import { SettingsModal } from './components/settings'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener } from './stores'
 import { useKeyboardShortcuts } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
@@ -28,7 +29,7 @@ function App() {
     activeView
   } = useAppStore()
 
-  const { settings, loadSettings, getTerminalLimitValue } = useSettingsStore()
+  const { settings, loadSettings, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -172,6 +173,11 @@ function App() {
     // Apply new classes
     root.classList.add(isDark ? 'dark' : 'light')
     root.classList.add(`theme-${settings.colorTheme}`)
+
+    // Update title bar overlay to match theme (--mc-bg-tertiary)
+    const bgColor = isDark ? '#2d2d2d' : '#ebebeb'
+    const symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
+    window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
   }, [settings.themeMode, settings.colorTheme])
 
   // Load saved projects on mount
@@ -219,6 +225,9 @@ function App() {
     <div className="h-screen flex flex-col bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)]">
       {/* Toast notifications */}
       <ToastContainer />
+
+      {/* Settings Modal */}
+      <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
 
       {/* Title Bar */}
       <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag">

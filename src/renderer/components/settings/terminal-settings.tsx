@@ -43,54 +43,76 @@ export function TerminalSettings() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Section Header */}
       <div>
-        <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">
-          Terminal Limit per Project
-        </div>
-        <div className="grid grid-cols-4 gap-1">
-          {PRESET_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handlePresetChange(option.value)}
-              className={`
-                flex items-center justify-center p-2 rounded text-xs
-                ${terminalLimit.preset === option.value
-                  ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)]'
-                  : 'bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] text-[var(--mc-text-primary)]'
-                }
-              `}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <h3 className="text-lg font-medium">Terminals</h3>
+        <p className="text-sm text-[var(--mc-text-muted)]">
+          Configure terminal behavior and limits
+        </p>
+        <hr className="my-4 border-[var(--mc-border)]" />
       </div>
 
-      {/* Custom value input */}
-      {terminalLimit.preset === 'custom' && (
-        <div>
-          <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">
-            Custom Limit
+      {/* Terminal Limit Section */}
+      <SettingsSection title="General">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm">Max Terminals per Project</span>
+              <p className="text-xs text-[var(--mc-text-muted)]">
+                Limits the number of terminals per project
+              </p>
+            </div>
           </div>
-          <input
-            type="number"
-            min={1}
-            max={99}
-            value={customValue}
-            onChange={(e) => handleCustomValueChange(e.target.value)}
-            className="w-full px-3 py-2 text-sm rounded
-              bg-[var(--mc-bg-primary)] border border-[var(--mc-border)]
-              text-[var(--mc-text-primary)]
-              focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
-            placeholder="Enter number (1-99)"
-          />
-        </div>
-      )}
 
-      <div className="text-xs text-[var(--mc-text-muted)]">
-        Limits the maximum number of terminals per project.
-      </div>
+          <div className="grid grid-cols-4 gap-2">
+            {PRESET_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handlePresetChange(option.value)}
+                className={`
+                  flex items-center justify-center py-2 rounded text-sm
+                  transition-colors duration-150
+                  ${terminalLimit.preset === option.value
+                    ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)]'
+                    : 'bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] text-[var(--mc-text-primary)]'}
+                `}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom value input */}
+          {terminalLimit.preset === 'custom' && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-[var(--mc-text-secondary)]">Custom limit:</span>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={customValue}
+                onChange={(e) => handleCustomValueChange(e.target.value)}
+                className="w-20 px-3 py-1.5 text-sm rounded
+                  bg-[var(--mc-bg-primary)] border border-[var(--mc-border)]
+                  text-[var(--mc-text-primary)]
+                  focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
+                placeholder="1-99"
+              />
+            </div>
+          )}
+        </div>
+      </SettingsSection>
+    </div>
+  )
+}
+
+// Reusable settings section component
+function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="text-sm font-medium mb-3 text-[var(--mc-text-secondary)]">{title}</h4>
+      <div className="space-y-3">{children}</div>
     </div>
   )
 }

@@ -1,6 +1,4 @@
-import { useState } from 'react'
-import { useAppStore } from '../../stores'
-import { SettingsPanel } from '../settings'
+import { useAppStore, useSettingsStore } from '../../stores'
 import { SidebarHeader } from './sidebar-header'
 import { NavigationItem } from './navigation-item'
 import { UserAccountCard } from './user-account-card'
@@ -29,7 +27,7 @@ export function Sidebar() {
     setActiveView
   } = useAppStore()
 
-  const [showSettings, setShowSettings] = useState(false)
+  const { setSettingsModalOpen } = useSettingsStore()
   const activeProject = projects.find(p => p.id === activeProjectId)
 
   if (!sidebarOpen) return null
@@ -87,21 +85,15 @@ export function Sidebar() {
 
       {/* Settings Section - Bottom */}
       <div className="border-t border-[var(--mc-border)]">
-        {showSettings && (
-          <SettingsPanel onClose={() => setShowSettings(false)} />
-        )}
         <div className="p-2">
           <IconWithTooltip tooltip="Settings" collapsed={sidebarCollapsed}>
             <button
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() => setSettingsModalOpen(true)}
               className={`
                 w-full flex items-center gap-2 px-2 py-2 rounded text-sm
                 transition-colors duration-150
                 ${sidebarCollapsed ? 'justify-center' : ''}
-                ${showSettings
-                  ? 'bg-[var(--mc-bg-active)] text-[var(--mc-accent)]'
-                  : 'hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-secondary)]'
-                }
+                hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-secondary)]
               `}
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

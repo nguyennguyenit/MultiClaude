@@ -110,6 +110,9 @@ export interface ElectronAPI {
   utils: {
     getFilePath: (file: File) => string
   }
+  window: {
+    updateTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>
+  }
   onFileDrop: (callback: (filePath: string) => void) => () => void
 }
 
@@ -217,6 +220,9 @@ const api: ElectronAPI = {
   },
   utils: {
     getFilePath: (file) => webUtils.getPathForFile(file)
+  },
+  window: {
+    updateTitleBarOverlay: (colors) => ipcRenderer.invoke('update-title-bar-overlay', colors)
   },
   onFileDrop: (callback) => {
     const listener = (_: unknown, data: { filePath: string }) => callback(data.filePath)

@@ -87,6 +87,17 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Handle title bar overlay color updates from renderer
+  ipcMain.handle('update-title-bar-overlay', (_event, colors: { color: string; symbolColor: string }) => {
+    if (mainWindow) {
+      mainWindow.setTitleBarOverlay({
+        color: colors.color,
+        symbolColor: colors.symbolColor,
+        height: 40
+      })
+    }
+  })
 }
 
 app.whenReady().then(() => {

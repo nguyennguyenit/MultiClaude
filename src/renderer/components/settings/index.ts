@@ -1,4 +1,6 @@
 export { SettingsPanel } from './settings-panel'
+export { SettingsModal } from './settings-modal'
+export { SettingsSidebar } from './settings-sidebar'
 export { ThemeSelector } from './theme-selector'
 export { TerminalSettings } from './terminal-settings'
 export { NotificationSettings } from './notification-settings'
