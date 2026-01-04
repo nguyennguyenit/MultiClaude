@@ -180,11 +180,44 @@ function App() {
     window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
   }, [settings.themeMode, settings.colorTheme])
 
-  // Load saved projects on mount
+  // Load saved projects on mount and validate folder existence
   useEffect(() => {
     const init = async () => {
       const loadedProjects = await window.electron.project.list()
-      setProjects(loadedProjects)
+
+      // Check which projects still have valid folders
+      const validationResults = await Promise.all(
+        loadedProjects.map(async (project) => {
+          try {
+            await window.electron.project.checkFolder(project.path)
+            return { project, exists: true }
+          } catch {
+            return { project, exists: false }
+          }
+        })
+      )
+
+      const validProjects = validationResults
+        .filter(r => r.exists)
+        .map(r => r.project)
+      const invalidProjects = validationResults
+        .filter(r => !r.exists)
+        .map(r => r.project)
+
+      // Auto-remove invalid projects and notify user
+      if (invalidProjects.length > 0) {
+        for (const project of invalidProjects) {
+          await window.electron.project.delete(project.id)
+        }
+
+        const names = invalidProjects.map(p => p.name).join(', ')
+        useToastStore.getState().addToast(
+          `Removed ${invalidProjects.length} project(s) with missing folders: ${names}`,
+          'warning'
+        )
+      }
+
+      setProjects(validProjects)
     }
     init()
   }, [])
