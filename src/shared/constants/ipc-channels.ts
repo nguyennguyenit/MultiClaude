@@ -51,6 +51,8 @@ export const IPC_CHANNELS = {
   GITHUB_LOGIN: 'github:login',
   GITHUB_LOGOUT: 'github:logout',
   GITHUB_CREATE_REPO: 'github:create-repo',
+  GITHUB_ISSUES_LIST: 'github:issues-list',
+  GITHUB_PRS_LIST: 'github:prs-list',
 
   // Session channels
   SESSION_SAVE: 'session:save',

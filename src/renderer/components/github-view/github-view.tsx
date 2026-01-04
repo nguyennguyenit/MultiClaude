@@ -8,8 +8,10 @@ import { StashTab } from '../git-panel/stash-tab'
 import { BranchesTab } from '../git-panel/branches-tab'
 import { GitHubActionBar } from './github-action-bar'
 import { RepoInfoHeader } from './repo-info-header'
+import { IssuesTab } from './issues-tab'
+import { PRsTab } from './prs-tab'
 
-type TabId = 'changes' | 'history' | 'stash' | 'branches'
+type TabId = 'changes' | 'history' | 'stash' | 'branches' | 'issues' | 'prs'
 
 interface GitHubViewProps {
   projectPath: string | undefined
@@ -43,7 +45,9 @@ export function GitHubView({ projectPath }: GitHubViewProps) {
     { id: 'changes' as const, label: 'Changes' },
     { id: 'history' as const, label: 'History' },
     { id: 'stash' as const, label: 'Stash' },
-    { id: 'branches' as const, label: 'Branches' }
+    { id: 'branches' as const, label: 'Branches' },
+    { id: 'issues' as const, label: 'Issues' },
+    { id: 'prs' as const, label: 'PRs' }
   ]
 
   // Sync handlers
@@ -193,6 +197,14 @@ export function GitHubView({ projectPath }: GitHubViewProps) {
             onDelete={gitPanel.deleteBranch}
             onMerge={gitPanel.mergeBranch}
           />
+        )}
+
+        {activeTab === 'issues' && projectPath && (
+          <IssuesTab projectPath={projectPath} />
+        )}
+
+        {activeTab === 'prs' && projectPath && (
+          <PRsTab projectPath={projectPath} />
         )}
       </div>
     </div>

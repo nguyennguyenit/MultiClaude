@@ -169,5 +169,26 @@ export interface AppSettings {
   terminalLimit: TerminalLimit
 }
 
+// GitHub Issues/PRs types
+export interface GitHubIssue {
+  number: number
+  title: string
+  state: 'open' | 'closed'
+  createdAt: string
+  author: { login: string }
+  labels: { name: string; color: string }[]
+  body?: string
+}
+
+export interface GitHubPR {
+  number: number
+  title: string
+  state: 'open' | 'closed' | 'merged'
+  createdAt: string
+  author: { login: string }
+  headRefName: string
+  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
+}
+
 // Notification types
 export * from './notification'

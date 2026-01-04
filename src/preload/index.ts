@@ -15,7 +15,9 @@ import type {
   AppSession,
   NotificationSettings,
   NotificationEvent,
-  NotificationTestResult
+  NotificationTestResult,
+  GitHubIssue,
+  GitHubPR
 } from '@shared/types'
 
 // Type-safe API for renderer
@@ -72,6 +74,8 @@ export interface ElectronAPI {
     login: () => Promise<{ success: boolean; deviceCode?: string }>
     logout: () => Promise<GitOperationResult>
     createRepo: (name: string, isPrivate: boolean, cwd?: string) => Promise<{ success: boolean; url?: string; error?: string }>
+    listIssues: (projectPath: string, state?: string) => Promise<{ success: boolean; data: GitHubIssue[]; error?: string }>
+    listPRs: (projectPath: string, state?: string) => Promise<{ success: boolean; data: GitHubPR[]; error?: string }>
   }
   session: {
     save: (bounds?: { x: number; y: number; width: number; height: number }) => Promise<boolean>
@@ -173,7 +177,9 @@ const api: ElectronAPI = {
     authStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_AUTH_STATUS),
     login: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_LOGIN),
     logout: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_LOGOUT),
-    createRepo: (name, isPrivate, cwd) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_CREATE_REPO, { name, isPrivate, cwd })
+    createRepo: (name, isPrivate, cwd) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_CREATE_REPO, { name, isPrivate, cwd }),
+    listIssues: (projectPath, state = 'open') => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_ISSUES_LIST, projectPath, state),
+    listPRs: (projectPath, state = 'open') => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_PRS_LIST, projectPath, state)
   },
   session: {
     save: (bounds) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_SAVE, bounds),

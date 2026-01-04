@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { TerminalManager } from './terminal/terminal-manager'
@@ -6,6 +6,7 @@ import { GitManager } from './git/git-manager'
 import { ProjectStore } from './project/project-store'
 import { NotificationManager } from './notification'
 import { registerIpcHandlers } from './ipc/handlers'
+import { registerGitHubHandlers } from './ipc/github-handlers'
 import { initAutoUpdater } from './updater'
 
 // ES module compatibility for __dirname
@@ -56,6 +57,9 @@ function createWindow() {
     projectStore,
     notificationManager
   })
+
+  // Register GitHub-specific handlers
+  registerGitHubHandlers(ipcMain)
 
   // Initialize auto-updater
   initAutoUpdater(mainWindow)
