@@ -188,12 +188,8 @@ function App() {
       // Check which projects still have valid folders
       const validationResults = await Promise.all(
         loadedProjects.map(async (project) => {
-          try {
-            await window.electron.project.checkFolder(project.path)
-            return { project, exists: true }
-          } catch {
-            return { project, exists: false }
-          }
+          const result = await window.electron.project.checkFolder(project.path)
+          return { project, exists: result.exists }
         })
       )
 

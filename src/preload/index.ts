@@ -39,7 +39,7 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<boolean>
     setActive: (id: string | null) => Promise<boolean>
     openFolder: () => Promise<string | null>
-    checkFolder: (cwd: string) => Promise<{ isEmpty: boolean; isGitRepo: boolean; fileCount: number }>
+    checkFolder: (cwd: string) => Promise<{ exists: boolean; isEmpty: boolean; isGitRepo: boolean; fileCount: number }>
   }
   git: {
     status: (cwd: string) => Promise<GitStatus>

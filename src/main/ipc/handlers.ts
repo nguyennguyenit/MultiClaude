@@ -95,6 +95,11 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_CHECK_FOLDER, async (_, cwd: string) => {
+    // Check if folder exists first
+    if (!existsSync(cwd)) {
+      return { exists: false, isEmpty: true, isGitRepo: false, fileCount: 0 }
+    }
+
     try {
       const files = readdirSync(cwd)
       // Filter out hidden files (starting with .)
@@ -102,12 +107,13 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       const isEmpty = visibleFiles.length === 0
       const gitStatus = await gitManager.getStatus(cwd)
       return {
+        exists: true,
         isEmpty,
         isGitRepo: gitStatus.isRepo,
         fileCount: visibleFiles.length
       }
     } catch {
-      return { isEmpty: true, isGitRepo: false, fileCount: 0 }
+      return { exists: false, isEmpty: true, isGitRepo: false, fileCount: 0 }
     }
   })
 
