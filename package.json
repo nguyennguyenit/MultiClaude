@@ -92,6 +92,9 @@
       ],
       "category": "Development"
     },
+    "deb": {
+      "afterInstall": "scripts/postinst.sh"
+    },
     "mac": {
       "target": [
         "dmg",
