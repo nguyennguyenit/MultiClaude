@@ -1,9 +1,9 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { Sidebar } from './components/sidebar'
 import { ProjectTabs } from './components/project-tabs'
-import { TerminalGrid } from './components/terminal'
+import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
-import { GitPanel } from './components/git-panel'
+import { GitHubView } from './components/github-view'
 import { ToastContainer } from './components/toast-container'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener } from './stores'
 import { useKeyboardShortcuts } from './hooks'
@@ -28,7 +28,10 @@ function App() {
     activeView
   } = useAppStore()
 
-  const { settings, loadSettings, gitPanelOpen, setGitPanelOpen } = useSettingsStore()
+  const { settings, loadSettings, getTerminalLimitValue } = useSettingsStore()
+
+  // YOLO mode state
+  const [yoloEnabled, setYoloEnabled] = useState(false)
 
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
@@ -105,6 +108,28 @@ function App() {
     window.electron.terminal.write(terminalId, formatted)
   }, [])
 
+  // Handler: Toggle YOLO mode
+  const handleYoloToggle = useCallback(async (enabled: boolean) => {
+    if (!activeProject) return
+    const result = await window.electron.yolo.set(activeProject.path, enabled)
+    if (result.success) {
+      setYoloEnabled(enabled)
+    }
+  }, [activeProject])
+
+  // Handler: Kill all terminals in active project (with delay to prevent WebGL warnings)
+  const handleKillAll = useCallback(async () => {
+    const terminalsToKill = [...projectTerminals]
+    for (const terminal of terminalsToKill) {
+      await window.electron.terminal.destroy(terminal.id)
+      removeTerminal(terminal.id)
+      // Delay must exceed use-terminal.ts cleanup timeout (100ms) to ensure WebGL context disposal
+      if (terminalsToKill.indexOf(terminal) < terminalsToKill.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 150))
+      }
+    }
+  }, [projectTerminals, removeTerminal])
+
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onAddTerminal: handleAddTerminal,
@@ -115,6 +140,15 @@ function App() {
   useEffect(() => {
     loadSettings()
   }, [])
+
+  // Load YOLO status when project changes
+  useEffect(() => {
+    if (activeProject) {
+      window.electron.yolo.get(activeProject.path).then(setYoloEnabled)
+    } else {
+      setYoloEnabled(false)
+    }
+  }, [activeProject])
 
   // Setup notification listener
   useEffect(() => {
@@ -214,24 +248,32 @@ function App() {
         {activeProjectId ? (
           <>
             <Sidebar />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 flex flex-col">
               {activeView === 'terminals' && (
-                <TerminalGrid
-                  terminals={projectTerminals}
-                  activeTerminalId={activeTerminalId}
-                  onTerminalClick={setActiveTerminal}
-                  onAddTerminal={handleAddTerminal}
-                  onCloseTerminal={handleCloseTerminal}
-                  onStartClaude={handleStartClaude}
-                  onInsertFilePath={handleInsertFilePath}
-                />
+                <>
+                  <TerminalActionBar
+                    terminalCount={projectTerminals.length}
+                    terminalLimit={getTerminalLimitValue()}
+                    yoloEnabled={yoloEnabled}
+                    onAddTerminal={handleAddTerminal}
+                    onToggleYolo={handleYoloToggle}
+                    onKillAll={handleKillAll}
+                  />
+                  <div className="flex-1 min-h-0">
+                    <TerminalGrid
+                      terminals={projectTerminals}
+                      activeTerminalId={activeTerminalId}
+                      onTerminalClick={setActiveTerminal}
+                      onAddTerminal={handleAddTerminal}
+                      onCloseTerminal={handleCloseTerminal}
+                      onStartClaude={handleStartClaude}
+                      onInsertFilePath={handleInsertFilePath}
+                    />
+                  </div>
+                </>
               )}
               {activeView === 'github' && (
-                <GitPanel
-                  projectPath={activeProject?.path}
-                  isOpen={true}
-                  onToggle={() => {}}
-                />
+                <GitHubView projectPath={activeProject?.path} />
               )}
             </div>
           </>
