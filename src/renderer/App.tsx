@@ -59,6 +59,31 @@ function App() {
     removeProject(id)
   }, [removeProject])
 
+  // Handler: Switch to project with folder validation
+  const handleSelectProject = useCallback(async (id: string | null) => {
+    if (!id) {
+      setActiveProject(null)
+      return
+    }
+
+    const project = projects.find(p => p.id === id)
+    if (!project) return
+
+    // Validate folder exists before switching
+    const result = await window.electron.project.checkFolder(project.path)
+    if (!result.exists) {
+      useToastStore.getState().addToast(
+        `Project "${project.name}" folder no longer exists. Removing from list.`,
+        'warning'
+      )
+      await window.electron.project.delete(id)
+      removeProject(id)
+      return
+    }
+
+    setActiveProject(id)
+  }, [projects, setActiveProject, removeProject])
+
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async () => {
     // Get fresh state to avoid stale closure
@@ -134,7 +159,8 @@ function App() {
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onAddTerminal: handleAddTerminal,
-    onCloseTerminal: handleCloseTerminal
+    onCloseTerminal: handleCloseTerminal,
+    onSelectProject: handleSelectProject
   })
 
   // Load settings on mount
@@ -276,7 +302,7 @@ function App() {
       <ProjectTabs
         projects={projects}
         activeProjectId={activeProjectId}
-        onSelectProject={setActiveProject}
+        onSelectProject={handleSelectProject}
         onAddProject={handleAddProject}
         onDeleteProject={handleDeleteProject}
       />

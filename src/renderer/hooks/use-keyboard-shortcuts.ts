@@ -4,6 +4,7 @@ import { useAppStore } from '../stores'
 interface KeyboardShortcutsOptions {
   onAddTerminal: () => void
   onCloseTerminal: () => void
+  onSelectProject?: (id: string) => void
 }
 
 /**
@@ -14,7 +15,8 @@ interface KeyboardShortcutsOptions {
  */
 export function useKeyboardShortcuts({
   onAddTerminal,
-  onCloseTerminal
+  onCloseTerminal,
+  onSelectProject
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -22,12 +24,15 @@ export function useKeyboardShortcuts({
       if (e.altKey && e.key >= '1' && e.key <= '9') {
         e.preventDefault()
         const index = parseInt(e.key) - 1
-        const { projects, setActiveProject } = useAppStore.getState()
+        const { projects } = useAppStore.getState()
 
         if (projects[index]) {
-          setActiveProject(projects[index].id)
+          if (onSelectProject) {
+            onSelectProject(projects[index].id)
+          } else {
+            useAppStore.getState().setActiveProject(projects[index].id)
+          }
         }
-        // Skip notification for now - no UI toast system yet
         return
       }
 
@@ -48,5 +53,5 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onAddTerminal, onCloseTerminal])
+  }, [onAddTerminal, onCloseTerminal, onSelectProject])
 }
