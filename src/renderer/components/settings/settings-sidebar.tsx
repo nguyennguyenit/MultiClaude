@@ -7,7 +7,7 @@ interface SettingsSidebarProps {
 
 const TABS: { id: SettingsTab; label: string; icon: string }[] = [
   { id: 'appearance', label: 'Appearance', icon: '🎨' },
-  { id: 'terminals', label: 'Terminals', icon: '📟' },
+  { id: 'terminals', label: 'Terminals', icon: '⌨' },
   { id: 'notifications', label: 'Notifications', icon: '🔔' }
 ]
 
