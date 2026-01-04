@@ -20,7 +20,10 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
 
 #### Sidebar & UI Components
-- **Sidebar**: Left-side navigation with Features (Git/GitHub), Tools (terminal management), and Settings
+- **Sidebar**: Left-side navigation with collapsible layout (240px expanded / 60px collapsed)
+  - **sidebar-header.tsx**: Logo display + collapse/expand toggle button
+  - **navigation-item.tsx**: Reusable navigation menu item with active/hover states
+  - **user-account-card.tsx**: GitHub account card showing username, connection status, and current branch
   - Features: Git status display/initialization and GitHub authentication/repo creation
   - Tools: New Terminal, Start Claude, Kill All with terminal counting
   - Settings toggle at bottom
@@ -110,6 +113,10 @@ src/
 │   ├── components/
 │   │   ├── terminal/        # Terminal UI
 │   │   ├── sidebar/         # Project/settings sidebar
+│   │   │   ├── sidebar.tsx
+│   │   │   ├── sidebar-header.tsx      # Logo + collapse toggle
+│   │   │   ├── navigation-item.tsx     # Navigation menu item
+│   │   │   └── user-account-card.tsx   # GitHub account card
 │   │   ├── project-tabs/    # Project tab bar
 │   │   │   ├── project-tabs.tsx
 │   │   │   └── index.ts

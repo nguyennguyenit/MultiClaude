@@ -24,7 +24,8 @@ function App() {
     setActiveProject,
     setActiveTerminal,
     sidebarOpen,
-    toggleSidebar
+    toggleSidebar,
+    activeView
   } = useAppStore()
 
   const { settings, loadSettings, gitPanelOpen, setGitPanelOpen } = useSettingsStore()
@@ -214,21 +215,25 @@ function App() {
           <>
             <Sidebar />
             <div className="flex-1 min-w-0">
-              <TerminalGrid
-                terminals={projectTerminals}
-                activeTerminalId={activeTerminalId}
-                onTerminalClick={setActiveTerminal}
-                onAddTerminal={handleAddTerminal}
-                onCloseTerminal={handleCloseTerminal}
-                onStartClaude={handleStartClaude}
-                onInsertFilePath={handleInsertFilePath}
-              />
+              {activeView === 'terminals' && (
+                <TerminalGrid
+                  terminals={projectTerminals}
+                  activeTerminalId={activeTerminalId}
+                  onTerminalClick={setActiveTerminal}
+                  onAddTerminal={handleAddTerminal}
+                  onCloseTerminal={handleCloseTerminal}
+                  onStartClaude={handleStartClaude}
+                  onInsertFilePath={handleInsertFilePath}
+                />
+              )}
+              {activeView === 'github' && (
+                <GitPanel
+                  projectPath={activeProject?.path}
+                  isOpen={true}
+                  onToggle={() => {}}
+                />
+              )}
             </div>
-            <GitPanel
-              projectPath={activeProject?.path}
-              isOpen={gitPanelOpen}
-              onToggle={() => setGitPanelOpen(!gitPanelOpen)}
-            />
           </>
         ) : (
           <WelcomeScreen onAddProject={handleAddProject} />

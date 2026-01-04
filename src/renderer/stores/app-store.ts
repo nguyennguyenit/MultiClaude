@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { Terminal, Project, ProjectTerminalLayout } from '@shared/types'
 
+export type ActiveView = 'terminals' | 'github'
+
 interface TerminalWithOutput extends Terminal {
   output: string
 }
@@ -26,6 +28,10 @@ interface AppState {
   // UI State
   sidebarOpen: boolean
   toggleSidebar: () => void
+  sidebarCollapsed: boolean
+  toggleSidebarCollapse: () => void
+  activeView: ActiveView
+  setActiveView: (view: ActiveView) => void
 
   // Per-project terminal layouts
   projectTerminals: Record<string, ProjectTerminalLayout>
@@ -99,6 +105,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // UI State
   sidebarOpen: true,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  sidebarCollapsed: false,
+  toggleSidebarCollapse: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  activeView: 'terminals' as ActiveView,
+  setActiveView: (view) => set({ activeView: view }),
 
   // Per-project terminal layouts
   projectTerminals: {},

@@ -74,6 +74,11 @@ body {
    ============================================ */
 
 :root {
+  /* Sidebar dimensions */
+  --mc-sidebar-width-expanded: 240px;
+  --mc-sidebar-width-collapsed: 60px;
+  --mc-sidebar-transition: 200ms ease-in-out;
+
   /* Base colors - will be overridden by theme classes */
   --mc-bg-primary: #1e1e1e;
   --mc-bg-secondary: #252526;
@@ -190,4 +195,24 @@ body {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* ============================================
+   Sidebar Polish - Smooth Transitions
+   ============================================ */
+
+/* Prevent text wrapping during sidebar transition */
+.sidebar-content {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Ensure smooth icon centering when collapsed */
+.sidebar-collapsed .sidebar-icon {
+  margin: 0 auto;
+}
+
+/* Navigation item text fade during transition */
+.nav-item-text {
+  transition: opacity 150ms ease-in-out;
 }
