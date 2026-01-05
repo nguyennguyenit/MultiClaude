@@ -4,6 +4,7 @@ import { join } from 'path'
 import { IPC_CHANNELS } from '@shared/constants'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
+import type { GitHeadWatcher } from '../git/git-head-watcher'
 import type { ProjectStore } from '../project/project-store'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
@@ -12,6 +13,7 @@ import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate 
 interface Managers {
   terminalManager: TerminalManager
   gitManager: GitManager
+  gitHeadWatcher: GitHeadWatcher
   projectStore: ProjectStore
   notificationManager: NotificationManager
 }
@@ -21,7 +23,15 @@ interface Managers {
 const GIT_BRANCH_CHANGE_PATTERN = /Switched to (?:a new )?branch '|Already on '/
 
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
-  const { terminalManager, gitManager, projectStore, notificationManager } = managers
+  const { terminalManager, gitManager, gitHeadWatcher, projectStore, notificationManager } = managers
+
+  // Register git head watcher callback to emit branch changes from external terminals
+  gitHeadWatcher.onBranchChange((projectPath) => {
+    console.log(`[handlers] Git branch changed for ${projectPath}, sending IPC event`)
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.GIT_BRANCH_CHANGED, { projectPath })
+    }
+  })
 
   // Forward terminal output to renderer + notification detection
   terminalManager.on('output', ({ terminalId, data }) => {
@@ -131,6 +141,20 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   // Git handlers
   ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_, cwd: string) => {
     return gitManager.getStatus(cwd)
+  })
+
+  // Git HEAD watcher handlers for external terminal changes
+  ipcMain.handle(IPC_CHANNELS.GIT_WATCH_PROJECT, async (_, projectPath: string) => {
+    console.log(`[handlers] Received watch request for ${projectPath}`)
+    const result = gitHeadWatcher.watch(projectPath)
+    console.log(`[handlers] Watch result: ${result}`)
+    return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNWATCH_PROJECT, async (_, projectPath: string) => {
+    console.log(`[handlers] Unwatching ${projectPath}`)
+    gitHeadWatcher.unwatch(projectPath)
+    return true
   })
 
   ipcMain.handle(IPC_CHANNELS.GIT_INIT, async (_, cwd: string) => {

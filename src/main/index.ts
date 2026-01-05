@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { TerminalManager } from './terminal/terminal-manager'
 import { GitManager } from './git/git-manager'
+import { GitHeadWatcher } from './git/git-head-watcher'
 import { ProjectStore } from './project/project-store'
 import { NotificationManager } from './notification'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -17,6 +18,7 @@ const __dirname = path.dirname(__filename)
 let mainWindow: BrowserWindow | null = null
 let terminalManager: TerminalManager | null = null
 let gitManager: GitManager | null = null
+let gitHeadWatcher: GitHeadWatcher | null = null
 let projectStore: ProjectStore | null = null
 let notificationManager: NotificationManager | null = null
 
@@ -46,6 +48,7 @@ function createWindow() {
   // Initialize managers
   terminalManager = new TerminalManager()
   gitManager = new GitManager()
+  gitHeadWatcher = new GitHeadWatcher()
   projectStore = new ProjectStore()
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
@@ -54,6 +57,7 @@ function createWindow() {
   registerIpcHandlers(mainWindow, {
     terminalManager,
     gitManager,
+    gitHeadWatcher,
     projectStore,
     notificationManager
   })
@@ -113,6 +117,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   // Cleanup
   terminalManager?.destroyAll()
+  gitHeadWatcher?.destroy()
   notificationManager?.destroy()
 
   if (process.platform !== 'darwin') {

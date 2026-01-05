@@ -168,6 +168,16 @@ export function UserAccountCard({ collapsed, projectPath }: UserAccountCardProps
     return unsubscribe
   }, [projectPath, loadGitStatus])
 
+  // Start watching project for external git changes (from terminals outside the app)
+  useEffect(() => {
+    if (!projectPath) return
+    // Start file watcher for .git/HEAD
+    window.electron.git.watchProject(projectPath)
+    return () => {
+      window.electron.git.unwatchProject(projectPath)
+    }
+  }, [projectPath])
+
   const status = STATUS_STYLES[connectionState]
   const gitRemoteStatus = gitStatus?.hasRemote ? GIT_STATUS_STYLES.connected : GIT_STATUS_STYLES.disconnected
   const username = githubAuth?.username || 'GitHub CLI'

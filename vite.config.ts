@@ -16,6 +16,11 @@ export default defineConfig(({ command }) => {
         main: {
           entry: 'src/main/index.ts',
           vite: {
+            server: {
+              watch: {
+                ignored: ['**/.git/**']
+              }
+            },
             build: {
               sourcemap: isServe,
               minify: isBuild,
@@ -34,6 +39,11 @@ export default defineConfig(({ command }) => {
         preload: {
           input: 'src/preload/index.ts',
           vite: {
+            server: {
+              watch: {
+                ignored: ['**/.git/**']
+              }
+            },
             build: {
               sourcemap: isServe ? 'inline' : undefined,
               minify: isBuild,
