@@ -3,6 +3,7 @@ import { SettingsSidebar, type SettingsTab } from './settings-sidebar'
 import { ThemeSelector } from './theme-selector'
 import { TerminalSettings } from './terminal-settings'
 import { NotificationSettings } from './notification-settings'
+import { UpdateSettings } from './update-settings'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -59,6 +60,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {activeTab === 'appearance' && <ThemeSelector />}
             {activeTab === 'terminals' && <TerminalSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
+            {activeTab === 'updates' && <UpdateSettings />}
           </div>
         </div>
 
