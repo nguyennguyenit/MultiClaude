@@ -157,6 +157,17 @@ export function UserAccountCard({ collapsed, projectPath }: UserAccountCardProps
     return () => window.removeEventListener('git-status-changed', handleGitStatusChanged as EventListener)
   }, [projectPath, loadGitStatus])
 
+  // Listen for git branch changes from terminal commands (git checkout, git switch)
+  useEffect(() => {
+    if (!projectPath) return
+    const unsubscribe = window.electron.git.onBranchChanged((data) => {
+      if (data.projectPath === projectPath) {
+        loadGitStatus()
+      }
+    })
+    return unsubscribe
+  }, [projectPath, loadGitStatus])
+
   const status = STATUS_STYLES[connectionState]
   const gitRemoteStatus = gitStatus?.hasRemote ? GIT_STATUS_STYLES.connected : GIT_STATUS_STYLES.disconnected
   const username = githubAuth?.username || 'GitHub CLI'

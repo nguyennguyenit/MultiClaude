@@ -64,6 +64,16 @@ export default defineConfig(({ command }) => {
     build: {
       outDir: 'dist/renderer'
     },
-    clearScreen: false
+    clearScreen: false,
+    server: {
+      watch: {
+        // Ignore .git folder to prevent restart on git operations
+        ignored: ['**/.git/**']
+      }
+    },
+    optimizeDeps: {
+      // Keep esbuild service alive to prevent EPIPE errors
+      holdUntilCrawlEnd: true
+    }
   }
 })

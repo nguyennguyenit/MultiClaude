@@ -16,6 +16,10 @@ interface Managers {
   notificationManager: NotificationManager
 }
 
+// Pattern to detect git branch changes from terminal output
+// Matches: "Switched to branch 'xxx'", "Switched to a new branch 'xxx'", "Already on 'xxx'"
+const GIT_BRANCH_CHANGE_PATTERN = /Switched to (?:a new )?branch '|Already on '/
+
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   const { terminalManager, gitManager, projectStore, notificationManager } = managers
 
@@ -23,6 +27,13 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   terminalManager.on('output', ({ terminalId, data }) => {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.TERMINAL_OUTPUT, { terminalId, data })
+      // Detect git branch changes (from git checkout, git switch commands)
+      if (GIT_BRANCH_CHANGE_PATTERN.test(data)) {
+        const terminal = terminalManager.get(terminalId)
+        if (terminal?.cwd) {
+          window.webContents.send(IPC_CHANNELS.GIT_BRANCH_CHANGED, { projectPath: terminal.cwd })
+        }
+      }
     }
     // Pattern detection for notifications
     notificationManager.processOutput(terminalId, data)
