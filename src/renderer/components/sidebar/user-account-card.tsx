@@ -146,6 +146,17 @@ export function UserAccountCard({ collapsed, projectPath }: UserAccountCardProps
     loadGitStatus()
   }, [loadGitStatus])
 
+  // Listen for git status changes (e.g., branch checkout from GitHub tab)
+  useEffect(() => {
+    const handleGitStatusChanged = (e: CustomEvent<{ projectPath: string }>) => {
+      if (e.detail.projectPath === projectPath) {
+        loadGitStatus()
+      }
+    }
+    window.addEventListener('git-status-changed', handleGitStatusChanged as EventListener)
+    return () => window.removeEventListener('git-status-changed', handleGitStatusChanged as EventListener)
+  }, [projectPath, loadGitStatus])
+
   const status = STATUS_STYLES[connectionState]
   const gitRemoteStatus = gitStatus?.hasRemote ? GIT_STATUS_STYLES.connected : GIT_STATUS_STYLES.disconnected
   const username = githubAuth?.username || 'GitHub CLI'
