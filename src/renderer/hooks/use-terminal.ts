@@ -98,7 +98,8 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       e.preventDefault()
       try {
         const text = await navigator.clipboard.readText()
-        if (text) terminal.paste(text)
+        // Write directly to PTY to avoid duplicate from terminal.paste()
+        if (text) window.electron.terminal.write(terminalId, text)
       } catch {
         // Clipboard permission denied - ignore silently
       }
@@ -108,6 +109,9 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
+
+      // Prevent browser's native paste event to avoid duplicate paste from xterm's paste listener
+      e.preventDefault()
 
       navigator.clipboard.read().then(async (clipboardItems) => {
         let hasImage = false
@@ -146,14 +150,17 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
         if (!hasImage) {
           try {
             const text = await navigator.clipboard.readText()
-            if (text) terminal.paste(text)
+            // Write directly to PTY - shell will echo back and display via onOutput
+            // Do NOT use terminal.paste() as it writes to display AND triggers onData,
+            // causing duplicate when PTY echoes back
+            if (text) window.electron.terminal.write(terminalId, text)
           } catch {
             // Clipboard permission denied
           }
         }
       }).catch(() => {
         navigator.clipboard.readText().then(text => {
-          if (text) terminal.paste(text)
+          if (text) window.electron.terminal.write(terminalId, text)
         }).catch(() => {})
       })
 

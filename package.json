@@ -95,7 +95,9 @@
       "icon": "build/icon.png"
     },
     "deb": {
-      "afterInstall": "scripts/postinst.sh"
+      "afterInstall": "scripts/postinst.sh",
+      "maintainer": "nguyennguyenit <nguyennlt.ncc@gmail.com>",
+      "license": "LICENSE"
     },
     "mac": {
       "target": [

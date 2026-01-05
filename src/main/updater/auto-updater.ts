@@ -8,6 +8,7 @@ autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
 
 let mainWindow: BrowserWindow | null = null
+let isDevMode = false
 
 // In-memory state
 let updateState: UpdateState = {
@@ -79,6 +80,7 @@ export function initAutoUpdater(window: BrowserWindow) {
   // Skip in dev mode
   if (process.env.VITE_DEV_SERVER_URL) {
     console.log('[AutoUpdater] Skipping in development mode')
+    isDevMode = true
     return
   }
 
@@ -128,6 +130,12 @@ export function initAutoUpdater(window: BrowserWindow) {
 }
 
 export async function checkForUpdatesManually(): Promise<UpdateState> {
+  // In dev mode, show appropriate message
+  if (isDevMode) {
+    setStatus('error', { error: 'Updates not available in development mode' })
+    return getUpdateState()
+  }
+
   try {
     setStatus('checking')
     await autoUpdater.checkForUpdates()
