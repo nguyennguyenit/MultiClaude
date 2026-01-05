@@ -173,12 +173,16 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
     if (!projectPath) return
     await window.electron.git.checkoutBranch(projectPath, name)
     await refreshAll()
+    // Dispatch event for other components to react to branch change
+    window.dispatchEvent(new CustomEvent('git-status-changed', { detail: { projectPath } }))
   }, [projectPath, refreshAll])
 
   const createBranch = useCallback(async (name: string) => {
     if (!projectPath) return
     await window.electron.git.createBranch(projectPath, name, true)
     await refreshAll()
+    // Dispatch event for other components to react to branch change
+    window.dispatchEvent(new CustomEvent('git-status-changed', { detail: { projectPath } }))
   }, [projectPath, refreshAll])
 
   const deleteBranch = useCallback(async (name: string, force = false) => {
