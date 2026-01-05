@@ -96,8 +96,7 @@
     },
     "deb": {
       "afterInstall": "scripts/postinst.sh",
-      "maintainer": "nguyennguyenit <nguyennlt.ncc@gmail.com>",
-      "license": "LICENSE"
+      "maintainer": "nguyennguyenit <nguyennlt.ncc@gmail.com>"
     },
     "mac": {
       "target": [
