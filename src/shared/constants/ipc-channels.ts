@@ -31,8 +31,11 @@ export const IPC_CHANNELS = {
   GIT_COMMIT: 'git:commit',
   GIT_DIFF: 'git:diff',
   GIT_DISCARD: 'git:discard',
-  // Git branch change event (from terminal detection)
+  // Git branch change event (from terminal detection or file watcher)
   GIT_BRANCH_CHANGED: 'git:branch-changed',
+  // Git HEAD watcher for external terminal changes
+  GIT_WATCH_PROJECT: 'git:watch-project',
+  GIT_UNWATCH_PROJECT: 'git:unwatch-project',
   // Git extended operations
   GIT_PULL: 'git:pull',
   GIT_FETCH: 'git:fetch',

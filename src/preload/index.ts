@@ -73,8 +73,11 @@ export interface ElectronAPI {
     // Config methods
     configGet: () => Promise<GitConfig>
     configSet: (config: GitConfig) => Promise<GitOperationResult>
-    // Branch change event listener (from terminal git commands)
+    // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback: (data: { projectPath: string }) => void) => () => void
+    // Watch project for external git changes
+    watchProject: (projectPath: string) => Promise<boolean>
+    unwatchProject: (projectPath: string) => Promise<boolean>
   }
   github: {
     authStatus: () => Promise<GitHubAuth>
@@ -192,12 +195,15 @@ const api: ElectronAPI = {
     // Config methods
     configGet: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_GET),
     configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config),
-    // Branch change event listener (from terminal git commands)
+    // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback) => {
       const listener = (_: unknown, data: { projectPath: string }) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.GIT_BRANCH_CHANGED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_BRANCH_CHANGED, listener)
-    }
+    },
+    // Watch project for external git changes
+    watchProject: (projectPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WATCH_PROJECT, projectPath),
+    unwatchProject: (projectPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_UNWATCH_PROJECT, projectPath)
   },
   github: {
     authStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_AUTH_STATUS),
