@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { ThemeSelector } from './theme-selector'
 import { NotificationSettings } from './notification-settings'
 import { TerminalSettings } from './terminal-settings'
+import { UpdateSettings } from './update-settings'
+import { useUpdateStore } from '../../stores'
 
-type SettingsTab = 'appearance' | 'terminals' | 'notifications'
+type SettingsTab = 'appearance' | 'terminals' | 'notifications' | 'updates'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -11,6 +13,8 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  const { state: updateState } = useUpdateStore()
+  const hasUpdate = updateState.status === 'available' || updateState.status === 'ready'
 
   return (
     <div className="border-t border-[var(--mc-border)] bg-[var(--mc-bg-secondary)] p-3">
@@ -46,12 +50,20 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         >
           Notifications
         </TabButton>
+        <TabButton
+          active={activeTab === 'updates'}
+          onClick={() => setActiveTab('updates')}
+          badge={hasUpdate}
+        >
+          Updates
+        </TabButton>
       </div>
 
       {/* Tab content */}
       {activeTab === 'appearance' && <ThemeSelector />}
       {activeTab === 'terminals' && <TerminalSettings />}
       {activeTab === 'notifications' && <NotificationSettings />}
+      {activeTab === 'updates' && <UpdateSettings />}
     </div>
   )
 }
@@ -59,17 +71,19 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
 function TabButton({
   children,
   active,
-  onClick
+  onClick,
+  badge
 }: {
   children: React.ReactNode
   active: boolean
   onClick: () => void
+  badge?: boolean
 }) {
   return (
     <button
       onClick={onClick}
       className={`
-        px-3 py-1 text-xs rounded
+        px-3 py-1 text-xs rounded relative
         ${active
           ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)]'
           : 'bg-[var(--mc-bg-hover)] text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-active)]'
@@ -77,6 +91,9 @@ function TabButton({
       `}
     >
       {children}
+      {badge && !active && (
+        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[var(--mc-accent)] rounded-full" />
+      )}
     </button>
   )
 }

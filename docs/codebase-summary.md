@@ -126,6 +126,7 @@ src/
 │   │       ├── notification-settings.tsx
 │   │       ├── telegram-config-modal.tsx
 │   │       ├── discord-config-modal.tsx
+│   │       ├── update-settings.tsx      # In-app update management UI
 │   │       └── index.ts
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-file-drop.ts       # Drag-drop file paths into terminal
@@ -135,6 +136,7 @@ src/
 │   │   ├── app-store.ts
 │   │   ├── settings-store.ts
 │   │   ├── notification-store.ts
+│   │   ├── update-store.ts          # Update state management
 │   │   └── index.ts
 │   └── styles/              # CSS
 ├── preload/                 # IPC bridge
@@ -173,6 +175,13 @@ src/
 
 ### Session & App
 - `session:save`, `session:restore`, `app:get-path`, `app:check-for-updates`
+
+### Updates
+- `update:get-state` - Get current update state (status, progress, version, changelog)
+- `update:check` - Manually trigger update check
+- `update:download` - Start downloading available update
+- `update:install` - Install downloaded update and restart app
+- `update:state-changed` - Broadcast event when update state changes
 
 ### Clipboard
 - `clipboard:save-image` - Save clipboard image to temp file, returns path or null
@@ -216,6 +225,20 @@ interface NotificationSettings {
   telegramConfigured: boolean
   discordEnabled: boolean
   discordConfigured: boolean
+}
+```
+
+### Update State
+```typescript
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+
+interface UpdateState {
+  status: UpdateStatus
+  currentVersion: string
+  availableVersion?: string
+  changelog?: string
+  progress?: number  // 0-100 for download progress
+  error?: string
 }
 ```
 
@@ -378,3 +401,35 @@ interface ProjectTerminal {
   - `getAllTerminalLayouts()`: Bulk retrieval for app initialization
 - **Deleted Components**: Removed terminal-tabs.tsx (consolidated into ProjectTabs)
 - **Feature Complete**: Project tabs redesign fully integrated with persistence layer
+
+## In-App Update Settings Implementation
+
+**Feature Status**: Completed (2026-01-05)
+
+**Phase 1 - Completed: Types + IPC Channels**
+- **UpdateState**: State interface with status, versions, changelog, progress, error
+- **UpdateStatus**: Type union ('idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error')
+- **IPC Channels**: UPDATE_GET_STATE, UPDATE_CHECK, UPDATE_DOWNLOAD, UPDATE_INSTALL, UPDATE_STATE_CHANGED
+- **Preload**: Added `update` namespace to ElectronAPI
+
+**Phase 2 - Completed: Main Process Enhancements**
+- **auto-updater.ts**: Enhanced with state management and IPC broadcasting
+  - State tracking with status, versions, changelog, progress
+  - GitHub Releases API fetch for changelog (24hr cache TTL)
+  - IPC event broadcasting on state changes
+  - Auto-check on startup with 3s delay
+- **handlers.ts**: UPDATE_* IPC handlers for get-state, check, download, install
+
+**Phase 3 - Completed: Renderer Store + UI**
+- **update-store.ts**: Zustand store for update state management
+  - State mirroring from main process via IPC
+  - Actions: checkForUpdates, downloadUpdate, installUpdate
+- **update-settings.tsx**: Settings panel UI component
+  - Current version display
+  - "Check for Updates" button with loading state
+  - Changelog display (plain text)
+  - Download progress bar (0-100%)
+  - "Install and Restart" button when update ready
+- **settings-panel.tsx**: Added Updates tab to tabbed settings UI
+- **sidebar.tsx**: Badge notification dot on Settings button when update available/ready
+- **App.tsx**: setupUpdateListener() called on mount for state sync

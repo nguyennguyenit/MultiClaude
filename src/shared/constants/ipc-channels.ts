@@ -85,7 +85,14 @@ export const IPC_CHANNELS = {
   CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image',
 
   // File picker channels
-  FILE_PICKER_OPEN: 'file-picker:open'
+  FILE_PICKER_OPEN: 'file-picker:open',
+
+  // Update channels
+  UPDATE_GET_STATE: 'update:get-state',
+  UPDATE_CHECK: 'update:check',
+  UPDATE_DOWNLOAD: 'update:download',
+  UPDATE_INSTALL: 'update:install',
+  UPDATE_STATUS_CHANGED: 'update:status-changed'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

@@ -1,51 +1,125 @@
 import { autoUpdater, UpdateInfo } from 'electron-updater'
-import { dialog, BrowserWindow } from 'electron'
+import { BrowserWindow, app } from 'electron'
+import type { UpdateState, UpdateStatus } from '@shared/types'
 
 // Configure logging
 autoUpdater.logger = console
-autoUpdater.autoDownload = false // Let user decide
+autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
 
 let mainWindow: BrowserWindow | null = null
 
+// In-memory state
+let updateState: UpdateState = {
+  status: 'idle',
+  currentVersion: app.getVersion(),
+  latestVersion: null,
+  releaseNotes: null,
+  downloadProgress: 0,
+  error: null
+}
+
+// Release notes cache (24hr TTL)
+interface ReleaseNotesCache {
+  version: string
+  notes: string
+  timestamp: number
+}
+let releaseNotesCache: ReleaseNotesCache | null = null
+const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+function setStatus(status: UpdateStatus, extra?: Partial<UpdateState>) {
+  updateState = { ...updateState, status, ...extra }
+  broadcastState()
+}
+
+function broadcastState() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:status-changed', updateState)
+  }
+}
+
+export function getUpdateState(): UpdateState {
+  return { ...updateState, currentVersion: app.getVersion() }
+}
+
+async function fetchReleaseNotes(version: string): Promise<string> {
+  // Check cache
+  if (releaseNotesCache &&
+      releaseNotesCache.version === version &&
+      Date.now() - releaseNotesCache.timestamp < CACHE_TTL) {
+    return releaseNotesCache.notes
+  }
+
+  try {
+    const url = `https://api.github.com/repos/nguyennguyenit/MultiClaude/releases/tags/v${version}`
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'MultiClaude-Updater' }
+    })
+
+    if (!res.ok) {
+      return 'No release notes available.'
+    }
+
+    const data = await res.json()
+    const notes = data.body || 'No release notes available.'
+
+    // Cache result
+    releaseNotesCache = { version, notes, timestamp: Date.now() }
+
+    return notes
+  } catch {
+    return 'Failed to fetch release notes.'
+  }
+}
+
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window
 
-  // Only check for updates in production
+  // Skip in dev mode
   if (process.env.VITE_DEV_SERVER_URL) {
-    console.log('[AutoUpdater] Skipping update check in development mode')
+    console.log('[AutoUpdater] Skipping in development mode')
     return
   }
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for updates...')
+    setStatus('checking', { error: null })
   })
 
-  autoUpdater.on('update-available', (info: UpdateInfo) => {
+  autoUpdater.on('update-available', async (info: UpdateInfo) => {
     console.log('[AutoUpdater] Update available:', info.version)
-    promptUserForUpdate(info)
+    const notes = await fetchReleaseNotes(info.version)
+    setStatus('available', {
+      latestVersion: info.version,
+      releaseNotes: notes,
+      error: null
+    })
   })
 
   autoUpdater.on('update-not-available', () => {
     console.log('[AutoUpdater] No updates available')
+    setStatus('idle', { error: null })
   })
 
   autoUpdater.on('download-progress', (progress) => {
     console.log(`[AutoUpdater] Download progress: ${progress.percent.toFixed(1)}%`)
-    // Send to renderer for UI display
-    mainWindow?.webContents.send('update-download-progress', progress)
+    setStatus('downloading', {
+      downloadProgress: Math.round(progress.percent)
+    })
   })
 
   autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
     console.log('[AutoUpdater] Update downloaded:', info.version)
-    promptInstallUpdate(info)
+    setStatus('ready', { downloadProgress: 100 })
   })
 
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error.message)
+    setStatus('error', { error: error.message })
   })
 
-  // Check for updates after a short delay
+  // Auto-check after 3s delay
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch((err) => {
       console.error('[AutoUpdater] Check failed:', err.message)
@@ -53,38 +127,21 @@ export function initAutoUpdater(window: BrowserWindow) {
   }, 3000)
 }
 
-async function promptUserForUpdate(info: UpdateInfo) {
-  const result = await dialog.showMessageBox(mainWindow!, {
-    type: 'info',
-    title: 'Update Available',
-    message: `Version ${info.version} is available`,
-    detail: 'Would you like to download it now?',
-    buttons: ['Download', 'Later'],
-    defaultId: 0,
-    cancelId: 1
-  })
-
-  if (result.response === 0) {
-    autoUpdater.downloadUpdate()
+export async function checkForUpdatesManually(): Promise<UpdateState> {
+  try {
+    setStatus('checking')
+    await autoUpdater.checkForUpdates()
+  } catch (error) {
+    setStatus('error', { error: (error as Error).message })
   }
+  return getUpdateState()
 }
 
-async function promptInstallUpdate(info: UpdateInfo) {
-  const result = await dialog.showMessageBox(mainWindow!, {
-    type: 'info',
-    title: 'Update Ready',
-    message: `Version ${info.version} is ready to install`,
-    detail: 'The application will restart to apply the update.',
-    buttons: ['Install Now', 'Later'],
-    defaultId: 0,
-    cancelId: 1
-  })
-
-  if (result.response === 0) {
-    autoUpdater.quitAndInstall(false, true)
-  }
+export async function downloadUpdate(): Promise<void> {
+  setStatus('downloading', { downloadProgress: 0 })
+  await autoUpdater.downloadUpdate()
 }
 
-export function checkForUpdatesManually() {
-  return autoUpdater.checkForUpdates()
+export function installUpdate(): void {
+  autoUpdater.quitAndInstall(false, true)
 }

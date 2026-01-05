@@ -1,1 +1,1 @@
-export { initAutoUpdater, checkForUpdatesManually } from './auto-updater'
+export { initAutoUpdater, checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from './auto-updater'

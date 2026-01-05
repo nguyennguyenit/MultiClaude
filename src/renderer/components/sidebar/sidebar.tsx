@@ -1,4 +1,4 @@
-import { useAppStore, useSettingsStore } from '../../stores'
+import { useAppStore, useSettingsStore, useUpdateStore } from '../../stores'
 import { SidebarHeader } from './sidebar-header'
 import { NavigationItem } from './navigation-item'
 import { UserAccountCard } from './user-account-card'
@@ -28,6 +28,8 @@ export function Sidebar() {
   } = useAppStore()
 
   const { setSettingsModalOpen } = useSettingsStore()
+  const { state: updateState } = useUpdateStore()
+  const hasUpdate = updateState.status === 'available' || updateState.status === 'ready'
   const activeProject = projects.find(p => p.id === activeProjectId)
 
   if (!sidebarOpen) return null
@@ -98,7 +100,7 @@ export function Sidebar() {
             <button
               onClick={() => setSettingsModalOpen(true)}
               className={`
-                w-full flex items-center gap-2 px-2 py-2 rounded text-sm
+                w-full flex items-center gap-2 px-2 py-2 rounded text-sm relative
                 transition-colors duration-150
                 ${sidebarCollapsed ? 'justify-center' : ''}
                 hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-secondary)]
@@ -110,6 +112,9 @@ export function Sidebar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               {!sidebarCollapsed && <span className="whitespace-nowrap">Settings</span>}
+              {hasUpdate && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-[var(--mc-accent)] rounded-full" />
+              )}
             </button>
           </IconWithTooltip>
         </div>

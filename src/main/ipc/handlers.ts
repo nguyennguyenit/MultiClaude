@@ -7,7 +7,7 @@ import type { GitManager } from '../git/git-manager'
 import type { ProjectStore } from '../project/project-store'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
-import { checkForUpdatesManually } from '../updater'
+import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
 
 interface Managers {
   terminalManager: TerminalManager
@@ -268,7 +268,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   ipcMain.handle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, async () => {
     try {
       const result = await checkForUpdatesManually()
-      return { success: true, updateInfo: result?.updateInfo }
+      return { success: true, updateState: result }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -397,5 +397,22 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       return null
     }
     return result.filePaths
+  })
+
+  // Update handlers
+  ipcMain.handle(IPC_CHANNELS.UPDATE_GET_STATE, () => {
+    return getUpdateState()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {
+    return checkForUpdatesManually()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, async () => {
+    await downloadUpdate()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, () => {
+    installUpdate()
   })
 }

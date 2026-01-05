@@ -6,7 +6,7 @@ import { WelcomeScreen } from './components/welcome-screen'
 import { GitHubView } from './components/github-view'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
-import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener } from './stores'
+import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
 
@@ -180,6 +180,12 @@ function App() {
   // Setup notification listener
   useEffect(() => {
     const cleanup = setupNotificationListener()
+    return cleanup
+  }, [])
+
+  // Setup update listener
+  useEffect(() => {
+    const cleanup = setupUpdateListener()
     return cleanup
   }, [])
 

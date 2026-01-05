@@ -18,7 +18,8 @@ import type {
   NotificationEvent,
   NotificationTestResult,
   GitHubIssue,
-  GitHubPR
+  GitHubPR,
+  UpdateState
 } from '@shared/types'
 
 // Type-safe API for renderer
@@ -110,6 +111,13 @@ export interface ElectronAPI {
   }
   filePicker: {
     open: () => Promise<string[] | null>
+  }
+  update: {
+    getState: () => Promise<UpdateState>
+    check: () => Promise<UpdateState>
+    download: () => Promise<void>
+    install: () => Promise<void>
+    onStatusChanged: (callback: (state: UpdateState) => void) => () => void
   }
   utils: {
     getFilePath: (file: File) => string
@@ -224,6 +232,17 @@ const api: ElectronAPI = {
   },
   filePicker: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)
+  },
+  update: {
+    getState: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_GET_STATE),
+    check: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
+    download: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_DOWNLOAD),
+    install: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_INSTALL),
+    onStatusChanged: (callback) => {
+      const listener = (_: unknown, state: UpdateState) => callback(state)
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
+    }
   },
   utils: {
     getFilePath: (file) => webUtils.getPathForFile(file)
