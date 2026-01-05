@@ -5,6 +5,7 @@ import type {
   Project,
   GitStatus,
   GitHubAuth,
+  GitConfig,
   GitFileStatus,
   GitCommitResult,
   GitDiffResult,
@@ -68,6 +69,9 @@ export interface ElectronAPI {
     stashApply: (cwd: string, index?: number) => Promise<GitOperationResult>
     stashPop: (cwd: string, index?: number) => Promise<GitOperationResult>
     stashDrop: (cwd: string, index?: number) => Promise<GitOperationResult>
+    // Config methods
+    configGet: () => Promise<GitConfig>
+    configSet: (config: GitConfig) => Promise<GitOperationResult>
   }
   github: {
     authStatus: () => Promise<GitHubAuth>
@@ -174,7 +178,10 @@ const api: ElectronAPI = {
     stashSave: (cwd, message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_SAVE, { cwd, message }),
     stashApply: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_APPLY, { cwd, index }),
     stashPop: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_POP, { cwd, index }),
-    stashDrop: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_DROP, { cwd, index })
+    stashDrop: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_DROP, { cwd, index }),
+    // Config methods
+    configGet: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_GET),
+    configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config)
   },
   github: {
     authStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_AUTH_STATUS),

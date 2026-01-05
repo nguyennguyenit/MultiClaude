@@ -216,6 +216,14 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.stashDrop(cwd, index)
   })
 
+  ipcMain.handle(IPC_CHANNELS.GIT_CONFIG_GET, async () => {
+    return gitManager.getGitConfig()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CONFIG_SET, async (_, config: { userName?: string; userEmail?: string }) => {
+    return gitManager.setGitConfig(config)
+  })
+
   // GitHub handlers
   ipcMain.handle(IPC_CHANNELS.GITHUB_AUTH_STATUS, async () => {
     return gitManager.getGitHubAuthStatus()

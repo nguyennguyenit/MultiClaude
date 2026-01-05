@@ -45,6 +45,8 @@ export const IPC_CHANNELS = {
   GIT_STASH_APPLY: 'git:stash-apply',
   GIT_STASH_POP: 'git:stash-pop',
   GIT_STASH_DROP: 'git:stash-drop',
+  GIT_CONFIG_GET: 'git:config-get',
+  GIT_CONFIG_SET: 'git:config-set',
 
   // GitHub channels
   GITHUB_AUTH_STATUS: 'github:auth-status',

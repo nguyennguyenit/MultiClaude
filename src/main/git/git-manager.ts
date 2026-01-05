@@ -4,6 +4,7 @@ import { resolve, relative } from 'path'
 import type {
   GitStatus,
   GitHubAuth,
+  GitConfig,
   GitFileStatus,
   GitCommitResult,
   GitDiffResult,
@@ -620,5 +621,66 @@ export class GitManager {
         resolve({ success: false, error: 'GitHub CLI not found' })
       })
     })
+  }
+
+  // ========== Git Config ==========
+
+  async getGitConfig(): Promise<GitConfig> {
+    return new Promise((resolve) => {
+      const proc = spawn('git', ['config', '--global', '--get-regexp', '^user\\.'])
+      let output = ''
+
+      proc.stdout.on('data', (data) => {
+        output += data.toString()
+      })
+
+      proc.on('close', () => {
+        const config: GitConfig = {}
+        const lines = output.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('user.name ')) {
+            config.userName = line.replace('user.name ', '').trim()
+          } else if (line.startsWith('user.email ')) {
+            config.userEmail = line.replace('user.email ', '').trim()
+          }
+        }
+        resolve(config)
+      })
+
+      proc.on('error', () => {
+        resolve({})
+      })
+    })
+  }
+
+  async setGitConfig(config: GitConfig): Promise<GitOperationResult> {
+    try {
+      const promises: Promise<void>[] = []
+
+      if (config.userName !== undefined) {
+        promises.push(
+          new Promise((resolve, reject) => {
+            const proc = spawn('git', ['config', '--global', 'user.name', config.userName || ''])
+            proc.on('close', (code) => (code === 0 ? resolve() : reject()))
+            proc.on('error', reject)
+          })
+        )
+      }
+
+      if (config.userEmail !== undefined) {
+        promises.push(
+          new Promise((resolve, reject) => {
+            const proc = spawn('git', ['config', '--global', 'user.email', config.userEmail || ''])
+            proc.on('close', (code) => (code === 0 ? resolve() : reject()))
+            proc.on('error', reject)
+          })
+        )
+      }
+
+      await Promise.all(promises)
+      return { success: true, message: 'Git config updated' }
+    } catch {
+      return { success: false, error: 'Failed to update git config' }
+    }
   }
 }

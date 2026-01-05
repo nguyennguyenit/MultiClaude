@@ -87,6 +87,11 @@ export interface GitHubAuth {
   username?: string
 }
 
+export interface GitConfig {
+  userName?: string
+  userEmail?: string
+}
+
 // Git file status for commit workflow panel
 export interface GitFileStatus {
   path: string
