@@ -73,6 +73,8 @@ export interface ElectronAPI {
     // Config methods
     configGet: () => Promise<GitConfig>
     configSet: (config: GitConfig) => Promise<GitOperationResult>
+    // Branch change event listener (from terminal git commands)
+    onBranchChanged: (callback: (data: { projectPath: string }) => void) => () => void
   }
   github: {
     authStatus: () => Promise<GitHubAuth>
@@ -189,7 +191,13 @@ const api: ElectronAPI = {
     stashDrop: (cwd, index) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_DROP, { cwd, index }),
     // Config methods
     configGet: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_GET),
-    configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config)
+    configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config),
+    // Branch change event listener (from terminal git commands)
+    onBranchChanged: (callback) => {
+      const listener = (_: unknown, data: { projectPath: string }) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.GIT_BRANCH_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_BRANCH_CHANGED, listener)
+    }
   },
   github: {
     authStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_AUTH_STATUS),
