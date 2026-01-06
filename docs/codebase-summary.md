@@ -96,7 +96,7 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 
 **Phase 3 - Completed: Renderer UI**
 - **NotificationStore** (Zustand): Settings state management with sound caching
-- **NotificationSettings**: Main settings UI with event toggles, sound preset selector
+- **NotificationSettings**: Main settings UI with event toggles, sound preset selector, behavior controls
 - **TelegramConfigModal**: Modal for Telegram botToken/chatId configuration
 - **DiscordConfigModal**: Modal for Discord webhookUrl configuration
 - Sound playback with audio element caching (auto, success, error, info types)
@@ -437,6 +437,16 @@ interface ProjectTerminal {
   - Test notification now uses embeds
 - **NotificationManager**: Delegates to `notifier.sendTaskEvent()` instead of inline formatting
   - Removed duplicate `formatTelegramMessage()`/`formatDiscordMessage()` methods
+
+**Phase 6 - Completed: Settings UI**
+- **NotificationSettings Behavior Section**: New UI section for output parsing and notification behavior
+  - Detection Mode dropdown: auto (recommended), stream-json, plain-text
+  - "Only When Background" toggle: Skip notifications when watching terminal
+  - "Include Task Summary" toggle: Add task name to notifications
+  - Uses OutputMode type from shared/types
+- **App.tsx Active Terminal Sync**: useEffect syncs activeTerminalId with notification.setActiveTerminal IPC
+  - Enables FocusDetector to track which terminal user is watching
+  - Runs on every activeTerminalId change
 
 **Feature Status**: Feature complete and fully integrated
 

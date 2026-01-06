@@ -208,6 +208,11 @@ function App() {
     return cleanup
   }, [])
 
+  // Sync active terminal with notification focus detector
+  useEffect(() => {
+    window.electron.notification.setActiveTerminal(activeTerminalId)
+  }, [activeTerminalId])
+
   // Apply theme classes to document
   useEffect(() => {
     const root = document.documentElement
