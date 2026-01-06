@@ -14,20 +14,20 @@ Get the latest version from [GitHub Releases](https://github.com/nguyennguyenit/
 
 ### First Run Notes
 
-- **macOS**: Right-click the app → Open → Open (to bypass Gatekeeper)
-- **Windows**: Click "More info" → "Run anyway" (for SmartScreen warning)
+- **macOS**: Right-click the app > Open > Open (to bypass Gatekeeper)
+- **Windows**: Click "More info" > "Run anyway" (for SmartScreen warning)
 - **Linux AppImage**: Make executable with `chmod +x MultiClaude-*.AppImage`
 
 ## Features
 
-- **Multi-Agent Terminals**: Open multiple terminals running Claude Code simultaneously
-- **Git Integration**: Initialize git repos, view status, push changes
-- **GitHub Integration**: Login via GitHub CLI, create repositories
-- **Project Management**: Add, switch between, and manage multiple projects
-- **Session Persistence**: Terminals automatically restore on app restart
-- **Theme Settings**: Light/Dark/System mode + 7 color themes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest)
-- **Notifications**: Get notified when tasks complete/fail via native OS, Telegram, or Discord
-- **Clipboard Images**: Paste images from clipboard directly into terminal (auto-saves and inserts path)
+- **Multi-Agent Terminals**: Up to 12 terminals in auto-split grid layout
+- **Project Management**: Per-project terminal layouts with session persistence
+- **Git Integration**: Visual git panel with staging, commits, branches, stash, history
+- **GitHub Integration**: Login via gh CLI, create repos, view issues/PRs
+- **Notifications**: Task alerts via native OS, Telegram, or Discord
+- **Themes**: 7 color themes + light/dark/system mode
+- **Terminal Rendering**: Configurable WebGL modes (Performance/Balanced/Quality)
+- **Auto-Updates**: In-app updates with changelog display
 
 ## Quick Start
 
@@ -49,10 +49,11 @@ npm run build
 | Desktop | Electron 33 |
 | Frontend | React 19 + TypeScript |
 | Terminal | node-pty + xterm.js |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS 3 |
 | State | Zustand |
 | Persistence | electron-store |
 | Git | simple-git + gh CLI |
+| Updates | electron-updater |
 
 ## Project Structure
 
@@ -64,6 +65,7 @@ src/
 │   ├── project/      # Project store
 │   ├── notification/ # Telegram/Discord notifications
 │   ├── clipboard/    # Clipboard image handling
+│   ├── updater/      # Auto-update system
 │   └── ipc/          # IPC handlers
 ├── renderer/         # React UI
 │   ├── components/   # UI components
@@ -84,37 +86,70 @@ src/
 1. **Add Project**: Click the + button in the sidebar to add a project folder
 2. **Create Terminal**: Click the + button in the terminal tab bar
 3. **Start Claude**: Click "Start Claude" to invoke Claude Code in the active terminal
-4. **Git Integration**: Initialize git, connect to GitHub, push changes from the sidebar
+4. **Git Integration**: Use the Git panel in sidebar for staging, commits, branches
 
 ### Keyboard Shortcuts
 
-#### Global Shortcuts
 | Action | Shortcut |
 |--------|----------|
 | Switch to Project 1-9 | Alt+1 to Alt+9 |
 | New Terminal | Ctrl+N |
 | Close Active Terminal | Ctrl+W |
-
-#### Terminal Shortcuts
-| Action | Shortcut |
-|--------|----------|
-| Copy | Select text (auto-copies on selection) |
+| Copy | Select text (auto-copies) |
 | Paste | Right-click or Ctrl+V |
-| Paste Image | Ctrl+V (image from clipboard, saves to temp and inserts path) |
-| Insert File Path | Drag-and-drop file from file manager |
+| Paste Image | Ctrl+V (clipboard image > temp file > insert path) |
+| Insert File Path | Drag-and-drop file |
 
 ## Notifications
 
-Configure notifications in Settings to get alerted when Claude tasks complete or fail:
+Configure in Settings > Notifications:
 
-- **Native OS**: Desktop notifications (always enabled)
-- **Telegram**: Configure bot token and chat ID
-- **Discord**: Configure webhook URL
+| Platform | Configuration |
+|----------|---------------|
+| Native OS | Always enabled |
+| Telegram | Bot token + Chat ID |
+| Discord | Webhook URL |
 
-Detected events:
-- Task Complete (e.g., "I've finished...")
-- Task Failed (e.g., "Error:", "failed")
-- Review Needed (e.g., "Please review", "waiting for")
+Detected events: Task Complete, Task Failed, Review Needed
+
+## Terminal Rendering Modes
+
+Configure in Settings > Terminals:
+
+| Mode | Description |
+|------|-------------|
+| Performance | No WebGL, best for many terminals |
+| Balanced | WebGL on active terminal only (default) |
+| Quality | WebGL always enabled, best visuals |
+
+## Documentation
+
+See [docs/](./docs/) for detailed documentation:
+
+- [Project Overview & PDR](./docs/project-overview-pdr.md)
+- [System Architecture](./docs/system-architecture.md)
+- [Code Standards](./docs/code-standards.md)
+- [Codebase Summary](./docs/codebase-summary.md)
+- [Tech Stack](./docs/tech-stack.md)
+
+## Development
+
+```bash
+npm run electron:dev    # Dev with hot reload
+npm run build           # Production build
+npm test                # Run tests
+npm run test:coverage   # Coverage report
+npm run typecheck       # Type checking
+```
+
+## Release
+
+```bash
+npm run version:patch   # Bump version (creates git tag)
+npm run release         # Build + publish to GitHub Releases
+```
+
+Platform-specific: `release:linux`, `release:win`, `release:mac`
 
 ## License
 

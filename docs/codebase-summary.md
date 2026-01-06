@@ -1,7 +1,9 @@
 # MultiClaude Codebase Summary
 
 ## Overview
-MultiClaude is an Electron-based desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management, and user settings (themes and notifications).
+MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management, and user settings (themes and notifications).
+
+**Codebase Stats**: ~10K LOC, 88 TypeScript files, 79 IPC channels
 
 ## Architecture
 
@@ -162,38 +164,51 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels
+## IPC Channels (79 total)
 
-### Terminal
-- `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`, `terminal:resize`, `terminal:list`, `terminal:invoke-claude`
+### Terminal (8 channels)
+- `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
+- `terminal:resize`, `terminal:list`, `terminal:invoke-claude`, `terminal:title-change`
 
-### Project
-- `project:list`, `project:create`, `project:delete`, `project:set-active`, `project:open-folder`, `project:check-folder`
+### Project (6 channels)
+- `project:list`, `project:create`, `project:delete`, `project:set-active`
+- `project:open-folder`, `project:check-folder`
 
-### Git
-- `git:status`, `git:init`, `git:add-remote`, `git:push`
+### Git (35 channels)
+**Basic**: `git:status`, `git:init`, `git:add-remote`, `git:push`
+**File Operations**: `git:file-status`, `git:stage-file`, `git:unstage-file`, `git:stage-all`, `git:discard`, `git:diff`
+**Commit**: `git:commit`
+**Branch**: `git:branches`, `git:create-branch`, `git:checkout-branch`, `git:delete-branch`, `git:merge`
+**Remote**: `git:pull`, `git:fetch`
+**History**: `git:log`
+**Stash**: `git:stash-list`, `git:stash-save`, `git:stash-apply`, `git:stash-pop`, `git:stash-drop`
+**Config**: `git:config-get`, `git:config-set`
+**Watcher**: `git:branch-changed`, `git:watch-project`, `git:unwatch-project`
 
-### GitHub
+### GitHub (5 channels)
 - `github:auth-status`, `github:login`, `github:logout`, `github:create-repo`
+- `github:issues-list`, `github:prs-list`
 
-### Notifications
+### Notifications (12 channels)
 - **Settings**: `notification:get-settings`, `notification:set-settings`
 - **Telegram**: `notification:set-telegram`, `notification:get-telegram-status`, `notification:test-telegram`, `notification:clear-telegram`
 - **Discord**: `notification:set-discord`, `notification:get-discord-status`, `notification:test-discord`, `notification:clear-discord`
-- **Events**: `notification:event` (broadcast for pattern-detected events)
+- **Events**: `notification:event`
 
-### Session & App
+### Session & App (4 channels)
 - `session:save`, `session:restore`, `app:get-path`, `app:check-for-updates`
 
-### Updates
-- `update:get-state` - Get current update state (status, progress, version, changelog)
-- `update:check` - Manually trigger update check
-- `update:download` - Start downloading available update
-- `update:install` - Install downloaded update and restart app
-- `update:state-changed` - Broadcast event when update state changes
+### Updates (5 channels)
+- `update:get-state`, `update:check`, `update:download`, `update:install`, `update:status-changed`
 
-### Clipboard
-- `clipboard:save-image` - Save clipboard image to temp file, returns path or null
+### Clipboard (1 channel)
+- `clipboard:save-image`
+
+### File Picker (1 channel)
+- `file-picker:open`
+
+### YOLO Mode (2 channels)
+- `yolo:get`, `yolo:set`
 
 ## Key Data Structures
 

@@ -1,0 +1,452 @@
+# MultiClaude Code Standards
+
+## Project Structure
+
+```
+multiclaude/
+├── src/
+│   ├── main/                 # Electron main process (Node.js)
+│   │   ├── index.ts          # Entry point, window, menu
+│   │   ├── terminal/         # PTY management
+│   │   ├── git/              # Git operations
+│   │   ├── project/          # Project persistence
+│   │   ├── notification/     # Notification system
+│   │   ├── clipboard/        # Clipboard handlers
+│   │   ├── updater/          # Auto-update
+│   │   ├── ipc/              # IPC handlers
+│   │   └── __tests__/        # Test files
+│   ├── renderer/             # React UI
+│   │   ├── App.tsx           # Root component
+│   │   ├── main.tsx          # Entry point
+│   │   ├── components/       # UI components
+│   │   ├── hooks/            # Custom React hooks
+│   │   ├── stores/           # Zustand stores
+│   │   ├── utils/            # Utility functions
+│   │   └── styles/           # CSS files
+│   ├── preload/              # Electron preload
+│   │   └── index.ts          # IPC bridge
+│   └── shared/               # Shared between processes
+│       ├── types/            # TypeScript interfaces
+│       └── constants/        # Constants, enums, IPC channels
+├── docs/                     # Documentation
+├── plans/                    # Development plans, reports
+└── build/                    # App icons
+```
+
+## Naming Conventions
+
+### Files and Directories
+
+| Type | Convention | Example |
+|------|------------|---------|
+| Components | kebab-case | `terminal-grid.tsx` |
+| Hooks | kebab-case, use- prefix | `use-keyboard-shortcuts.ts` |
+| Stores | kebab-case, -store suffix | `app-store.ts` |
+| Types | kebab-case | `notification.ts` |
+| Tests | kebab-case, .spec suffix | `git-manager.spec.ts` |
+| Constants | kebab-case | `ipc-channels.ts` |
+
+### Code Identifiers
+
+| Type | Convention | Example |
+|------|------------|---------|
+| Components | PascalCase | `TerminalGrid` |
+| Hooks | camelCase, use prefix | `useKeyboardShortcuts` |
+| Functions | camelCase | `handleTerminalCreate` |
+| Constants | SCREAMING_SNAKE | `IPC_CHANNELS` |
+| Interfaces | PascalCase | `Terminal`, `Project` |
+| Types | PascalCase | `UpdateStatus` |
+| Enums | PascalCase | `SoundPreset` |
+
+## TypeScript Standards
+
+### Type Definitions
+
+Place shared types in `src/shared/types/`:
+
+```typescript
+// src/shared/types/index.ts
+export interface Terminal {
+  id: string
+  title: string
+  cwd: string
+  isClaudeMode: boolean
+  claudeSessionId?: string
+  projectId?: string
+  createdAt: Date
+}
+
+export interface Project {
+  id: string
+  name: string
+  path: string
+  gitRemote?: string
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Avoid `any`
+
+Use proper types or `unknown` with type guards:
+
+```typescript
+// Bad
+function processData(data: any) { ... }
+
+// Good
+function processData(data: unknown) {
+  if (isValidData(data)) { ... }
+}
+```
+
+### Prefer Type Inference
+
+Let TypeScript infer when obvious:
+
+```typescript
+// Unnecessary
+const count: number = 0
+const items: string[] = []
+
+// Preferred
+const count = 0
+const items: string[] = [] // explicit when empty
+```
+
+## React Standards
+
+### Component Structure
+
+```typescript
+// components/terminal/terminal-pane.tsx
+import { useState, useCallback } from 'react'
+import { Terminal } from '@shared/types'
+
+interface TerminalPaneProps {
+  terminal: Terminal
+  isActive: boolean
+  onClose: (id: string) => void
+  onTitleChange: (id: string, title: string) => void
+}
+
+export function TerminalPane({
+  terminal,
+  isActive,
+  onClose,
+  onTitleChange
+}: TerminalPaneProps) {
+  const [isEditing, setIsEditing] = useState(false)
+
+  const handleClose = useCallback(() => {
+    onClose(terminal.id)
+  }, [terminal.id, onClose])
+
+  return (
+    <div className={`terminal-pane ${isActive ? 'active' : ''}`}>
+      {/* ... */}
+    </div>
+  )
+}
+```
+
+### Hook Guidelines
+
+```typescript
+// hooks/use-terminal.ts
+export function useTerminal(terminalId: string) {
+  const terminal = useAppStore(state =>
+    state.terminals.find(t => t.id === terminalId)
+  )
+
+  const sendInput = useCallback((data: string) => {
+    window.electron.terminal.input(terminalId, data)
+  }, [terminalId])
+
+  return { terminal, sendInput }
+}
+```
+
+### State Management (Zustand)
+
+```typescript
+// stores/app-store.ts
+import { create } from 'zustand'
+import { Terminal, Project } from '@shared/types'
+
+interface AppState {
+  terminals: Terminal[]
+  projects: Project[]
+  activeProjectId: string | null
+  activeTerminalId: string | null
+
+  // Actions
+  addTerminal: (terminal: Terminal) => void
+  removeTerminal: (id: string) => void
+  setActiveProject: (id: string) => void
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  terminals: [],
+  projects: [],
+  activeProjectId: null,
+  activeTerminalId: null,
+
+  addTerminal: (terminal) => set((state) => ({
+    terminals: [...state.terminals, terminal]
+  })),
+
+  removeTerminal: (id) => set((state) => ({
+    terminals: state.terminals.filter(t => t.id !== id)
+  })),
+
+  setActiveProject: (id) => set({ activeProjectId: id })
+}))
+```
+
+## IPC Standards
+
+### Channel Definition
+
+```typescript
+// shared/constants/ipc-channels.ts
+export const IPC_CHANNELS = {
+  TERMINAL_CREATE: 'terminal:create',
+  TERMINAL_DESTROY: 'terminal:destroy',
+  TERMINAL_INPUT: 'terminal:input',
+  // ... more channels
+} as const
+
+export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]
+```
+
+### Handler Pattern
+
+```typescript
+// main/ipc/handlers.ts
+import { ipcMain } from 'electron'
+import { IPC_CHANNELS } from '@shared/constants'
+
+export function registerHandlers(terminalManager: TerminalManager) {
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
+    return terminalManager.create(options)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
+    return terminalManager.destroy(id)
+  })
+}
+```
+
+### Preload Bridge
+
+```typescript
+// preload/index.ts
+import { contextBridge, ipcRenderer } from 'electron'
+import { IPC_CHANNELS } from '../shared/constants'
+
+contextBridge.exposeInMainWorld('electron', {
+  terminal: {
+    create: (options) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, options),
+    destroy: (id) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DESTROY, id),
+    input: (id, data) => ipcRenderer.send(IPC_CHANNELS.TERMINAL_INPUT, id, data),
+    onOutput: (callback) => {
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, callback)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_OUTPUT, callback)
+    }
+  }
+})
+```
+
+## Error Handling
+
+### Main Process
+
+```typescript
+// Wrap async handlers with error handling
+ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_, path, message) => {
+  try {
+    return await gitManager.commit(path, message)
+  } catch (error) {
+    console.error('[GitManager] Commit failed:', error)
+    throw error // Re-throw for renderer to handle
+  }
+})
+```
+
+### Renderer
+
+```typescript
+// Use try/catch with toast notifications
+async function handleCommit(message: string) {
+  try {
+    await window.electron.git.commit(projectPath, message)
+    showToast({ type: 'success', message: 'Committed successfully' })
+  } catch (error) {
+    showToast({ type: 'error', message: error.message })
+  }
+}
+```
+
+## Testing Standards
+
+### Test File Location
+
+Place tests in `__tests__/` directories:
+
+```
+src/main/git/
+├── git-manager.ts
+├── git-head-watcher.ts
+└── __tests__/
+    └── git-manager.spec.ts
+```
+
+### Test Structure
+
+```typescript
+// __tests__/git-manager.spec.ts
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { GitManager } from '../git-manager'
+
+describe('GitManager', () => {
+  let gitManager: GitManager
+
+  beforeEach(() => {
+    gitManager = new GitManager()
+  })
+
+  describe('status', () => {
+    it('returns git status for valid repo', async () => {
+      const status = await gitManager.status('/valid/repo')
+      expect(status.isRepo).toBe(true)
+    })
+
+    it('throws error for invalid path', async () => {
+      await expect(gitManager.status('/invalid'))
+        .rejects.toThrow()
+    })
+  })
+})
+```
+
+### Coverage Requirements
+
+- Minimum 60% coverage for statements, branches, functions, lines
+- Run with: `npm run test:coverage`
+
+## CSS Standards (Tailwind)
+
+### Class Organization
+
+```tsx
+// Order: layout -> spacing -> sizing -> colors -> effects -> states
+<div className="
+  flex items-center justify-between
+  p-2 gap-2
+  w-full h-12
+  bg-gray-800 text-white
+  rounded-lg shadow-md
+  hover:bg-gray-700
+">
+```
+
+### Theme Variables
+
+Use CSS variables for theme colors (defined in themes.ts):
+
+```css
+.terminal-pane {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+```
+
+## Git Workflow
+
+### Branch Naming
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Feature | feature/description | `feature/terminal-grid` |
+| Fix | fix/description | `fix/webgl-disposal` |
+| Refactor | refactor/description | `refactor/settings-modal` |
+
+### Commit Messages
+
+```
+<type>(<scope>): <description>
+
+type: feat, fix, refactor, docs, test, chore
+scope: terminal, git, notification, settings, etc.
+```
+
+Examples:
+- `feat(terminal): add WebGL rendering modes`
+- `fix(notification): prevent pattern spam with debounce`
+- `refactor(sidebar): extract navigation-item component`
+
+## Documentation Standards
+
+### Code Comments
+
+```typescript
+// Single line for brief explanations
+const DISPOSE_DELAY = 150 // Prevents WebGL corruption
+
+/**
+ * Multi-line for complex logic.
+ * Explains why, not what.
+ */
+function handleProjectSwitch(projectId: string) {
+  // ...
+}
+```
+
+### JSDoc for Public APIs
+
+```typescript
+/**
+ * Creates a new terminal in the specified project.
+ * @param options - Terminal creation options
+ * @param options.cwd - Working directory
+ * @param options.projectId - Associated project ID
+ * @returns Created terminal instance
+ */
+export async function createTerminal(options: CreateTerminalOptions): Promise<Terminal>
+```
+
+## Path Aliases
+
+Configure in tsconfig.json:
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@main/*": ["src/main/*"],
+      "@renderer/*": ["src/renderer/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  }
+}
+```
+
+Usage:
+```typescript
+import { IPC_CHANNELS } from '@shared/constants'
+import { Terminal } from '@shared/types'
+```
+
+## Development Commands
+
+| Command | Purpose |
+|---------|---------|
+| `npm run electron:dev` | Development with hot reload |
+| `npm run build` | Production build |
+| `npm test` | Run tests once |
+| `npm run test:watch` | Watch mode |
+| `npm run test:coverage` | Coverage report |
+| `npm run typecheck` | Type checking |
+| `npm run lint` | ESLint |
