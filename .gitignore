@@ -38,6 +38,9 @@ yarn-error.log*
 # Plans and reports (local only)
 plans/
 
+# Claude Code local commands
+.claude/commands/
+
 # Local feature planning folder
 new-feature/
 

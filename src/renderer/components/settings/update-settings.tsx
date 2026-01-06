@@ -60,7 +60,7 @@ export function UpdateSettings() {
 
         {/* Status: Up to date */}
         {status === 'idle' && !latestVersion && (
-          <p className="text-sm text-[var(--mc-text-muted)]">You're running the latest version</p>
+          <p className="text-sm text-[var(--mc-text-muted)]">You&apos;re running the latest version</p>
         )}
 
         {/* Status: Error */}
@@ -75,7 +75,7 @@ export function UpdateSettings() {
       {hasUpdate && releaseNotes && (
         <div className="border-l-4 border-[var(--mc-accent)] bg-[var(--mc-bg-tertiary)] rounded-r-md p-4 space-y-2">
           <span className="text-sm font-semibold text-[var(--mc-text-primary)]">
-            ✨ What's New
+            ✨ What&apos;s New
           </span>
           <pre className="text-sm text-[var(--mc-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto">
             {releaseNotes}
