@@ -11,7 +11,7 @@ interface TerminalViewProps {
 }
 
 export const TerminalView = memo(function TerminalView({ terminalId, isActive, initialOutput, onFitReady }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, scrollToBottom, isAtBottom } = useTerminal({
     terminalId,
     initialOutput,
     isActive
@@ -71,6 +71,22 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
         className="terminal-container"
         style={{ height: '100%', width: '100%' }}
       />
+
+      {/* Floating scroll-to-bottom button with fade animation */}
+      <button
+        type="button"
+        onClick={scrollToBottom}
+        className={`absolute bottom-3 right-3 p-2 rounded-full bg-[var(--mc-bg-tertiary)] hover:bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] shadow-lg transition-all duration-200 ${
+          isAtBottom ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+        title="Scroll to bottom"
+        aria-label="Scroll to bottom"
+        aria-hidden={isAtBottom}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+      </button>
     </div>
   )
 })

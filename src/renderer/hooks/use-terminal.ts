@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -50,7 +50,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   const disposedRef = useRef(false)
   const webglAddonRef = useRef<WebglAddon | null>(null)
   const isActiveRef = useRef(isActive)
-  const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll
+  const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
+  const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
@@ -87,9 +88,14 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     // Track scroll position for smart scroll behavior
     // viewportY = top visible line; baseY = scrollback lines above viewport
     // When viewportY >= baseY, viewport shows the bottom (cursor area)
+    // Use threshold of 5 lines to reduce button flicker
+    const SCROLL_THRESHOLD = 5
     scrollDisposableRef.current = terminal.onScroll(() => {
       const buffer = terminal.buffer.active
-      isAtBottomRef.current = buffer.viewportY >= buffer.baseY
+      const linesFromBottom = buffer.baseY - buffer.viewportY
+      const atBottom = linesFromBottom <= SCROLL_THRESHOLD
+      isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
+      setIsAtBottom(atBottom)  // With threshold for UI button visibility
     })
 
     terminalRef.current = terminal
@@ -256,6 +262,11 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     terminalRef.current?.clear()
   }, [])
 
+  // Scroll terminal to bottom (for UI button)
+  const scrollToBottom = useCallback(() => {
+    terminalRef.current?.scrollToBottom()
+  }, [])
+
   // Cleanup on unmount
   useEffect(() => {
     // Reset disposed flag on mount
@@ -410,6 +421,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     fit,
     focus,
     clear,
+    scrollToBottom,
+    isAtBottom,
     terminal: terminalRef.current
   }
 }

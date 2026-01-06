@@ -21,8 +21,13 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
 - **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
-  - `isAtBottomRef` tracks viewport position via `terminal.onScroll()` listener
+  - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
+  - 5-line threshold reduces button flicker on minor scroll changes
   - `write()` conditionally calls `scrollToBottom()` only when at bottom
+  - **Scroll-to-Bottom Button**: Floating button (bottom-right) with fade animation
+    - Appears when user scrolls 5+ lines from bottom
+    - Opacity-based show/hide (no mount/unmount) for smooth transitions
+    - Accessibility: `aria-label`, `aria-hidden`, `pointer-events-none` when hidden
   - Proper disposable cleanup on unmount
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
   - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
@@ -70,10 +75,15 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 #### Notifications
 **Phase 1 - Completed: Types & Constants**
 - **NotificationEventType**: 'taskComplete' | 'taskFailed' | 'reviewNeeded'
+- **OutputMode**: 'auto' | 'stream-json' | 'plain-text' - Parser mode for terminal output
 - **SoundPreset**: 'default' | 'minimal' | 'retro'
-- **NotificationSettings**: Event toggles, sound config, Telegram/Discord flags
+- **NotificationSettings**: Event toggles, sound config, Telegram/Discord flags, output mode, background-only, task summary
+- **TaskEvent**: Unique task event with id, terminalId, type, taskName, projectName, context, timestamp
+- **JsonStreamEvent**: Claude Code stream-json event structure (init, message, tool_use, tool_result, result, error)
+- **ParserType**: Alias for OutputMode (parser-specific usage)
 - **TelegramCredentials**, **DiscordCredentials**: Secure credential interfaces
 - **DETECTION_PATTERNS**: Regex patterns for automatic event detection
+- **ENHANCED_DETECTION_PATTERNS**: Named capture group patterns for task name extraction
 
 **Phase 2 - Completed: Core Backend**
 - **NotificationManager**: Central orchestrator for all notification types
@@ -159,7 +169,8 @@ src/
 └── shared/                  # Shared code
     ├── types/               # TypeScript interfaces
     │   ├── index.ts
-    │   └── notification.ts
+    │   ├── notification.ts
+    │   └── notification-events.ts  # TaskEvent, JsonStreamEvent, ParserType
     └── constants/           # Constants & defaults
         ├── index.ts
         ├── ipc-channels.ts
@@ -253,6 +264,10 @@ interface NotificationSettings {
   telegramConfigured: boolean
   discordEnabled: boolean
   discordConfigured: boolean
+  // Enhanced notification tracking
+  outputMode: OutputMode        // 'auto' | 'stream-json' | 'plain-text'
+  notifyOnlyBackground: boolean // Only notify when app unfocused
+  includeTaskSummary: boolean   // Include task name in notification
 }
 ```
 
@@ -345,9 +360,12 @@ interface ProjectTerminal {
 ## Notifications Implementation Phases
 
 **Phase 1 - Completed: Types & Constants**
-- Notification event types, settings interfaces, credentials structures
-- Default settings, sound presets, regex detection patterns
-- IPC channel definitions and exports
+- Notification event types (NotificationEventType), OutputMode, SoundPreset
+- NotificationSettings interface with enhanced tracking fields (outputMode, notifyOnlyBackground, includeTaskSummary)
+- TaskEvent and JsonStreamEvent interfaces for output parsing
+- TelegramCredentials, DiscordCredentials for secure storage
+- DETECTION_PATTERNS and ENHANCED_DETECTION_PATTERNS (named capture groups)
+- Default settings, sound presets, IPC channel definitions
 
 **Phase 2 - Completed: Core Backend**
 - **NotificationManager**: Central orchestrator, pattern detection, external platform dispatch
