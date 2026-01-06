@@ -1,6 +1,6 @@
 import { useEffect, useRef, memo } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
-import { useAppStore } from '../../stores'
+import { useAppStore, useSettingsStore } from '../../stores'
 
 interface TerminalViewProps {
   terminalId: string
@@ -17,6 +17,7 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
     isActive
   })
   const appendOutput = useAppStore((state) => state.appendOutput)
+  const settingsModalOpen = useSettingsStore((state) => state.settingsModalOpen)
   // Skip appending output right after restore to prevent duplicates from shell prompt redraws
   const skipAppendRef = useRef(!!initialOutput)
 
@@ -75,15 +76,16 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
       />
 
       {/* Floating scroll-to-bottom button with fade animation */}
+      {/* Only show when terminal is active, not at bottom, and no modal is open */}
       <button
         type="button"
         onClick={scrollToBottom}
-        className={`absolute bottom-3 right-3 p-2 rounded-full bg-[var(--mc-bg-tertiary)] hover:bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] shadow-lg transition-all duration-200 ${
-          isAtBottom ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        className={`absolute bottom-3 right-3 z-50 p-2 rounded-full bg-[var(--mc-bg-tertiary)] hover:bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] shadow-lg transition-all duration-200 ${
+          isAtBottom || !isActive || settingsModalOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
         title="Scroll to bottom"
         aria-label="Scroll to bottom"
-        aria-hidden={isAtBottom}
+        aria-hidden={isAtBottom || !isActive || settingsModalOpen}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />

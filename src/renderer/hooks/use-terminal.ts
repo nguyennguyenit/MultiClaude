@@ -53,6 +53,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
+  const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
 
@@ -85,18 +86,27 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
 
     terminal.open(container)
 
-    // Track scroll position for smart scroll behavior
-    // viewportY = top visible line; baseY = scrollback lines above viewport
-    // When viewportY >= baseY, viewport shows the bottom (cursor area)
-    // Use threshold of 5 lines to reduce button flicker
-    const SCROLL_THRESHOLD = 5
-    scrollDisposableRef.current = terminal.onScroll(() => {
+    // Helper function to check and update scroll position
+    const updateScrollPosition = () => {
       const buffer = terminal.buffer.active
       const linesFromBottom = buffer.baseY - buffer.viewportY
+      const SCROLL_THRESHOLD = 5
       const atBottom = linesFromBottom <= SCROLL_THRESHOLD
       isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
       setIsAtBottom(atBottom)  // With threshold for UI button visibility
-    })
+    }
+
+    // Track scroll position for smart scroll behavior
+    // xterm.js onScroll fires when scrollback buffer changes
+    scrollDisposableRef.current = terminal.onScroll(updateScrollPosition)
+
+    // Also listen for scroll events on the terminal viewport for user scroll detection
+    // xterm.js onScroll may not fire for all viewport scroll events
+    const viewportElement = terminal.element?.querySelector('.xterm-viewport')
+    if (viewportElement) {
+      viewportElement.addEventListener('scroll', updateScrollPosition)
+      viewportScrollHandlerRef.current = { element: viewportElement, handler: updateScrollPosition }
+    }
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -282,10 +292,17 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
+      const viewportScrollHandler = viewportScrollHandlerRef.current
       terminalRef.current = null
       fitAddonRef.current = null
       webglAddonRef.current = null
       scrollDisposableRef.current = null
+      viewportScrollHandlerRef.current = null
+
+      // Cleanup viewport scroll listener
+      if (viewportScrollHandler) {
+        viewportScrollHandler.element.removeEventListener('scroll', viewportScrollHandler.handler)
+      }
 
       // Delay disposal to allow xterm's internal setTimeout callbacks to complete
       // xterm.js uses setTimeout(0) internally for Viewport refresh
