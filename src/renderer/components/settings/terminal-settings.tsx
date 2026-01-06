@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../../stores'
-import type { TerminalLimitPreset } from '@shared/types'
+import type { TerminalLimitPreset, TerminalRenderMode } from '@shared/types'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 2, label: '2' },
@@ -9,8 +9,15 @@ const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 'custom', label: 'Custom' }
 ]
 
+// Render mode definitions for UI display
+const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string }[] = [
+  { id: 'performance', name: 'Performance', description: 'No WebGL, best for many terminals' },
+  { id: 'balanced', name: 'Balanced', description: 'WebGL only for active terminal' },
+  { id: 'quality', name: 'Quality', description: 'WebGL always, best visual quality' }
+]
+
 export function TerminalSettings() {
-  const { settings, setTerminalLimit } = useSettingsStore()
+  const { settings, setTerminalLimit, setTerminalRenderMode } = useSettingsStore()
   const { terminalLimit } = settings
 
   const [customValue, setCustomValue] = useState(
@@ -101,6 +108,39 @@ export function TerminalSettings() {
               />
             </div>
           )}
+        </div>
+      </SettingsSection>
+
+      {/* Terminal Rendering Mode */}
+      <SettingsSection title="Rendering">
+        <div className="space-y-3">
+          <div>
+            <span className="text-sm">Rendering Mode</span>
+            <p className="text-xs text-[var(--mc-text-muted)]">
+              Optimize terminal performance vs visual quality
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {RENDER_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                onClick={() => setTerminalRenderMode(mode.id)}
+                className={`
+                  flex flex-col px-4 py-3 rounded-lg border-2 w-[140px]
+                  transition-all duration-150
+                  ${settings.terminalRenderMode === mode.id
+                    ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
+                    : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
+                `}
+              >
+                <span className="text-sm font-medium flex items-center gap-1">
+                  {mode.name}
+                  {settings.terminalRenderMode === mode.id && <span className="text-[var(--mc-accent)]">✓</span>}
+                </span>
+                <span className="text-xs text-[var(--mc-text-muted)] mt-1">{mode.description}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </SettingsSection>
     </div>
