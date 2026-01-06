@@ -5,6 +5,10 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { useSettingsStore } from '../stores'
 import { getTerminalTheme } from '@shared/constants'
 
+// Terminal timing constants (ms)
+const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
+export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
+
 interface UseTerminalOptions {
   terminalId: string
   initialOutput?: string
@@ -27,6 +31,7 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
+  const webglAddonRef = useRef<WebglAddon | null>(null)
 
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
@@ -60,7 +65,7 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
-    // Defer WebGL addon and fit to ensure terminal is fully initialized
+    // Defer WebGL addon, fit, and initialOutput to ensure terminal is fully initialized
     // Use setTimeout to run after xterm's internal setTimeout completes
     setTimeout(() => {
       // Guard against disposed terminal
@@ -69,6 +74,7 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       // Try WebGL addon for better performance
       try {
         const webglAddon = new WebglAddon()
+        webglAddonRef.current = webglAddon
         terminal.loadAddon(webglAddon)
       } catch (e) {
         console.warn('WebGL addon failed to load:', e)
@@ -79,7 +85,15 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       } catch {
         // Ignore fit errors
       }
-    }, 50)
+
+      // Restore output AFTER WebGL init to prevent race condition
+      if (initialOutput) {
+        terminal.write(initialOutput)
+      } else {
+        // Initial resize only for fresh terminals
+        window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+      }
+    }, TERMINAL_INIT_DELAY)
 
     // Auto-copy on selection complete
     terminal.element?.addEventListener('mouseup', async () => {
@@ -177,18 +191,6 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-
-    // Restore previous output if available
-    // Note: We write to terminal display only, not appending to store
-    // since initialOutput already came from the store
-    if (initialOutput) {
-      terminal.write(initialOutput)
-      // Skip initial resize when restoring - prevents shell prompt redraw duplicates
-      // The resize will happen naturally when fit() is called
-    } else {
-      // Initial resize only for fresh terminals
-      window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
-    }
   }, [terminalId, initialOutput, onResize])
 
   // Write data to terminal
@@ -230,19 +232,23 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       // Capture refs before nullifying
       const terminal = terminalRef.current
       const fitAddon = fitAddonRef.current
+      const webglAddon = webglAddonRef.current
       terminalRef.current = null
       fitAddonRef.current = null
+      webglAddonRef.current = null
 
       // Delay disposal to allow xterm's internal setTimeout callbacks to complete
       // xterm.js uses setTimeout(0) internally for Viewport refresh
       setTimeout(() => {
         try {
+          // Order: WebGL first, then fit, then terminal
+          webglAddon?.dispose()
           fitAddon?.dispose()
           terminal?.dispose()
         } catch {
           // Terminal may already be disposed or in invalid state
         }
-      }, 100)
+      }, TERMINAL_DISPOSE_DELAY)
     }
   }, [])
 

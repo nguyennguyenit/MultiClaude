@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { Sidebar } from './components/sidebar'
 import { ProjectTabs } from './components/project-tabs'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
@@ -7,7 +7,7 @@ import { GitHubView } from './components/github-view'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
-import { useKeyboardShortcuts } from './hooks'
+import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
 
 function App() {
@@ -33,6 +33,10 @@ function App() {
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
+
+  // Project switch transition state
+  const [projectSwitching, setProjectSwitching] = useState(false)
+  const prevProjectIdRef = useRef<string | null>(null)
 
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
@@ -66,6 +70,9 @@ function App() {
       return
     }
 
+    // Guard against rapid switching - ignore if already transitioning
+    if (projectSwitching) return
+
     const project = projects.find(p => p.id === id)
     if (!project) return
 
@@ -81,8 +88,20 @@ function App() {
       return
     }
 
-    setActiveProject(id)
-  }, [projects, setActiveProject, removeProject])
+    // Start transition if switching between projects (not initial load)
+    if (prevProjectIdRef.current && prevProjectIdRef.current !== id) {
+      setProjectSwitching(true)
+      // Allow old terminals to start unmounting
+      setActiveProject(id)
+      // Wait for disposal + buffer (TERMINAL_DISPOSE_DELAY + 50ms safety margin)
+      await new Promise(resolve => setTimeout(resolve, TERMINAL_DISPOSE_DELAY + 50))
+      setProjectSwitching(false)
+    } else {
+      setActiveProject(id)
+    }
+
+    prevProjectIdRef.current = id
+  }, [projects, projectSwitching, setActiveProject, removeProject])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async () => {
@@ -149,9 +168,9 @@ function App() {
     for (const terminal of terminalsToKill) {
       await window.electron.terminal.destroy(terminal.id)
       removeTerminal(terminal.id)
-      // Delay must exceed use-terminal.ts cleanup timeout (100ms) to ensure WebGL context disposal
+      // Delay must exceed TERMINAL_DISPOSE_DELAY to ensure WebGL context disposal
       if (terminalsToKill.indexOf(terminal) < terminalsToKill.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 150))
+        await new Promise(resolve => setTimeout(resolve, TERMINAL_DISPOSE_DELAY + 50))
       }
     }
   }, [projectTerminals, removeTerminal])
@@ -333,6 +352,7 @@ function App() {
                     <TerminalGrid
                       terminals={projectTerminals}
                       activeTerminalId={activeTerminalId}
+                      isTransitioning={projectSwitching}
                       onTerminalClick={setActiveTerminal}
                       onAddTerminal={handleAddTerminal}
                       onCloseTerminal={handleCloseTerminal}

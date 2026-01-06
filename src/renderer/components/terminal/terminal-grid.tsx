@@ -10,6 +10,7 @@ interface TerminalWithOutput extends Terminal {
 interface TerminalGridProps {
   terminals: TerminalWithOutput[]
   activeTerminalId: string | null
+  isTransitioning?: boolean
   onTerminalClick: (id: string) => void
   onAddTerminal?: () => void
   onCloseTerminal?: (id: string) => void
@@ -39,6 +40,7 @@ function splitIntoRows<T>(items: T[], cols: number): T[][] {
 export const TerminalGrid = memo(function TerminalGrid({
   terminals,
   activeTerminalId,
+  isTransitioning = false,
   onTerminalClick,
   onAddTerminal,
   onCloseTerminal,
@@ -70,7 +72,12 @@ export const TerminalGrid = memo(function TerminalGrid({
   const rows = splitIntoRows(terminals, cols)
 
   return (
-    <Group orientation="vertical" className="h-full">
+    <div
+      className={`h-full transition-opacity duration-100 ${
+        isTransitioning ? 'opacity-50 pointer-events-none' : 'opacity-100'
+      }`}
+    >
+      <Group orientation="vertical" className="h-full">
       {rows.map((rowTerminals, rowIndex) => {
         const cellCount = rowTerminals.length
 
@@ -109,5 +116,6 @@ export const TerminalGrid = memo(function TerminalGrid({
         )
       })}
     </Group>
+    </div>
   )
 })
