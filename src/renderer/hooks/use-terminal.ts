@@ -134,6 +134,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     }, TERMINAL_INIT_DELAY)
 
     // Auto-copy on selection complete
+    // Note: Listeners are implicitly cleaned up when terminal.dispose() destroys the DOM element
     terminal.element?.addEventListener('mouseup', async () => {
       const selection = terminal.getSelection()
       if (selection) {

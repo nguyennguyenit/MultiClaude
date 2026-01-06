@@ -1,16 +1,20 @@
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
 import type { NotificationSettings, NotificationEventType, NotificationEvent } from '@shared/types'
-import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS } from '@shared/constants'
+import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS } from '@shared/constants'
 import { SecureStorage } from './secure-storage'
 import { PatternDetector } from './pattern-detector'
 import { TelegramNotifier } from './telegram-notifier'
 import { DiscordNotifier } from './discord-notifier'
+import { FocusDetector } from './focus-detector'
+import { TaskTracker } from './task-tracker'
 
 export class NotificationManager extends EventEmitter {
   private settings: NotificationSettings
   private storage: SecureStorage
   private detector: PatternDetector
+  private focusDetector: FocusDetector
+  private taskTracker: TaskTracker
   private window: BrowserWindow | null = null
   private cleanupInterval: NodeJS.Timeout | null = null
 
@@ -18,18 +22,36 @@ export class NotificationManager extends EventEmitter {
     super()
     this.storage = new SecureStorage()
     this.detector = new PatternDetector()
+    this.focusDetector = new FocusDetector()
+    this.taskTracker = new TaskTracker()
     this.settings = {
       ...DEFAULT_NOTIFICATION_SETTINGS,
       telegramConfigured: this.storage.hasTelegram(),
       discordConfigured: this.storage.hasDiscord()
     }
 
-    // Cleanup debounce entries every minute
-    this.cleanupInterval = setInterval(() => this.detector.cleanup(), 60000)
+    // Cleanup debounce entries periodically using shared constant
+    this.cleanupInterval = setInterval(() => {
+      this.detector.cleanup()
+      this.taskTracker.cleanup()
+    }, TASK_TRACKER_CLEANUP_INTERVAL_MS)
   }
 
   setWindow(window: BrowserWindow): void {
     this.window = window
+    this.focusDetector.setWindow(window)
+  }
+
+  setActiveTerminal(terminalId: string | null): void {
+    this.focusDetector.setActiveTerminal(terminalId)
+  }
+
+  getFocusDetector(): FocusDetector {
+    return this.focusDetector
+  }
+
+  getTaskTracker(): TaskTracker {
+    return this.taskTracker
   }
 
   getSettings(): NotificationSettings {
@@ -166,5 +188,7 @@ export class NotificationManager extends EventEmitter {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval)
     }
+    this.focusDetector.destroy()
+    this.taskTracker.clearAll()
   }
 }

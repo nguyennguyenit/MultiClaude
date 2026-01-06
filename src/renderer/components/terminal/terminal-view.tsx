@@ -26,6 +26,8 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
   }, [initTerminal])
 
   // After terminal init settles, allow appending output (for restore case)
+  // 500ms delay ensures xterm finishes restoring output before we start appending new data
+  // This prevents duplicate shell prompts when switching tabs during terminal restore
   useEffect(() => {
     if (!skipAppendRef.current) return
     const timer = setTimeout(() => {

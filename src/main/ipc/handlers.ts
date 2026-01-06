@@ -354,6 +354,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return true
   })
 
+  // Active terminal tracking for background-only notifications
+  // Uses ipcMain.on (not handle) for fire-and-forget - no response needed from renderer
+  ipcMain.on(IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL, (_, terminalId: string | null) => {
+    notificationManager.setActiveTerminal(terminalId)
+  })
+
   // YOLO Mode settings.local.json content
   const yoloSettingsContent = {
     permissions: {
@@ -384,7 +390,8 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
         "Bash(docker system prune -af:*)",
         "Bash(docker volume rm -f :*::*)",
         "Bash(prisma migrate reset:*)"
-      ]
+      ],
+      defaultMode: "bypassPermissions"
     }
   }
 

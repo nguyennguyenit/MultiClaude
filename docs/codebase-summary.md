@@ -102,6 +102,20 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 - Settings persistence via IPC with local optimistic updates
 - Integrated into SettingsPanel with tabbed navigation
 
+**Phase 4 - Completed: Focus Detection & Deduplication**
+- **FocusDetector**: Window/terminal focus tracking to suppress notifications when user is watching
+  - Tracks BrowserWindow focus/blur events
+  - Tracks active terminal ID via IPC (NOTIFICATION_SET_ACTIVE_TERMINAL)
+  - `shouldNotify(terminalId)`: Returns true if window unfocused OR different terminal active
+- **TaskTracker**: Prevents duplicate notifications for same task within TTL window
+  - SHA256 hash-based task ID deduplication (per terminal)
+  - Configurable TTL (TASK_TRACKER_TTL_MS = 5min default)
+  - Auto-cleanup of stale entries (TASK_TRACKER_CLEANUP_INTERVAL_MS = 1min)
+  - `shouldNotify(terminalId, taskId)`: Returns true if task not seen within TTL
+- **NotificationManager Integration**: FocusDetector and TaskTracker integrated into notification flow
+- **Preload API**: Added `setActiveTerminal()` to ElectronAPI for renderer-to-main focus tracking
+- **Test Coverage**: 17 tests for FocusDetector, 14 tests for TaskTracker
+
 ## File Organization
 
 ```
@@ -123,6 +137,8 @@ src/
 │   │   ├── notification-manager.ts
 │   │   ├── secure-storage.ts
 │   │   ├── pattern-detector.ts
+│   │   ├── focus-detector.ts        # Window/terminal focus tracking
+│   │   ├── task-tracker.ts          # Task ID deduplication with TTL
 │   │   ├── telegram-notifier.ts
 │   │   ├── discord-notifier.ts
 │   │   ├── output-parser.ts         # Router: auto-detects and locks parser mode
@@ -130,7 +146,9 @@ src/
 │   │   ├── plain-text-parser.ts     # Regex parser with named capture groups
 │   │   ├── parser-utils.ts          # Shared: generateTaskEventId, MAX_REGEX_INPUT_LENGTH
 │   │   ├── __tests__/
-│   │   │   └── output-parser.spec.ts
+│   │   │   ├── output-parser.spec.ts
+│   │   │   ├── focus-detector.spec.ts   # 17 tests
+│   │   │   └── task-tracker.spec.ts     # 14 tests
 │   │   └── index.ts
 │   ├── clipboard/           # Clipboard operations
 │   │   └── clipboard-handler.ts
@@ -185,7 +203,7 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (79 total)
+## IPC Channels (80 total)
 
 ### Terminal (8 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
@@ -210,11 +228,12 @@ src/
 - `github:auth-status`, `github:login`, `github:logout`, `github:create-repo`
 - `github:issues-list`, `github:prs-list`
 
-### Notifications (12 channels)
+### Notifications (13 channels)
 - **Settings**: `notification:get-settings`, `notification:set-settings`
 - **Telegram**: `notification:set-telegram`, `notification:get-telegram-status`, `notification:test-telegram`, `notification:clear-telegram`
 - **Discord**: `notification:set-discord`, `notification:get-discord-status`, `notification:test-discord`, `notification:clear-discord`
 - **Events**: `notification:event`
+- **Focus**: `notification:set-active-terminal`
 
 ### Session & App (4 channels)
 - `session:save`, `session:restore`, `app:get-path`, `app:check-for-updates`
@@ -396,6 +415,14 @@ interface ProjectTerminal {
 - **Sound Playback**: Audio element caching for efficient sound playback
 - **Settings Panel Integration**: Notification tab in tabbed settings UI (Appearance/Notifications)
 - **App Integration**: setupNotificationListener() called in App component on mount
+
+**Phase 4 - Completed: Focus Detection & Deduplication**
+- **FocusDetector**: Tracks window focus/blur and active terminal to suppress notifications when user is watching
+- **TaskTracker**: Prevents duplicate notifications using SHA256-based task IDs with 5min TTL
+- **IPC Handler**: NOTIFICATION_SET_ACTIVE_TERMINAL for renderer-to-main focus tracking
+- **Preload API**: `electron.notification.setActiveTerminal(terminalId)` exposed to renderer
+- **NotificationManager**: Integrated both detectors into notification flow
+- **Test Coverage**: 31 new tests (17 FocusDetector + 14 TaskTracker)
 
 **Feature Status**: Feature complete and fully integrated
 

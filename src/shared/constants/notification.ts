@@ -1,5 +1,9 @@
 import type { NotificationSettings, SoundPreset } from '../types/notification'
 
+// Task tracker constants
+export const TASK_TRACKER_TTL_MS = 5 * 60 * 1000 // 5 minutes
+export const TASK_TRACKER_CLEANUP_INTERVAL_MS = 60 * 1000 // 1 minute
+
 // Default notification settings
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   onTaskComplete: true,
