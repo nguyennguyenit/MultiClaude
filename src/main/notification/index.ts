@@ -1,6 +1,5 @@
 export { NotificationManager } from './notification-manager'
 export { SecureStorage } from './secure-storage'
-export { PatternDetector } from './pattern-detector'
 export { TelegramNotifier } from './telegram-notifier'
 export { DiscordNotifier } from './discord-notifier'
 export { OutputParser } from './output-parser'
@@ -9,3 +8,5 @@ export { PlainTextParser } from './plain-text-parser'
 export { FocusDetector } from './focus-detector'
 export { TaskTracker } from './task-tracker'
 export { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
+// Deprecated: PatternDetector replaced by OutputParser in Phase 4
+export { PatternDetector } from './pattern-detector'
