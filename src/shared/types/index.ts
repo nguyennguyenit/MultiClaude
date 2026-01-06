@@ -201,6 +201,7 @@ export interface GitHubPR {
 
 // Notification types
 export * from './notification'
+export * from './notification-events'
 
 // Update types
 export * from './update'

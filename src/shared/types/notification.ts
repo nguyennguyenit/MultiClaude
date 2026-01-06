@@ -1,6 +1,9 @@
 // Notification event types
 export type NotificationEventType = 'taskComplete' | 'taskFailed' | 'reviewNeeded'
 
+// Output parsing mode for terminal output detection
+export type OutputMode = 'auto' | 'stream-json' | 'plain-text'
+
 // Sound preset options
 export type SoundPreset = 'default' | 'minimal' | 'retro'
 
@@ -22,6 +25,14 @@ export interface NotificationSettings {
   // Discord (credentials stored securely via IPC)
   discordEnabled: boolean
   discordConfigured: boolean
+
+  // Enhanced notification tracking settings
+  /** Parser mode: 'auto' detects and locks, 'stream-json' or 'plain-text' forces mode @default 'auto' */
+  outputMode: OutputMode
+  /** Only send notifications when app window is not focused @default true */
+  notifyOnlyBackground: boolean
+  /** Include extracted task name in notification message @default true */
+  includeTaskSummary: boolean
 }
 
 // Telegram credentials (never stored in renderer)
