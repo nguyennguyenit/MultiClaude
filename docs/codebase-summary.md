@@ -125,6 +125,12 @@ src/
 │   │   ├── pattern-detector.ts
 │   │   ├── telegram-notifier.ts
 │   │   ├── discord-notifier.ts
+│   │   ├── output-parser.ts         # Router: auto-detects and locks parser mode
+│   │   ├── json-stream-parser.ts    # NDJSON parser for stream-json output
+│   │   ├── plain-text-parser.ts     # Regex parser with named capture groups
+│   │   ├── parser-utils.ts          # Shared: generateTaskEventId, MAX_REGEX_INPUT_LENGTH
+│   │   ├── __tests__/
+│   │   │   └── output-parser.spec.ts
 │   │   └── index.ts
 │   ├── clipboard/           # Clipboard operations
 │   │   └── clipboard-handler.ts
@@ -373,6 +379,12 @@ interface ProjectTerminal {
 - **PatternDetector**: Terminal output analysis with debounce to prevent event spam
 - **TelegramNotifier**: Telegram Bot API integration with test/validation
 - **DiscordNotifier**: Discord Webhook integration with URL format validation
+- **Output Parser Infrastructure**:
+  - **OutputParser**: Router with auto-detection locking (first valid format wins)
+  - **JsonStreamParser**: NDJSON parser for Claude Code `--output-format stream-json`
+  - **PlainTextParser**: Enhanced regex with named capture groups for task extraction
+  - **parser-utils.ts**: Shared utilities (generateTaskEventId, MAX_REGEX_INPUT_LENGTH=10000)
+  - 25 unit tests covering all parser scenarios
 - **IPC Handlers**: 12 handlers covering settings, Telegram/Discord management, testing
 - **Main Process Integration**: NotificationManager lifecycle, terminal output forwarding, app cleanup
 

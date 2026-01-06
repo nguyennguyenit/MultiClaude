@@ -50,10 +50,12 @@ export class OutputParser extends EventEmitter {
       return
     }
 
-    // First-time detection: try to detect and lock
+    // First-time detection: use heuristic to detect JSON format
+    // Heuristic: line starts with '{' and ends with '}' (NDJSON pattern)
     const lines = data.split('\n').filter(l => l.trim())
     const isJson = lines.some(line => {
-      try { JSON.parse(line); return true } catch { return false }
+      const trimmed = line.trim()
+      return trimmed.startsWith('{') && trimmed.endsWith('}')
     })
 
     if (isJson) {

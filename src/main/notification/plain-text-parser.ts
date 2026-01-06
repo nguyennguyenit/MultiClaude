@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
-import { createHash } from 'crypto'
 import type { TaskEvent, NotificationEventType } from '@shared/types'
 import { ENHANCED_DETECTION_PATTERNS } from '@shared/constants'
+import { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
 
 /**
  * Enhanced plain text parser with named capture groups for task name extraction.
@@ -12,9 +12,14 @@ export class PlainTextParser extends EventEmitter {
   private debounceMs = 5000
 
   parse(terminalId: string, data: string, projectName: string): void {
+    // Guard against ReDoS by limiting input length
+    const safeData = data.length > MAX_REGEX_INPUT_LENGTH
+      ? data.slice(0, MAX_REGEX_INPUT_LENGTH)
+      : data
+
     // Check each pattern
     for (const [type, pattern] of Object.entries(ENHANCED_DETECTION_PATTERNS)) {
-      const match = data.match(pattern)
+      const match = safeData.match(pattern)
       if (match) {
         const key = `${terminalId}:${type}`
         const now = Date.now()
@@ -36,7 +41,7 @@ export class PlainTextParser extends EventEmitter {
 
   private emitTaskEvent(terminalId: string, type: NotificationEventType, taskName: string, projectName: string): void {
     const event: TaskEvent = {
-      id: this.generateId(terminalId, type, taskName),
+      id: generateTaskEventId(terminalId, type, taskName),
       terminalId,
       type,
       taskName,
@@ -44,13 +49,6 @@ export class PlainTextParser extends EventEmitter {
       timestamp: Date.now()
     }
     this.emit('taskEvent', event)
-  }
-
-  private generateId(terminalId: string, type: string, content: string): string {
-    return createHash('sha256')
-      .update(`${terminalId}:${type}:${content}`)
-      .digest('hex')
-      .slice(0, 16)
   }
 
   clearTerminal(terminalId: string): void {
