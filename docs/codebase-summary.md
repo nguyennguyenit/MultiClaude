@@ -20,8 +20,12 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
+- **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
+  - `isAtBottomRef` tracks viewport position via `terminal.onScroll()` listener
+  - `write()` conditionally calls `scrollToBottom()` only when at bottom
+  - Proper disposable cleanup on unmount
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
-  - `TERMINAL_DISPOSE_DELAY` (150ms) constant for deferred cleanup
+  - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
   - Deferred `initialOutput` write until terminal fully mounted
   - `isTransitioning` state in App.tsx with rapid-switch guard to prevent race conditions

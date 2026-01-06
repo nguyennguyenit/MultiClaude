@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { useSettingsStore } from '../stores'
@@ -50,6 +50,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   const disposedRef = useRef(false)
   const webglAddonRef = useRef<WebglAddon | null>(null)
   const isActiveRef = useRef(isActive)
+  const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll
+  const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
 
@@ -81,6 +83,14 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     terminal.loadAddon(fitAddon)
 
     terminal.open(container)
+
+    // Track scroll position for smart scroll behavior
+    // viewportY = top visible line; baseY = scrollback lines above viewport
+    // When viewportY >= baseY, viewport shows the bottom (cursor area)
+    scrollDisposableRef.current = terminal.onScroll(() => {
+      const buffer = terminal.buffer.active
+      isAtBottomRef.current = buffer.viewportY >= buffer.baseY
+    })
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -215,9 +225,13 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     })
   }, [terminalId, initialOutput, onResize])
 
-  // Write data to terminal
+  // Write data to terminal with smart scroll
   const write = useCallback((data: string) => {
     terminalRef.current?.write(data)
+    // Smart scroll: only scroll to bottom if user was at bottom
+    if (isAtBottomRef.current) {
+      terminalRef.current?.scrollToBottom()
+    }
   }, [])
 
   // Fit terminal to container (with safety check for initialization)
@@ -255,15 +269,18 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       const terminal = terminalRef.current
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
+      const scrollDisposable = scrollDisposableRef.current
       terminalRef.current = null
       fitAddonRef.current = null
       webglAddonRef.current = null
+      scrollDisposableRef.current = null
 
       // Delay disposal to allow xterm's internal setTimeout callbacks to complete
       // xterm.js uses setTimeout(0) internally for Viewport refresh
       setTimeout(() => {
         try {
-          // Order: WebGL first, then fit, then terminal
+          // Order: scroll listener first, WebGL, fit, then terminal
+          scrollDisposable?.dispose()
           webglAddon?.dispose()
           fitAddon?.dispose()
           terminal?.dispose()

@@ -324,6 +324,7 @@ Quit and Install
 3. **Lazy loading**: xterm addons loaded on demand
 4. **IPC batching**: Terminal output buffered before send
 5. **State selectors**: Zustand with shallow equality checks
+6. **Smart scroll**: Auto-scroll only when at bottom; preserves position when reading scrollback
 
 ## Error Handling
 
