@@ -48,5 +48,6 @@ export const COLOR_THEMES: ColorThemeDefinition[] = [
 export const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'system',
   colorTheme: 'default',
-  terminalLimit: { preset: 9 }
+  terminalLimit: { preset: 9 },
+  terminalRenderMode: 'balanced'
 }

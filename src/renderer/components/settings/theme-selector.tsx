@@ -1,9 +1,16 @@
 import { useSettingsStore } from '../../stores'
 import { COLOR_THEMES } from '@shared/constants'
-import type { ThemeMode, ColorThemeDefinition } from '@shared/types'
+import type { ThemeMode, ColorThemeDefinition, TerminalRenderMode } from '@shared/types'
+
+// Render mode definitions for UI display
+const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string }[] = [
+  { id: 'performance', name: 'Performance', description: 'No WebGL, best for many terminals' },
+  { id: 'balanced', name: 'Balanced', description: 'WebGL only for active terminal' },
+  { id: 'quality', name: 'Quality', description: 'WebGL always, best visual quality' }
+]
 
 export function ThemeSelector() {
-  const { settings, setThemeMode, setColorTheme } = useSettingsStore()
+  const { settings, setThemeMode, setColorTheme, setTerminalRenderMode } = useSettingsStore()
 
   const isDark = settings.themeMode === 'dark' ||
     (settings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -51,6 +58,24 @@ export function ThemeSelector() {
               selected={settings.colorTheme === theme.id}
               isDark={isDark}
               onClick={() => setColorTheme(theme.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Terminal Rendering Mode */}
+      <div>
+        <h4 className="text-sm font-medium mb-1">Terminal Rendering</h4>
+        <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+          Optimize terminal performance vs visual quality
+        </p>
+        <div className="flex gap-2">
+          {RENDER_MODES.map((mode) => (
+            <RenderModeCard
+              key={mode.id}
+              mode={mode}
+              selected={settings.terminalRenderMode === mode.id}
+              onClick={() => setTerminalRenderMode(mode.id)}
             />
           ))}
         </div>
@@ -123,6 +148,32 @@ function ThemeCard({ theme, selected, isDark, onClick }: {
         {theme.name}
         {selected && <span className="text-[var(--mc-accent)]">✓</span>}
       </span>
+    </button>
+  )
+}
+
+// Render mode card component
+function RenderModeCard({ mode, selected, onClick }: {
+  mode: { id: TerminalRenderMode; name: string; description: string }
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        flex flex-col px-4 py-3 rounded-lg border-2 w-[140px]
+        transition-all duration-150
+        ${selected
+          ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
+          : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
+      `}
+    >
+      <span className="text-sm font-medium flex items-center gap-1">
+        {mode.name}
+        {selected && <span className="text-[var(--mc-accent)]">✓</span>}
+      </span>
+      <span className="text-xs text-[var(--mc-text-muted)] mt-1">{mode.description}</span>
     </button>
   )
 }

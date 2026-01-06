@@ -13,7 +13,8 @@ interface TerminalViewProps {
 export const TerminalView = memo(function TerminalView({ terminalId, isActive, initialOutput, onFitReady }: TerminalViewProps) {
   const { containerRef, initTerminal, write, fit, focus } = useTerminal({
     terminalId,
-    initialOutput
+    initialOutput,
+    isActive
   })
   const appendOutput = useAppStore((state) => state.appendOutput)
   // Skip appending output right after restore to prevent duplicates from shell prompt redraws

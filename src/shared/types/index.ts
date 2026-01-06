@@ -147,6 +147,9 @@ export interface GitOperationResult {
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest'
 
+// Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
+export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
+
 // Terminal limit types
 export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
 export interface TerminalLimit {
@@ -172,6 +175,7 @@ export interface AppSettings {
   themeMode: ThemeMode
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
+  terminalRenderMode: TerminalRenderMode
 }
 
 // GitHub Issues/PRs types

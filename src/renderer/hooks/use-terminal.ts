@@ -8,10 +8,12 @@ import { getTerminalTheme } from '@shared/constants'
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
+const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
 
 interface UseTerminalOptions {
   terminalId: string
   initialOutput?: string
+  isActive?: boolean  // Required for balanced render mode WebGL toggle
   onResize?: (cols: number, rows: number) => void
 }
 
@@ -26,12 +28,30 @@ function getCurrentTerminalTheme() {
   return getTerminalTheme(settings.colorTheme, isDark)
 }
 
-export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminalOptions) {
+/**
+ * Determine if WebGL should be used based on render mode and active state
+ */
+function shouldUseWebGL(isActive: boolean): boolean {
+  const mode = useSettingsStore.getState().settings.terminalRenderMode ?? 'balanced'
+  switch (mode) {
+    case 'performance':
+      return false
+    case 'balanced':
+      return isActive
+    case 'quality':
+      return true
+  }
+}
+
+export function useTerminal({ terminalId, initialOutput, isActive = true, onResize }: UseTerminalOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
   const webglAddonRef = useRef<WebglAddon | null>(null)
+  const isActiveRef = useRef(isActive)
+  const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
 
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
@@ -71,13 +91,15 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       // Guard against disposed terminal
       if (disposedRef.current || !terminalRef.current) return
 
-      // Try WebGL addon for better performance
-      try {
-        const webglAddon = new WebglAddon()
-        webglAddonRef.current = webglAddon
-        terminal.loadAddon(webglAddon)
-      } catch (e) {
-        console.warn('WebGL addon failed to load:', e)
+      // Conditionally load WebGL based on render mode setting
+      if (shouldUseWebGL(isActiveRef.current)) {
+        try {
+          const webglAddon = new WebglAddon()
+          webglAddonRef.current = webglAddon
+          terminal.loadAddon(webglAddon)
+        } catch (e) {
+          console.warn('WebGL addon failed to load:', e)
+        }
       }
 
       try {
@@ -267,6 +289,99 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       const isDark = state.settings.themeMode === 'dark' ||
         (state.settings.themeMode === 'system' && prefersDark)
       terminalRef.current.options.theme = getTerminalTheme(state.settings.colorTheme, isDark)
+    })
+    return unsubscribe
+  }, [])
+
+  // Toggle WebGL addon based on active state and render mode (debounced)
+  useEffect(() => {
+    isActiveRef.current = isActive
+    if (!terminalRef.current || disposedRef.current) return
+
+    // Clear pending toggle
+    if (webglToggleTimerRef.current) {
+      clearTimeout(webglToggleTimerRef.current)
+      webglToggleTimerRef.current = null
+    }
+
+    const toggleWebGL = () => {
+      if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
+
+      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const hasWebGL = webglAddonRef.current !== null
+
+      if (needsWebGL && !hasWebGL) {
+        // Load WebGL addon with guard
+        webglLoadingRef.current = true
+        requestAnimationFrame(() => {
+          if (disposedRef.current || !terminalRef.current) {
+            webglLoadingRef.current = false
+            return
+          }
+          try {
+            const webglAddon = new WebglAddon()
+            webglAddonRef.current = webglAddon
+            terminalRef.current.loadAddon(webglAddon)
+          } catch (e) {
+            console.warn('WebGL addon failed to load:', e)
+          }
+          webglLoadingRef.current = false
+        })
+      } else if (!needsWebGL && hasWebGL) {
+        // Dispose WebGL addon
+        try {
+          webglAddonRef.current?.dispose()
+        } catch {
+          // Ignore disposal errors
+        }
+        webglAddonRef.current = null
+      }
+    }
+
+    // Debounce toggle to handle rapid tab switching
+    webglToggleTimerRef.current = setTimeout(toggleWebGL, WEBGL_TOGGLE_DEBOUNCE)
+
+    return () => {
+      if (webglToggleTimerRef.current) {
+        clearTimeout(webglToggleTimerRef.current)
+        webglToggleTimerRef.current = null
+      }
+    }
+  }, [isActive])
+
+  // React to render mode setting changes
+  useEffect(() => {
+    const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
+      if (!terminalRef.current || disposedRef.current) return
+      if (state.settings.terminalRenderMode === prevState.settings.terminalRenderMode) return
+
+      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const hasWebGL = webglAddonRef.current !== null
+
+      if (needsWebGL && !hasWebGL && !webglLoadingRef.current) {
+        webglLoadingRef.current = true
+        requestAnimationFrame(() => {
+          if (disposedRef.current || !terminalRef.current) {
+            webglLoadingRef.current = false
+            return
+          }
+          try {
+            const webglAddon = new WebglAddon()
+            webglAddonRef.current = webglAddon
+            terminalRef.current.loadAddon(webglAddon)
+          } catch (e) {
+            console.warn('WebGL addon failed to load:', e)
+          }
+          webglLoadingRef.current = false
+        })
+      } else if (!needsWebGL && hasWebGL) {
+        try {
+          webglAddonRef.current?.dispose()
+        } catch {
+          // Ignore disposal errors
+        }
+        webglAddonRef.current = null
+      }
     })
     return unsubscribe
   }, [])

@@ -15,7 +15,7 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
-- **TerminalView**: xterm.js renderer with WebGL addon
+- **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
@@ -53,8 +53,12 @@ MultiClaude is an Electron-based desktop application for managing multiple Claud
 
 #### Settings
 - **SettingsStore** (Zustand): Theme preferences in-memory + localStorage
-- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications)
+- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates)
 - **ThemeSelector**: Color theme and dark/light mode selection
+- **Terminal Rendering Mode**: WebGL optimization for xterm.js (Settings > Appearance > Terminal Rendering)
+  - **Performance**: No WebGL, best for many terminals (lower GPU usage)
+  - **Balanced** (default): WebGL only for active terminal
+  - **Quality**: WebGL always enabled, best visual quality
 - Themes: 7 color themes + light/dark/system mode
 
 #### Notifications
