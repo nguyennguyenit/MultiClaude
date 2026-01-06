@@ -28,6 +28,7 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
     - Appears when user scrolls 5+ lines from bottom
     - Opacity-based show/hide (no mount/unmount) for smooth transitions
     - Accessibility: `aria-label`, `aria-hidden`, `pointer-events-none` when hidden
+    - **Responsive Sizing**: CSS Container Queries with `clamp(20px, 4cqw, 32px)` for 3-4% terminal width scaling
   - Proper disposable cleanup on unmount
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
   - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup

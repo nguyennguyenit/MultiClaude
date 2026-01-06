@@ -1,6 +1,26 @@
-import { useEffect, useRef, memo } from 'react'
+import { useEffect, useRef, memo, CSSProperties } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
 import { useAppStore, useSettingsStore } from '../../stores'
+
+// Responsive scroll button styles using CSS Container Queries
+// Button scales 3-4% of terminal width, bounded 20-32px
+const scrollButtonWrapperStyle: CSSProperties = {
+  height: '100%',
+  width: '100%',
+  position: 'relative',
+  containerType: 'size'
+}
+
+const scrollButtonStyle: CSSProperties = {
+  width: 'clamp(20px, 4cqw, 32px)',
+  height: 'clamp(20px, 4cqw, 32px)',
+  padding: 'clamp(4px, 1cqw, 8px)'
+}
+
+const scrollButtonIconStyle: CSSProperties = {
+  width: 'clamp(12px, 2cqw, 16px)',
+  height: 'clamp(12px, 2cqw, 16px)'
+}
 
 interface TerminalViewProps {
   terminalId: string
@@ -67,7 +87,7 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
   return (
     <div
       className="terminal-container-wrapper"
-      style={{ height: '100%', width: '100%', position: 'relative' }}
+      style={scrollButtonWrapperStyle}
     >
       <div
         ref={containerRef}
@@ -80,14 +100,15 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
       <button
         type="button"
         onClick={scrollToBottom}
-        className={`absolute bottom-3 right-3 z-50 p-2 rounded-full bg-[var(--mc-bg-tertiary)] hover:bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] shadow-lg transition-all duration-200 ${
+        className={`absolute bottom-3 right-3 z-50 rounded-full bg-[var(--mc-bg-tertiary)] hover:bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] shadow-lg transition-all duration-200 ${
           isAtBottom || !isActive || settingsModalOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
+        style={scrollButtonStyle}
         title="Scroll to bottom"
         aria-label="Scroll to bottom"
         aria-hidden={isAtBottom || !isActive || settingsModalOpen}
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg style={scrollButtonIconStyle} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
         </svg>
       </button>
