@@ -49,3 +49,7 @@ repomix-output.xml
 
 # Test coverage
 coverage/
+
+# Playwright E2E test outputs
+src/__tests__/e2e/test-artifacts/
+src/__tests__/e2e/test-results/

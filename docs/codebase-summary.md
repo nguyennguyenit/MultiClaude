@@ -158,6 +158,11 @@ src/
 │   │   └── index.ts
 │   └── ipc/                 # IPC handlers
 │       └── handlers.ts
+├── __tests__/               # Test infrastructure
+│   └── e2e/                 # Playwright E2E tests
+│       ├── playwright.config.ts
+│       ├── fixtures/        # Electron app fixtures, mock data
+│       └── tests/           # Test specs
 ├── renderer/                # React UI
 │   ├── App.tsx
 │   ├── components/
@@ -347,6 +352,12 @@ interface ProjectTerminal {
   - Run tests: `npm test`
   - Watch mode: `npm run test:watch`
   - Coverage: `npm run test:coverage`
+- **E2E Testing**: Playwright with Electron fixtures
+  - Run UI tests: `npm run test:ui`
+  - Update snapshots: `npm run test:ui:update`
+  - Headed mode: `npm run test:ui:headed`
+  - Config: `src/__tests__/e2e/playwright.config.ts`
+  - Features: Trace on retry, screenshot on failure, video capture
 
 ### GitHub Actions Workflows
 
@@ -373,6 +384,10 @@ interface ProjectTerminal {
 - `react-resizable-panels`: Grid layout
 - `zustand`: State management
 - `tailwindcss@4`: Styling
+
+### Testing
+- `vitest`: Unit testing framework
+- `@playwright/test`: E2E testing with Electron support
 
 ## Development Workflow
 

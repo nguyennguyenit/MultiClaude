@@ -15,6 +15,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:ui": "playwright test -c src/__tests__/e2e/playwright.config.ts",
+    "test:ui:update": "playwright test -c src/__tests__/e2e/playwright.config.ts --update-snapshots",
+    "test:ui:headed": "playwright test -c src/__tests__/e2e/playwright.config.ts --headed",
     "release": "npm run build && electron-builder --publish always",
     "release:linux": "npm run build && electron-builder --linux --publish always",
     "release:win": "npm run build && electron-builder --win --publish always",
@@ -39,6 +42,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
