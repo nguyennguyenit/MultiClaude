@@ -424,6 +424,19 @@ interface ProjectTerminal {
 - **NotificationManager**: Integrated both detectors into notification flow
 - **Test Coverage**: 31 new tests (17 FocusDetector + 14 TaskTracker)
 
+**Phase 5 - Completed: Rich Platform Messages**
+- **TelegramNotifier**: Rich HTML formatted messages via `sendTaskEvent(event: TaskEvent)`
+  - `formatTaskEvent()`: Emoji + bold labels + HTML escaping
+  - `escapeHtml()`: Escape &, <, > characters
+  - `MAX_FIELD_LENGTH = 256`: Truncation limit
+- **DiscordNotifier**: Colored embeds via `sendTaskEvent(event: TaskEvent)`
+  - `DiscordEmbed` interface: Rich embed structure with fields, timestamp, footer
+  - `sendEmbed()`: Generic embed payload sender
+  - `formatTaskEvent()`: Build embed with color-coded type (green/red/yellow)
+  - Test notification now uses embeds
+- **NotificationManager**: Delegates to `notifier.sendTaskEvent()` instead of inline formatting
+  - Removed duplicate `formatTelegramMessage()`/`formatDiscordMessage()` methods
+
 **Feature Status**: Feature complete and fully integrated
 
 ## Project Tabs Redesign Implementation Phases

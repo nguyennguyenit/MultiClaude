@@ -175,49 +175,18 @@ export class NotificationManager extends EventEmitter {
       const creds = this.storage.getTelegram()
       if (creds) {
         const notifier = new TelegramNotifier(creds.botToken, creds.chatId)
-        const message = this.formatTelegramMessage(event)
-        notifier.send(message).catch(console.error)
+        notifier.sendTaskEvent(event).catch(console.error)
       }
     }
 
-    // Discord with markdown formatting (Phase 5 adds embeds)
+    // Discord with rich embed
     if (settings.discordEnabled && settings.discordConfigured) {
       const webhookUrl = this.storage.getDiscord()
       if (webhookUrl) {
         const notifier = new DiscordNotifier(webhookUrl)
-        const message = this.formatDiscordMessage(event)
-        notifier.send(message).catch(console.error)
+        notifier.sendTaskEvent(event).catch(console.error)
       }
     }
-  }
-
-  private formatTelegramMessage(event: TaskEvent): string {
-    const emoji: Record<NotificationEventType, string> = {
-      taskComplete: '✅',
-      taskFailed: '❌',
-      reviewNeeded: '👀'
-    }
-    const titles: Record<NotificationEventType, string> = {
-      taskComplete: 'Task Complete',
-      taskFailed: 'Task Failed',
-      reviewNeeded: 'Review Needed'
-    }
-
-    return [
-      `${emoji[event.type]} <b>${titles[event.type]}</b>`,
-      `<b>Project:</b> ${event.projectName}`,
-      `<b>Task:</b> ${event.taskName}`
-    ].join('\n')
-  }
-
-  private formatDiscordMessage(event: TaskEvent): string {
-    const emoji: Record<NotificationEventType, string> = {
-      taskComplete: '✅',
-      taskFailed: '❌',
-      reviewNeeded: '👀'
-    }
-
-    return `${emoji[event.type]} **${event.projectName}**: ${event.taskName}`
   }
 
   // Telegram methods
