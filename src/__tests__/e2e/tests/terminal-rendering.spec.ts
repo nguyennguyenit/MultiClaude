@@ -1,4 +1,4 @@
-import { test, expect, injectMockProject } from '../fixtures'
+import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 import type { Page } from '@playwright/test'
 
@@ -7,50 +7,13 @@ import type { Page } from '@playwright/test'
  * Tests WebGL rendering modes: performance, balanced, quality.
  */
 
-/**
- * Helper function to open Settings and navigate to Terminals tab.
- * Sets the rendering mode and saves settings.
- */
-async function setRenderingMode(
-  window: Page,
-  mode: 'performance' | 'balanced' | 'quality'
-): Promise<void> {
-  // Open settings via sidebar button with Settings text
-  const settingsButton = window.locator('button:has-text("Settings"), button:has(svg)').filter({
-    has: window.locator('svg path[d*="10.325 4.317"]')
-  }).first()
-  await settingsButton.click()
-
-  // Wait for settings modal
-  await window.waitForSelector('h2:has-text("Settings")', { timeout: 3000 })
-
-  // Click on Terminals tab
-  const terminalsTab = window.locator('button:has-text("Terminals")')
-  await terminalsTab.click()
-  await window.waitForTimeout(100)
-
-  // Find the rendering mode button by name
-  const modeButtonText = mode.charAt(0).toUpperCase() + mode.slice(1) // Capitalize
-  const modeButton = window.locator(`button:has-text("${modeButtonText}")`).filter({
-    has: window.locator(`span:text-is("${modeButtonText}")`)
-  }).first()
-  await modeButton.click()
-  await window.waitForTimeout(100)
-
-  // Save and close settings
-  const saveButton = window.locator('button:has-text("Save Settings")')
-  await saveButton.click()
-  await window.waitForTimeout(200)
-}
 
 /**
  * Helper to open settings modal.
  */
 async function openSettings(window: Page): Promise<void> {
-  // Click settings button with gear icon
-  const settingsButton = window.locator('button').filter({
-    has: window.locator('svg path[d*="10.325 4.317"]')
-  }).first()
+  // Click settings button using data-testid
+  const settingsButton = window.locator('[data-testid="settings-button"]')
   await settingsButton.click()
   await window.waitForSelector('h2:has-text("Settings")', { timeout: 3000 })
 }
@@ -62,7 +25,7 @@ async function navigateToTerminalsTab(window: Page): Promise<void> {
   // Use testid to avoid conflict with sidebar Terminals button
   const terminalsTab = window.locator('[data-testid="settings-tab-terminals"]')
   await terminalsTab.click()
-  await window.waitForTimeout(100)
+  await window.waitForTimeout(WAIT_TIMES.SHORT)
 }
 
 /**
@@ -75,7 +38,7 @@ async function selectRenderingMode(
   // Find the button with exact mode name
   const modeButton = window.locator(`button:has(span.font-medium:text-is("${mode}"))`).first()
   await modeButton.click()
-  await window.waitForTimeout(100)
+  await window.waitForTimeout(WAIT_TIMES.SHORT)
 }
 
 /**
@@ -84,7 +47,7 @@ async function selectRenderingMode(
 async function saveAndCloseSettings(window: Page): Promise<void> {
   const saveButton = window.locator('button:has-text("Save Settings")')
   await saveButton.click()
-  await window.waitForTimeout(200)
+  await window.waitForTimeout(WAIT_TIMES.MEDIUM)
 }
 
 test.describe('Terminal Rendering Modes', () => {
@@ -116,8 +79,7 @@ test.describe('Terminal Rendering Modes', () => {
     // Create a terminal to verify rendering if none exist
     const initialCount = await window.locator('.terminal-pane').count()
     if (initialCount === 0) {
-      await window.locator('button:has-text("+ New Terminal")').click()
-      await window.waitForTimeout(300)
+      await addTerminal(window)
       await window.waitForSelector('.terminal-pane', { timeout: 5000 })
     }
 
@@ -153,17 +115,14 @@ test.describe('Terminal Rendering Modes', () => {
     // Create terminals if none exist
     const initialCount = await window.locator('.terminal-pane').count()
     if (initialCount === 0) {
-      await window.locator('button:has-text("+ New Terminal")').click()
-      await window.waitForTimeout(300)
+      await addTerminal(window)
       await window.waitForSelector('.terminal-pane', { timeout: 5000 })
     }
 
     // Ensure we have at least 2 terminals
     const currentCount = await window.locator('.terminal-pane').count()
     if (currentCount < 2) {
-      const addButton = window.locator('button:has-text("+ New")')
-      await addButton.click()
-      await window.waitForTimeout(300)
+      await addTerminal(window)
     }
 
     // Verify at least 2 terminals visible
@@ -199,8 +158,7 @@ test.describe('Terminal Rendering Modes', () => {
     // Create a terminal if none exist
     const initialCount = await window.locator('.terminal-pane').count()
     if (initialCount === 0) {
-      await window.locator('button:has-text("+ New Terminal")').click()
-      await window.waitForTimeout(300)
+      await addTerminal(window)
       await window.waitForSelector('.terminal-pane', { timeout: 5000 })
     }
 
@@ -280,14 +238,14 @@ test.describe('Terminal Rendering Modes', () => {
       has: window.locator('text=/^4$/')
     })
     await preset4Button.click()
-    await window.waitForTimeout(100)
+    await window.waitForTimeout(WAIT_TIMES.SHORT)
 
     await saveAndCloseSettings(window)
 
     // Create a terminal if none exist
     const initialCount = await window.locator('.terminal-pane').count()
     if (initialCount === 0) {
-      await window.locator('button:has-text("+ New Terminal")').click()
+      await addTerminal(window)
       await window.waitForSelector('.terminal-pane', { timeout: 5000 })
     }
 

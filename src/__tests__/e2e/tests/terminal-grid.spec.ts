@@ -1,4 +1,4 @@
-import { test, expect, injectMockProject } from '../fixtures'
+import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 
 /**
@@ -13,24 +13,8 @@ test.describe('Terminal Grid Layout', () => {
     // Wait for app to initialize
     await window.waitForSelector('#root', { state: 'attached' })
     // Give extra time for any session restoration to complete
-    await window.waitForTimeout(500)
+    await window.waitForTimeout(WAIT_TIMES.LONG)
   })
-
-  /**
-   * Helper to add a new terminal (works whether terminals exist or not)
-   */
-  async function addTerminal(window: import('@playwright/test').Page): Promise<void> {
-    // First try the empty state button, then the action bar button
-    const emptyStateButton = window.locator('button:has-text("+ New Terminal")')
-    const actionBarButton = window.locator('button:has-text("+ New")')
-
-    if (await emptyStateButton.isVisible()) {
-      await emptyStateButton.click()
-    } else {
-      await actionBarButton.click()
-    }
-    await window.waitForTimeout(300)
-  }
 
   test.skip('empty state shows "No terminals open" message and add button', async ({ window }) => {
     // Skip: App restores session from previous run, empty state not reliably testable
@@ -168,7 +152,7 @@ test.describe('Terminal Grid Layout', () => {
     }
 
     // Wait for terminals to fully render
-    await window.waitForTimeout(500)
+    await window.waitForTimeout(WAIT_TIMES.LONG)
 
     // Take screenshot of grid area
     const gridArea = window.locator('.terminal-pane').first().locator('..')

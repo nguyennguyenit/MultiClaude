@@ -1,4 +1,4 @@
-import { test, expect, injectMockProject } from '../fixtures'
+import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 
 /**
@@ -10,21 +10,12 @@ test.describe('Terminal Pane Interactions', () => {
     // Inject mock project data
     await injectMockProject(window, [mockProject])
     await window.waitForSelector('#root', { state: 'attached' })
-    await window.waitForTimeout(500)
+    await window.waitForTimeout(WAIT_TIMES.LONG)
 
     // Ensure at least one terminal exists
     const terminalCount = await window.locator('.terminal-pane').count()
     if (terminalCount === 0) {
-      // Try empty state button first, then action bar button
-      const emptyStateButton = window.locator('button:has-text("+ New Terminal")')
-      const actionBarButton = window.locator('button:has-text("+ New")')
-
-      if (await emptyStateButton.isVisible({ timeout: 1000 })) {
-        await emptyStateButton.click()
-      } else if (await actionBarButton.isVisible({ timeout: 1000 })) {
-        await actionBarButton.click()
-      }
-      await window.waitForTimeout(300)
+      await addTerminal(window)
       await window.waitForSelector('.terminal-pane', { timeout: 5000 })
     }
   })
@@ -132,7 +123,7 @@ test.describe('Terminal Pane Interactions', () => {
       const terminalsToAdd = 2 - initialCount
       for (let i = 0; i < terminalsToAdd; i++) {
         await addButton.click()
-        await window.waitForTimeout(300)
+        await window.waitForTimeout(WAIT_TIMES.STANDARD)
       }
     }
 
@@ -149,7 +140,7 @@ test.describe('Terminal Pane Interactions', () => {
 
     // Click the first terminal pane
     await terminalPanes.nth(0).click()
-    await window.waitForTimeout(200)
+    await window.waitForTimeout(WAIT_TIMES.MEDIUM)
 
     // Now first pane should have active class
     await expect(terminalPanes.nth(0)).toHaveClass(/terminal-pane-active/)
