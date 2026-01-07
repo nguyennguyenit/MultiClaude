@@ -1,4 +1,4 @@
-import { test, expect, injectMockProject, mockProject, WAIT_TIMES } from '../fixtures'
+import { test, expect, injectMockProject, mockProject, clearAllTerminalsForScreenshot, WAIT_TIMES } from '../fixtures'
 import type { Page } from '@playwright/test'
 
 /**
@@ -105,6 +105,9 @@ test.describe('Visual Regression - Terminal Area', () => {
         // Wait for terminal to render
         await window.waitForTimeout(WAIT_TIMES.LONG)
 
+        // Clear all terminals and inject fixed prompt for consistent screenshot
+        await clearAllTerminalsForScreenshot(window)
+
         // Find terminal container using data-testid
         const terminalArea = window.locator('[data-testid="terminal-area"]')
 
@@ -130,6 +133,9 @@ test.describe('Visual Regression - Full Page', () => {
 
         // Wait for everything to render
         await window.waitForTimeout(WAIT_TIMES.LONG)
+
+        // Clear all terminals and inject fixed prompt for consistent screenshot
+        await clearAllTerminalsForScreenshot(window)
 
         // Take full page screenshot
         await expect(window).toHaveScreenshot(`full-page-${theme}-${mode}.png`, {

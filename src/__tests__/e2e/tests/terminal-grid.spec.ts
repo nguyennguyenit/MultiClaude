@@ -1,4 +1,4 @@
-import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
+import { test, expect, injectMockProject, addTerminal, clearAllTerminalsForScreenshot, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 
 /**
@@ -153,6 +153,9 @@ test.describe('Terminal Grid Layout', () => {
 
     // Wait for terminals to fully render
     await window.waitForTimeout(WAIT_TIMES.LONG)
+
+    // Clear all terminals and inject fixed prompt for consistent screenshots
+    await clearAllTerminalsForScreenshot(window)
 
     // Take screenshot of grid area
     const gridArea = window.locator('.terminal-pane').first().locator('..')

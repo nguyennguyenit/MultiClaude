@@ -364,6 +364,10 @@ interface ProjectTerminal {
     - `themeTestCases`: 3 themes (default, ocean, vibrant) × 2 modes = 6 combinations
     - `viewportSizes`: Named viewport configs (fhd, laptop, hd, tablet, small)
     - `SIDEBAR_DIMENSIONS`: Min/max width boundaries for responsive tests
+  - **Terminal Screenshot Helpers** (`fixtures/electron-app.ts`): Utilities for consistent visual regression
+    - `TERMINAL_TEST_PROMPT`: Fixed prompt text for deterministic screenshots
+    - `clearTerminalForScreenshot(window, index)`: Clears terminal and injects fixed prompt
+    - `clearAllTerminalsForScreenshot(window)`: Clears all visible terminals for screenshots
   - **Phases Completed**:
     - Phase 1-3: Terminal pane, grid, rendering tests
     - Phase 4: Responsive layout tests - parameterized viewport testing, sidebar toggle, layout consistency
@@ -380,6 +384,10 @@ interface ProjectTerminal {
   - Triggers on version tags (e.g., `v1.0.0`)
   - Builds and publishes to GitHub Releases on all platforms
   - Uploads: AppImage, deb, dmg, zip, exe
+- **ui-tests.yml**: E2E/visual regression tests on push/PR to main/beta
+  - Runs on ubuntu-latest with Xvfb (virtual framebuffer for headless Electron)
+  - Playwright browser caching for faster runs
+  - Uploads playwright-report and screenshot-diffs artifacts on failure
 
 ## Dependencies Overview
 

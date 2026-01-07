@@ -145,6 +145,67 @@ export async function injectMockProject(window: Page, projects: MockProject[]): 
 /** Screenshot base path, relative to e2e directory */
 const SCREENSHOT_BASE_PATH = './screenshots'
 
+/** Fixed prompt text for consistent terminal screenshots */
+export const TERMINAL_TEST_PROMPT = 'test@multiclaude:~$ '
+
+/**
+ * Helper to clear terminal content and inject a fixed prompt.
+ * Ensures consistent terminal screenshots for visual regression testing.
+ * @throws Error if terminal at index doesn't exist or cannot be cleared
+ */
+export async function clearTerminalForScreenshot(window: Page, terminalIndex = 0): Promise<void> {
+  // Send clear command to terminal via xterm API
+  const success = await window.evaluate(({ index, prompt }: { index: number; prompt: string }) => {
+    interface XtermTerminal {
+      write: (data: string) => void
+      clear: () => void
+    }
+    interface TerminalData {
+      xterm?: XtermTerminal
+    }
+    interface AppStoreState {
+      terminals: TerminalData[]
+    }
+    interface StoreApi {
+      getState: () => AppStoreState
+    }
+    const appStore = (window as unknown as { __APP_STORE__?: StoreApi }).__APP_STORE__
+    if (!appStore) {
+      return { success: false, reason: 'App store not found' }
+    }
+    const state = appStore.getState()
+    if (index >= state.terminals.length) {
+      return { success: false, reason: `Terminal index ${index} out of range (${state.terminals.length} terminals)` }
+    }
+    const terminal = state.terminals[index] as TerminalData | undefined
+    if (!terminal?.xterm) {
+      return { success: false, reason: `Terminal ${index} has no xterm instance` }
+    }
+    // Clear terminal content
+    terminal.xterm.clear()
+    // Write fixed prompt for consistent screenshot
+    terminal.xterm.write(`\r\n${prompt}`)
+    return { success: true }
+  }, { index: terminalIndex, prompt: TERMINAL_TEST_PROMPT })
+
+  if (!success.success) {
+    console.warn(`[clearTerminalForScreenshot] ${success.reason}`)
+  }
+
+  // Wait for terminal to re-render
+  await window.waitForTimeout(WAIT_TIMES.STANDARD)
+}
+
+/**
+ * Helper to clear all visible terminals for screenshots.
+ */
+export async function clearAllTerminalsForScreenshot(window: Page): Promise<void> {
+  const terminalCount = await window.locator('.terminal-pane').count()
+  for (let i = 0; i < terminalCount; i++) {
+    await clearTerminalForScreenshot(window, i)
+  }
+}
+
 /**
  * Helper to take screenshot with consistent viewport.
  */

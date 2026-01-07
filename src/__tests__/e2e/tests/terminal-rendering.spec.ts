@@ -1,4 +1,4 @@
-import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
+import { test, expect, injectMockProject, addTerminal, clearTerminalForScreenshot, clearAllTerminalsForScreenshot, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 import type { Page } from '@playwright/test'
 
@@ -87,6 +87,9 @@ test.describe('Terminal Rendering Modes', () => {
     const terminalPane = window.locator('.terminal-pane').first()
     await expect(terminalPane).toBeVisible()
 
+    // Clear terminal and inject fixed prompt for consistent screenshot
+    await clearTerminalForScreenshot(window, 0)
+
     // Take screenshot for visual regression
     await expect(terminalPane).toHaveScreenshot('terminal-performance-mode.png', {
       maxDiffPixelRatio: 0.02
@@ -129,6 +132,9 @@ test.describe('Terminal Rendering Modes', () => {
     const terminalCount = await window.locator('.terminal-pane').count()
     expect(terminalCount).toBeGreaterThanOrEqual(2)
 
+    // Clear all terminals and inject fixed prompt for consistent screenshot
+    await clearAllTerminalsForScreenshot(window)
+
     // Take screenshot
     const gridArea = window.locator('.terminal-pane').first().locator('..')
     await expect(gridArea).toHaveScreenshot('terminal-balanced-mode.png', {
@@ -165,6 +171,9 @@ test.describe('Terminal Rendering Modes', () => {
     // Terminal should be visible
     const terminalPane = window.locator('.terminal-pane').first()
     await expect(terminalPane).toBeVisible()
+
+    // Clear terminal and inject fixed prompt for consistent screenshot
+    await clearTerminalForScreenshot(window, 0)
 
     // Take screenshot
     await expect(terminalPane).toHaveScreenshot('terminal-quality-mode.png', {
