@@ -368,6 +368,8 @@ interface ProjectTerminal {
     - Phase 1-3: Terminal pane, grid, rendering tests
     - Phase 4: Responsive layout tests - parameterized viewport testing, sidebar toggle, layout consistency
     - Phase 5: Visual regression tests - theme/mode screenshot comparisons for sidebar, settings modal, terminal, full page, empty state, theme transitions
+    - Phase 6: Interactive & keyboard tests - keyboard shortcuts (Alt+1-9 project switch, Ctrl+N/W terminal mgmt), form inputs (terminal title editing), state transitions (empty states, toasts, error handling)
+  - **Test Counts**: 21 passing, 5 flaky tests skipped (terminal creation timing issues in E2E)
 
 ### GitHub Actions Workflows
 

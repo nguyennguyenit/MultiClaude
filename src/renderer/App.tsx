@@ -364,6 +364,7 @@ function App() {
                       onCloseTerminal={handleCloseTerminal}
                       onStartClaude={handleStartClaude}
                       onInsertFilePath={handleInsertFilePath}
+                      onTitleChange={updateTerminalTitle}
                     />
                   </div>
                 </>

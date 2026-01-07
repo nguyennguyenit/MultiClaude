@@ -16,6 +16,7 @@ interface TerminalGridProps {
   onCloseTerminal?: (id: string) => void
   onStartClaude?: (id: string) => void
   onInsertFilePath?: (terminalId: string, paths: string[]) => void
+  onTitleChange?: (terminalId: string, title: string) => void
 }
 
 /** Calculate grid dimensions based on terminal count */
@@ -45,7 +46,8 @@ export const TerminalGrid = memo(function TerminalGrid({
   onAddTerminal,
   onCloseTerminal,
   onStartClaude,
-  onInsertFilePath
+  onInsertFilePath,
+  onTitleChange
 }: TerminalGridProps) {
   // Empty state with add button
   if (terminals.length === 0) {
@@ -98,6 +100,7 @@ export const TerminalGrid = memo(function TerminalGrid({
                         onClose={() => onCloseTerminal?.(terminal.id)}
                         onStartClaude={() => onStartClaude?.(terminal.id)}
                         onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
+                        onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
                       />
                     </Panel>
                     {/* Resize handle between columns */}

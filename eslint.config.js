@@ -52,6 +52,6 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', '*.config.js', '*.config.ts'],
+    ignores: ['dist/**', 'node_modules/**', '*.config.js', '*.config.ts', 'src/__tests__/e2e/test-artifacts/**', 'src/__tests__/e2e/screenshots/**'],
   },
 ];
