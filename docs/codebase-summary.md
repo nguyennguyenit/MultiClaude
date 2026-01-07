@@ -356,14 +356,18 @@ interface ProjectTerminal {
   - Run UI tests: `npm run test:ui`
   - Update snapshots: `npm run test:ui:update`
   - Headed mode: `npm run test:ui:headed`
+  - Visual regression: `npm run test:visual` / `test:visual:update`
+  - Theme tests: `npm run test:themes`
   - Config: `src/__tests__/e2e/playwright.config.ts`
   - Features: Trace on retry, screenshot on failure, video capture
   - **Test Data** (`fixtures/test-data.ts`): Unified mock data for projects, terminals, themes, viewports
+    - `themeTestCases`: 3 themes (default, ocean, vibrant) × 2 modes = 6 combinations
     - `viewportSizes`: Named viewport configs (fhd, laptop, hd, tablet, small)
     - `SIDEBAR_DIMENSIONS`: Min/max width boundaries for responsive tests
   - **Phases Completed**:
     - Phase 1-3: Terminal pane, grid, rendering tests
     - Phase 4: Responsive layout tests - parameterized viewport testing, sidebar toggle, layout consistency
+    - Phase 5: Visual regression tests - theme/mode screenshot comparisons for sidebar, settings modal, terminal, full page, empty state, theme transitions
 
 ### GitHub Actions Workflows
 

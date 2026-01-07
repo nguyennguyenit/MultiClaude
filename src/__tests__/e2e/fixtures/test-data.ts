@@ -69,14 +69,15 @@ export const mockTerminals: MockTerminal[] = Array.from({ length: 4 }, (_, i) =>
 /**
  * Theme combinations for visual regression testing.
  * Uses 3 representative themes × 2 modes = 6 combinations.
+ * Themes: default (classic), ocean (cool), vibrant (warm)
  */
 export const themeTestCases = [
-  { theme: 'zinc', mode: 'light' },
-  { theme: 'zinc', mode: 'dark' },
-  { theme: 'blue', mode: 'light' },
-  { theme: 'blue', mode: 'dark' },
-  { theme: 'rose', mode: 'light' },
-  { theme: 'rose', mode: 'dark' }
+  { theme: 'default', mode: 'light' },
+  { theme: 'default', mode: 'dark' },
+  { theme: 'ocean', mode: 'light' },
+  { theme: 'ocean', mode: 'dark' },
+  { theme: 'vibrant', mode: 'light' },
+  { theme: 'vibrant', mode: 'dark' }
 ] as const
 
 /**
