@@ -81,10 +81,18 @@ export const themeTestCases = [
 
 /**
  * Viewport sizes for responsive testing.
+ * Named viewport configurations for parameterized tests.
  */
-export const viewportSizes = {
-  desktop: { width: 1920, height: 1080 },
-  laptop: { width: 1366, height: 768 },
-  tablet: { width: 1024, height: 768 },
-  small: { width: 800, height: 600 }
+export const viewportSizes = [
+  { width: 1920, height: 1080, name: 'fhd' },
+  { width: 1366, height: 768, name: 'laptop' },
+  { width: 1280, height: 720, name: 'hd' },
+  { width: 1024, height: 768, name: 'tablet' },
+  { width: 800, height: 600, name: 'small' }
+] as const
+
+/** Sidebar width boundaries (px) */
+export const SIDEBAR_DIMENSIONS = {
+  MIN_COLLAPSED: 40,
+  MAX_EXPANDED: 280
 } as const

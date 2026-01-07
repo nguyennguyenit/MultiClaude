@@ -358,6 +358,12 @@ interface ProjectTerminal {
   - Headed mode: `npm run test:ui:headed`
   - Config: `src/__tests__/e2e/playwright.config.ts`
   - Features: Trace on retry, screenshot on failure, video capture
+  - **Test Data** (`fixtures/test-data.ts`): Unified mock data for projects, terminals, themes, viewports
+    - `viewportSizes`: Named viewport configs (fhd, laptop, hd, tablet, small)
+    - `SIDEBAR_DIMENSIONS`: Min/max width boundaries for responsive tests
+  - **Phases Completed**:
+    - Phase 1-3: Terminal pane, grid, rendering tests
+    - Phase 4: Responsive layout tests - parameterized viewport testing, sidebar toggle, layout consistency
 
 ### GitHub Actions Workflows
 

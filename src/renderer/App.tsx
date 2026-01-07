@@ -317,6 +317,7 @@ function App() {
       {/* Title Bar */}
       <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag">
         <button
+          data-testid="titlebar-sidebar-toggle"
           onClick={toggleSidebar}
           className="p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag mr-2"
           title="Toggle Sidebar"
@@ -353,7 +354,7 @@ function App() {
                     onToggleYolo={handleYoloToggle}
                     onKillAll={handleKillAll}
                   />
-                  <div className="flex-1 min-h-0">
+                  <div data-testid="terminal-area" className="flex-1 min-h-0">
                     <TerminalGrid
                       terminals={projectTerminals}
                       activeTerminalId={activeTerminalId}
