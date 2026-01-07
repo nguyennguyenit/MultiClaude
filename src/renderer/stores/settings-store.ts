@@ -10,6 +10,7 @@ interface SettingsState {
   settingsModalOpen: boolean
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
+  setGlassmorphismEnabled: (enabled: boolean) => void
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   getTerminalLimitValue: () => number
@@ -51,6 +52,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setColorTheme: (theme) => {
     const newSettings = { ...get().settings, colorTheme: theme }
+    saveToStorage(newSettings)
+    set({ settings: newSettings })
+  },
+
+  setGlassmorphismEnabled: (enabled) => {
+    const newSettings = { ...get().settings, glassmorphismEnabled: enabled }
     saveToStorage(newSettings)
     set({ settings: newSettings })
   },

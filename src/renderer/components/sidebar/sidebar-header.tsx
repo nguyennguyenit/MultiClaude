@@ -27,6 +27,7 @@ export function SidebarHeader({ collapsed, onToggle }: SidebarHeaderProps) {
       )}
       <button
         onClick={onToggle}
+        data-testid="sidebar-toggle"
         className={`
           p-1.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-secondary)]
           transition-colors duration-150

@@ -12,8 +12,12 @@ export class ProjectStore {
   private store: Store<StoreSchema>
 
   constructor() {
+    // In test mode, use test-specific store path from environment variable
+    const cwd = process.env.MULTICLAUDE_TEST_STORE_PATH || undefined
+
     this.store = new Store<StoreSchema>({
       name: 'multiclaude-data',
+      cwd,
       defaults: {
         projects: [],
         activeProjectId: null,

@@ -28,13 +28,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <div className="fixed inset-0 top-10 z-50 flex items-center justify-center">
       {/* Backdrop - dark mode: black 80%, light mode: white 80% - starts below titlebar */}
       <div
+        data-testid="settings-backdrop"
         className="absolute inset-0 bg-[var(--mc-backdrop)]"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal */}
-      <div className="relative bg-[var(--mc-bg-primary)] rounded-lg shadow-xl w-[calc(100%-32px)] h-[calc(100%-80px)] flex flex-col border border-[var(--mc-border)] mx-4 mb-10">
+      <div data-testid="settings-modal" className="relative bg-[var(--mc-bg-primary)] rounded-lg shadow-xl w-[calc(100%-32px)] h-[calc(100%-80px)] flex flex-col border border-[var(--mc-border)] mx-4 mb-10">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--mc-border)]">
           <div>
@@ -45,6 +46,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <p className="text-sm text-[var(--mc-text-muted)]">App Settings</p>
           </div>
           <button
+            data-testid="settings-close-button"
             onClick={onClose}
             className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded transition-colors"
             title="Close"
@@ -67,12 +69,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         {/* Footer */}
         <div className="flex justify-end gap-2 p-4 border-t border-[var(--mc-border)]">
           <button
+            data-testid="settings-cancel-button"
             onClick={onClose}
             className="px-4 py-2 rounded text-sm bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
           >
             Cancel
           </button>
           <button
+            data-testid="settings-save-button"
             onClick={onClose}
             className="px-4 py-2 rounded text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-1.5"
           >

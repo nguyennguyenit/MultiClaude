@@ -120,3 +120,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   getProjectTerminals: (projectId) => get().projectTerminals[projectId]
 }))
+
+// Expose store globally for E2E testing (safe for Electron desktop app)
+if (typeof window !== 'undefined') {
+  (window as unknown as { __APP_STORE__: typeof useAppStore }).__APP_STORE__ = useAppStore
+}

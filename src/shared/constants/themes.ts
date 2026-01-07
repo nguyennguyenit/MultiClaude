@@ -42,6 +42,24 @@ export const COLOR_THEMES: ColorThemeDefinition[] = [
     name: 'Forest',
     description: 'Natural, earthy green tones',
     previewColors: { bg: '#DCFCE7', accent: '#16A34A', darkBg: '#052E16' }
+  },
+  {
+    id: 'neon-cyber',
+    name: 'Neon Cyber',
+    description: 'DeFi/crypto inspired cyberpunk with neon cyan',
+    previewColors: { bg: '#EDF8FF', accent: '#0095A3', darkBg: '#0A0E17', darkAccent: '#00E5FF' }
+  },
+  {
+    id: 'pro-dark',
+    name: 'Pro Dark',
+    description: 'Professional trading platform with clean aesthetics',
+    previewColors: { bg: '#F6F8FA', accent: '#2563EB', darkBg: '#0D1117', darkAccent: '#3B82F6' }
+  },
+  {
+    id: 'vibrant',
+    name: 'Vibrant',
+    description: 'Bold music streaming inspired with warm gradients',
+    previewColors: { bg: '#FFFBFB', accent: '#E11D48', darkBg: '#121212', darkAccent: '#FF5E62' }
   }
 ]
 
@@ -49,5 +67,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'system',
   colorTheme: 'default',
   terminalLimit: { preset: 9 },
-  terminalRenderMode: 'balanced'
+  terminalRenderMode: 'balanced',
+  glassmorphismEnabled: false
 }
