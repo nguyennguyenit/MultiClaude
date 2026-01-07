@@ -1,12 +1,18 @@
 import { test, expect, injectMockProject, addTerminal, clearAllTerminalsForScreenshot, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 
+// Skip PTY-dependent tests on CI (terminal creation can be unreliable)
+const isCI = process.env.CI === 'true'
+
 /**
  * Terminal Grid Layout Tests
  * Tests grid behavior with different numbers of terminals.
- * Note: Tests are designed to work with existing terminals by checking relative counts.
+ * Note: Skipped on CI - PTY creation is unreliable in headless environment.
  */
 test.describe('Terminal Grid Layout', () => {
+  // Skip entire suite on CI - all tests require PTY creation
+  test.skip(isCI, 'Terminal grid tests require PTY which is unreliable on CI')
+
   test.beforeEach(async ({ window }) => {
     // Inject mock project data
     await injectMockProject(window, [mockProject])

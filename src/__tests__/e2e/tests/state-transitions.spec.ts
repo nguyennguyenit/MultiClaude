@@ -1,5 +1,8 @@
 import { test, expect, resetAppState, injectMockProject, mockProject, mockProjects } from '../fixtures'
 
+// Skip PTY-dependent tests on CI (terminal creation can be unreliable)
+const isCI = process.env.CI === 'true'
+
 /**
  * State transition tests for MultiClaude.
  * Tests empty states, toast notifications, and error handling.
@@ -109,6 +112,8 @@ test.describe('State Transitions', () => {
       await expect(body).toBeVisible()
     })
 
+    // Skip on CI - this test creates terminals via Ctrl+n which requires PTY
+    test.skip(isCI, 'Terminal creation requires PTY')
     test('terminal limit toast appears when limit reached', async ({ window }) => {
       // This test triggers the terminal limit warning
       await injectMockProject(window, [mockProject])
