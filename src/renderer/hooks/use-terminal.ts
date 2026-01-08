@@ -1,13 +1,19 @@
-import { useEffect, useRef, useCallback } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { useSettingsStore } from '../stores'
 import { getTerminalTheme } from '@shared/constants'
 
+// Terminal timing constants (ms)
+const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
+export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
+const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
+
 interface UseTerminalOptions {
   terminalId: string
   initialOutput?: string
+  isActive?: boolean  // Required for balanced render mode WebGL toggle
   onResize?: (cols: number, rows: number) => void
 }
 
@@ -22,11 +28,34 @@ function getCurrentTerminalTheme() {
   return getTerminalTheme(settings.colorTheme, isDark)
 }
 
-export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminalOptions) {
+/**
+ * Determine if WebGL should be used based on render mode and active state
+ */
+function shouldUseWebGL(isActive: boolean): boolean {
+  const mode = useSettingsStore.getState().settings.terminalRenderMode ?? 'balanced'
+  switch (mode) {
+    case 'performance':
+      return false
+    case 'balanced':
+      return isActive
+    case 'quality':
+      return true
+  }
+}
+
+export function useTerminal({ terminalId, initialOutput, isActive = true, onResize }: UseTerminalOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
+  const webglAddonRef = useRef<WebglAddon | null>(null)
+  const isActiveRef = useRef(isActive)
+  const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
+  const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
+  const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
+  const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
+  const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
 
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
@@ -57,21 +86,46 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
 
     terminal.open(container)
 
+    // Helper function to check and update scroll position
+    const updateScrollPosition = () => {
+      const buffer = terminal.buffer.active
+      const linesFromBottom = buffer.baseY - buffer.viewportY
+      const SCROLL_THRESHOLD = 5
+      const atBottom = linesFromBottom <= SCROLL_THRESHOLD
+      isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
+      setIsAtBottom(atBottom)  // With threshold for UI button visibility
+    }
+
+    // Track scroll position for smart scroll behavior
+    // xterm.js onScroll fires when scrollback buffer changes
+    scrollDisposableRef.current = terminal.onScroll(updateScrollPosition)
+
+    // Also listen for scroll events on the terminal viewport for user scroll detection
+    // xterm.js onScroll may not fire for all viewport scroll events
+    const viewportElement = terminal.element?.querySelector('.xterm-viewport')
+    if (viewportElement) {
+      viewportElement.addEventListener('scroll', updateScrollPosition)
+      viewportScrollHandlerRef.current = { element: viewportElement, handler: updateScrollPosition }
+    }
+
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
-    // Defer WebGL addon and fit to ensure terminal is fully initialized
+    // Defer WebGL addon, fit, and initialOutput to ensure terminal is fully initialized
     // Use setTimeout to run after xterm's internal setTimeout completes
     setTimeout(() => {
       // Guard against disposed terminal
       if (disposedRef.current || !terminalRef.current) return
 
-      // Try WebGL addon for better performance
-      try {
-        const webglAddon = new WebglAddon()
-        terminal.loadAddon(webglAddon)
-      } catch (e) {
-        console.warn('WebGL addon failed to load:', e)
+      // Conditionally load WebGL based on render mode setting
+      if (shouldUseWebGL(isActiveRef.current)) {
+        try {
+          const webglAddon = new WebglAddon()
+          webglAddonRef.current = webglAddon
+          terminal.loadAddon(webglAddon)
+        } catch (e) {
+          console.warn('WebGL addon failed to load:', e)
+        }
       }
 
       try {
@@ -79,9 +133,18 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       } catch {
         // Ignore fit errors
       }
-    }, 50)
+
+      // Restore output AFTER WebGL init to prevent race condition
+      if (initialOutput) {
+        terminal.write(initialOutput)
+      } else {
+        // Initial resize only for fresh terminals
+        window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+      }
+    }, TERMINAL_INIT_DELAY)
 
     // Auto-copy on selection complete
+    // Note: Listeners are implicitly cleaned up when terminal.dispose() destroys the DOM element
     terminal.element?.addEventListener('mouseup', async () => {
       const selection = terminal.getSelection()
       if (selection) {
@@ -177,23 +240,15 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-
-    // Restore previous output if available
-    // Note: We write to terminal display only, not appending to store
-    // since initialOutput already came from the store
-    if (initialOutput) {
-      terminal.write(initialOutput)
-      // Skip initial resize when restoring - prevents shell prompt redraw duplicates
-      // The resize will happen naturally when fit() is called
-    } else {
-      // Initial resize only for fresh terminals
-      window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
-    }
   }, [terminalId, initialOutput, onResize])
 
-  // Write data to terminal
+  // Write data to terminal with smart scroll
   const write = useCallback((data: string) => {
     terminalRef.current?.write(data)
+    // Smart scroll: only scroll to bottom if user was at bottom
+    if (isAtBottomRef.current) {
+      terminalRef.current?.scrollToBottom()
+    }
   }, [])
 
   // Fit terminal to container (with safety check for initialization)
@@ -218,6 +273,11 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     terminalRef.current?.clear()
   }, [])
 
+  // Scroll terminal to bottom (for UI button)
+  const scrollToBottom = useCallback(() => {
+    terminalRef.current?.scrollToBottom()
+  }, [])
+
   // Cleanup on unmount
   useEffect(() => {
     // Reset disposed flag on mount
@@ -230,19 +290,33 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
       // Capture refs before nullifying
       const terminal = terminalRef.current
       const fitAddon = fitAddonRef.current
+      const webglAddon = webglAddonRef.current
+      const scrollDisposable = scrollDisposableRef.current
+      const viewportScrollHandler = viewportScrollHandlerRef.current
       terminalRef.current = null
       fitAddonRef.current = null
+      webglAddonRef.current = null
+      scrollDisposableRef.current = null
+      viewportScrollHandlerRef.current = null
+
+      // Cleanup viewport scroll listener
+      if (viewportScrollHandler) {
+        viewportScrollHandler.element.removeEventListener('scroll', viewportScrollHandler.handler)
+      }
 
       // Delay disposal to allow xterm's internal setTimeout callbacks to complete
       // xterm.js uses setTimeout(0) internally for Viewport refresh
       setTimeout(() => {
         try {
+          // Order: scroll listener first, WebGL, fit, then terminal
+          scrollDisposable?.dispose()
+          webglAddon?.dispose()
           fitAddon?.dispose()
           terminal?.dispose()
         } catch {
           // Terminal may already be disposed or in invalid state
         }
-      }, 100)
+      }, TERMINAL_DISPOSE_DELAY)
     }
   }, [])
 
@@ -265,6 +339,99 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     return unsubscribe
   }, [])
 
+  // Toggle WebGL addon based on active state and render mode (debounced)
+  useEffect(() => {
+    isActiveRef.current = isActive
+    if (!terminalRef.current || disposedRef.current) return
+
+    // Clear pending toggle
+    if (webglToggleTimerRef.current) {
+      clearTimeout(webglToggleTimerRef.current)
+      webglToggleTimerRef.current = null
+    }
+
+    const toggleWebGL = () => {
+      if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
+
+      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const hasWebGL = webglAddonRef.current !== null
+
+      if (needsWebGL && !hasWebGL) {
+        // Load WebGL addon with guard
+        webglLoadingRef.current = true
+        requestAnimationFrame(() => {
+          if (disposedRef.current || !terminalRef.current) {
+            webglLoadingRef.current = false
+            return
+          }
+          try {
+            const webglAddon = new WebglAddon()
+            webglAddonRef.current = webglAddon
+            terminalRef.current.loadAddon(webglAddon)
+          } catch (e) {
+            console.warn('WebGL addon failed to load:', e)
+          }
+          webglLoadingRef.current = false
+        })
+      } else if (!needsWebGL && hasWebGL) {
+        // Dispose WebGL addon
+        try {
+          webglAddonRef.current?.dispose()
+        } catch {
+          // Ignore disposal errors
+        }
+        webglAddonRef.current = null
+      }
+    }
+
+    // Debounce toggle to handle rapid tab switching
+    webglToggleTimerRef.current = setTimeout(toggleWebGL, WEBGL_TOGGLE_DEBOUNCE)
+
+    return () => {
+      if (webglToggleTimerRef.current) {
+        clearTimeout(webglToggleTimerRef.current)
+        webglToggleTimerRef.current = null
+      }
+    }
+  }, [isActive])
+
+  // React to render mode setting changes
+  useEffect(() => {
+    const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
+      if (!terminalRef.current || disposedRef.current) return
+      if (state.settings.terminalRenderMode === prevState.settings.terminalRenderMode) return
+
+      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const hasWebGL = webglAddonRef.current !== null
+
+      if (needsWebGL && !hasWebGL && !webglLoadingRef.current) {
+        webglLoadingRef.current = true
+        requestAnimationFrame(() => {
+          if (disposedRef.current || !terminalRef.current) {
+            webglLoadingRef.current = false
+            return
+          }
+          try {
+            const webglAddon = new WebglAddon()
+            webglAddonRef.current = webglAddon
+            terminalRef.current.loadAddon(webglAddon)
+          } catch (e) {
+            console.warn('WebGL addon failed to load:', e)
+          }
+          webglLoadingRef.current = false
+        })
+      } else if (!needsWebGL && hasWebGL) {
+        try {
+          webglAddonRef.current?.dispose()
+        } catch {
+          // Ignore disposal errors
+        }
+        webglAddonRef.current = null
+      }
+    })
+    return unsubscribe
+  }, [])
+
   return {
     containerRef,
     initTerminal,
@@ -272,6 +439,8 @@ export function useTerminal({ terminalId, initialOutput, onResize }: UseTerminal
     fit,
     focus,
     clear,
+    scrollToBottom,
+    isAtBottom,
     terminal: terminalRef.current
   }
 }

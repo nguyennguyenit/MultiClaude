@@ -39,7 +39,9 @@ export function Sidebar() {
     : 'w-[var(--mc-sidebar-width-expanded)]'
 
   return (
-    <div className={`
+    <div
+      data-testid="sidebar"
+      className={`
       ${widthClass}
       bg-[var(--mc-bg-secondary)] border-r border-[var(--mc-border)] flex flex-col h-full
       transition-[width] duration-[var(--mc-sidebar-transition)]
@@ -98,6 +100,7 @@ export function Sidebar() {
         <div className="p-2">
           <IconWithTooltip tooltip="Settings" collapsed={sidebarCollapsed}>
             <button
+              data-testid="settings-button"
               onClick={() => setSettingsModalOpen(true)}
               className={`
                 w-full flex items-center gap-2 px-2 py-2 rounded text-sm relative

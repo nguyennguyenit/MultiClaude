@@ -10,11 +10,13 @@ interface TerminalWithOutput extends Terminal {
 interface TerminalGridProps {
   terminals: TerminalWithOutput[]
   activeTerminalId: string | null
+  isTransitioning?: boolean
   onTerminalClick: (id: string) => void
   onAddTerminal?: () => void
   onCloseTerminal?: (id: string) => void
   onStartClaude?: (id: string) => void
   onInsertFilePath?: (terminalId: string, paths: string[]) => void
+  onTitleChange?: (terminalId: string, title: string) => void
 }
 
 /** Calculate grid dimensions based on terminal count */
@@ -39,11 +41,13 @@ function splitIntoRows<T>(items: T[], cols: number): T[][] {
 export const TerminalGrid = memo(function TerminalGrid({
   terminals,
   activeTerminalId,
+  isTransitioning = false,
   onTerminalClick,
   onAddTerminal,
   onCloseTerminal,
   onStartClaude,
-  onInsertFilePath
+  onInsertFilePath,
+  onTitleChange
 }: TerminalGridProps) {
   // Empty state with add button
   if (terminals.length === 0) {
@@ -70,7 +74,12 @@ export const TerminalGrid = memo(function TerminalGrid({
   const rows = splitIntoRows(terminals, cols)
 
   return (
-    <Group orientation="vertical" className="h-full">
+    <div
+      className={`h-full transition-opacity duration-100 ${
+        isTransitioning ? 'opacity-50 pointer-events-none' : 'opacity-100'
+      }`}
+    >
+      <Group orientation="vertical" className="h-full">
       {rows.map((rowTerminals, rowIndex) => {
         const cellCount = rowTerminals.length
 
@@ -91,6 +100,7 @@ export const TerminalGrid = memo(function TerminalGrid({
                         onClose={() => onCloseTerminal?.(terminal.id)}
                         onStartClaude={() => onStartClaude?.(terminal.id)}
                         onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
+                        onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
                       />
                     </Panel>
                     {/* Resize handle between columns */}
@@ -109,5 +119,6 @@ export const TerminalGrid = memo(function TerminalGrid({
         )
       })}
     </Group>
+    </div>
   )
 })

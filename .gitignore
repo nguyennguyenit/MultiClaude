@@ -38,6 +38,9 @@ yarn-error.log*
 # Plans and reports (local only)
 plans/
 
+# Claude Code local commands
+.claude/commands/
+
 # Local feature planning folder
 new-feature/
 
@@ -46,3 +49,7 @@ repomix-output.xml
 
 # Test coverage
 coverage/
+
+# Playwright E2E test outputs
+src/__tests__/e2e/test-artifacts/
+src/__tests__/e2e/test-results/

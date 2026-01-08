@@ -3,7 +3,7 @@ import { useNotificationStore } from '../../stores/notification-store'
 import { TelegramConfigModal } from './telegram-config-modal'
 import { DiscordConfigModal } from './discord-config-modal'
 import { SOUND_PRESETS } from '@shared/constants'
-import type { SoundPreset } from '@shared/types'
+import type { SoundPreset, OutputMode } from '@shared/types'
 
 export function NotificationSettings() {
   const { settings, loadSettings, updateSettings } = useNotificationStore()
@@ -54,6 +54,43 @@ export function NotificationSettings() {
             label="On Review Needed"
             checked={settings.onReviewNeeded}
             onChange={(v) => updateSettings({ onReviewNeeded: v })}
+          />
+        </div>
+      </div>
+
+      {/* Behavior Section */}
+      <div>
+        <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">Behavior</div>
+        <div className="space-y-2">
+          {/* Detection Mode */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--mc-text-primary)]">Detection Mode</span>
+            <select
+              value={settings.outputMode}
+              onChange={(e) => updateSettings({ outputMode: e.target.value as OutputMode })}
+              className="text-xs bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
+            >
+              <option value="auto">Auto (Recommended)</option>
+              <option value="stream-json">JSON Stream</option>
+              <option value="plain-text">Plain Text</option>
+            </select>
+          </div>
+
+          {/* Only When Background */}
+          <ToggleRow
+            label="Only When Background"
+            checked={settings.notifyOnlyBackground}
+            onChange={(v) => updateSettings({ notifyOnlyBackground: v })}
+          />
+          <div className="text-[10px] text-[var(--mc-text-muted)] pl-2 -mt-1">
+            Skip notifications when watching the terminal
+          </div>
+
+          {/* Include Task Summary */}
+          <ToggleRow
+            label="Include Task Summary"
+            checked={settings.includeTaskSummary}
+            onChange={(v) => updateSettings({ includeTaskSummary: v })}
           />
         </div>
       </div>

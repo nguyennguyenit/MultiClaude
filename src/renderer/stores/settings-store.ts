@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 
 const STORAGE_KEY = 'multiclaude-settings'
@@ -10,7 +10,9 @@ interface SettingsState {
   settingsModalOpen: boolean
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
+  setGlassmorphismEnabled: (enabled: boolean) => void
   setTerminalLimit: (limit: TerminalLimit) => void
+  setTerminalRenderMode: (mode: TerminalRenderMode) => void
   getTerminalLimitValue: () => number
   setGitPanelOpen: (open: boolean) => void
   setSettingsModalOpen: (open: boolean) => void
@@ -54,8 +56,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings: newSettings })
   },
 
+  setGlassmorphismEnabled: (enabled) => {
+    const newSettings = { ...get().settings, glassmorphismEnabled: enabled }
+    saveToStorage(newSettings)
+    set({ settings: newSettings })
+  },
+
   setTerminalLimit: (limit) => {
     const newSettings = { ...get().settings, terminalLimit: limit }
+    saveToStorage(newSettings)
+    set({ settings: newSettings })
+  },
+
+  setTerminalRenderMode: (mode) => {
+    const newSettings = { ...get().settings, terminalRenderMode: mode }
     saveToStorage(newSettings)
     set({ settings: newSettings })
   },

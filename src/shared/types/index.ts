@@ -145,7 +145,10 @@ export interface GitOperationResult {
 
 // Theme types
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest'
+export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest' | 'neon-cyber' | 'pro-dark' | 'vibrant'
+
+// Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
+export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 
 // Terminal limit types
 export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
@@ -172,6 +175,8 @@ export interface AppSettings {
   themeMode: ThemeMode
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
+  terminalRenderMode: TerminalRenderMode
+  glassmorphismEnabled: boolean
 }
 
 // GitHub Issues/PRs types
@@ -197,6 +202,7 @@ export interface GitHubPR {
 
 // Notification types
 export * from './notification'
+export * from './notification-events'
 
 // Update types
 export * from './update'

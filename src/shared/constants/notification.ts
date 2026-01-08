@@ -1,5 +1,9 @@
 import type { NotificationSettings, SoundPreset } from '../types/notification'
 
+// Task tracker constants
+export const TASK_TRACKER_TTL_MS = 5 * 60 * 1000 // 5 minutes
+export const TASK_TRACKER_CLEANUP_INTERVAL_MS = 60 * 1000 // 1 minute
+
 // Default notification settings
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   onTaskComplete: true,
@@ -10,7 +14,11 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   telegramEnabled: false,
   telegramConfigured: false,
   discordEnabled: false,
-  discordConfigured: false
+  discordConfigured: false,
+  // Enhanced notification tracking defaults
+  outputMode: 'auto',
+  notifyOnlyBackground: true,
+  includeTaskSummary: true
 }
 
 // Sound preset definitions
@@ -29,4 +37,15 @@ export const DETECTION_PATTERNS = {
   // Claude Code shows "✗ Task failed" or "Task failed:" when a task actually fails
   taskFailed: /✗\s*(Task\s+)?failed|^Task\s+failed[:\s]|command\s+failed\s+with\s+exit\s+code/i,
   reviewNeeded: /review\s+needed|waiting\s+for\s+review|needs\s+review|please\s+review/i
-}
+} as const
+
+// Enhanced detection patterns with named capture groups for task name extraction
+// Used by PlainTextParser for richer notifications
+export const ENHANCED_DETECTION_PATTERNS = {
+  // Extract task name after checkmark: "✓ Fix login bug" → taskName="Fix login bug"
+  taskComplete: /✓\s+(?<taskName>.+?)(?:\s*\(completed\)|$)/i,
+  // Extract task name and optional exit code from failures
+  taskFailed: /✗\s+(?<taskName>.+?)(?:\s*\(failed\)|$)|exit(?:ed)?\s+(?:with\s+)?code\s+(?<exitCode>\d+)/i,
+  // Match review/approval prompts
+  reviewNeeded: /\[Y\/n\]|\(y\/N\)|approve|allow\s+(?:this\s+)?tool|waiting\s+for\s+(?:your\s+)?(?:input|response|confirmation)/i
+} as const

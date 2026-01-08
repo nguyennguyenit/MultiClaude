@@ -106,6 +106,7 @@ export interface ElectronAPI {
     clearTelegram: () => Promise<boolean>
     clearDiscord: () => Promise<boolean>
     onEvent: (callback: (event: NotificationEvent) => void) => () => void
+    setActiveTerminal: (terminalId: string | null) => void
   }
   yolo: {
     get: (projectPath: string) => Promise<boolean>
@@ -235,6 +236,9 @@ const api: ElectronAPI = {
       const listener = (_: unknown, event: NotificationEvent) => callback(event)
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_EVENT, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_EVENT, listener)
+    },
+    setActiveTerminal: (terminalId: string | null) => {
+      ipcRenderer.send(IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL, terminalId)
     }
   },
   yolo: {

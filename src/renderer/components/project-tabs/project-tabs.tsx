@@ -44,12 +44,13 @@ export function ProjectTabs({
   const overflowProjects = projects.slice(MAX_VISIBLE_TABS)
 
   return (
-    <div className="flex items-center h-9 bg-[var(--mc-bg-secondary)] border-b border-[var(--mc-border)]">
+    <div data-testid="project-tabs-container" className="flex items-center h-9 bg-[var(--mc-bg-secondary)] border-b border-[var(--mc-border)]">
       {/* Project Tabs */}
       <div className="flex-1 flex items-center overflow-x-auto">
         {visibleProjects.map((project, index) => (
           <div
             key={project.id}
+            data-testid={`project-tab-${project.id}`}
             className={`
               group flex items-center gap-2 px-3 py-1.5 text-sm
               border-r border-[var(--mc-border)] min-w-[100px] max-w-[200px]
@@ -90,7 +91,7 @@ export function ProjectTabs({
 
         {/* Empty state when no projects */}
         {projects.length === 0 && (
-          <div className="px-4 py-1.5 text-sm text-[var(--mc-text-muted)]">
+          <div data-testid="project-tabs-empty" className="px-4 py-1.5 text-sm text-[var(--mc-text-muted)]">
             No projects - click + to add
           </div>
         )}
@@ -102,6 +103,7 @@ export function ProjectTabs({
         {overflowProjects.length > 0 && (
           <div className="relative" ref={overflowRef}>
             <button
+              data-testid="project-tabs-overflow"
               onClick={() => setShowOverflow(!showOverflow)}
               className="flex items-center gap-1 px-2 py-1 text-sm hover:bg-[var(--mc-bg-hover)] rounded"
               title={`${overflowProjects.length} more projects`}
@@ -113,7 +115,7 @@ export function ProjectTabs({
             </button>
 
             {showOverflow && (
-              <div className="absolute right-0 top-full mt-1 min-w-[200px] bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded shadow-lg z-50">
+              <div data-testid="project-tabs-overflow-menu" className="absolute right-0 top-full mt-1 min-w-[200px] bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded shadow-lg z-50">
                 {overflowProjects.map((project) => (
                   <div
                     key={project.id}
@@ -156,6 +158,7 @@ export function ProjectTabs({
         {/* Add project button */}
         <button
           type="button"
+          data-testid="project-tabs-add"
           onClick={onAddProject}
           className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded"
           title="Add Project"

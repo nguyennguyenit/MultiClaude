@@ -1,7 +1,9 @@
 import { safeStorage } from 'electron'
 import Store from 'electron-store'
 
-const store = new Store({ name: 'notification-credentials' })
+// In test mode, use test-specific store path from environment variable
+const cwd = process.env.MULTICLAUDE_TEST_STORE_PATH || undefined
+const store = new Store({ name: 'notification-credentials', cwd })
 
 const TELEGRAM_KEY = 'telegram-credentials'
 const DISCORD_KEY = 'discord-credentials'

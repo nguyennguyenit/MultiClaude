@@ -149,6 +149,18 @@ body {
 .theme-forest.light { --mc-accent: #16A34A; --mc-bg-primary: #DCFCE7; }
 .theme-forest.dark { --mc-accent: #4ADE80; --mc-bg-primary: #052E16; }
 
+/* Theme: Neon Cyber - DeFi/crypto cyberpunk with neon cyan */
+.theme-neon-cyber.light { --mc-accent: #0095A3; --mc-bg-primary: #EDF8FF; }
+.theme-neon-cyber.dark { --mc-accent: #00E5FF; --mc-bg-primary: #0A0E17; }
+
+/* Theme: Pro Dark - Professional trading platform aesthetic */
+.theme-pro-dark.light { --mc-accent: #2563EB; --mc-bg-primary: #F6F8FA; }
+.theme-pro-dark.dark { --mc-accent: #3B82F6; --mc-bg-primary: #0D1117; }
+
+/* Theme: Vibrant - Music streaming inspired with warm gradients */
+.theme-vibrant.light { --mc-accent: #E11D48; --mc-bg-primary: #FFFBFB; }
+.theme-vibrant.dark { --mc-accent: #FF5E62; --mc-bg-primary: #121212; }
+
 /* ============================================
    Terminal Grid - Resize Handles & Pane Styles
    ============================================ */

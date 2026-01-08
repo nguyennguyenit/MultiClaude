@@ -1,35 +1,77 @@
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
 import type { NotificationSettings, NotificationEventType, NotificationEvent } from '@shared/types'
-import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS } from '@shared/constants'
+import type { TaskEvent } from '@shared/types/notification-events'
+import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS } from '@shared/constants'
 import { SecureStorage } from './secure-storage'
-import { PatternDetector } from './pattern-detector'
+import { OutputParser } from './output-parser'
+import { FocusDetector } from './focus-detector'
+import { TaskTracker } from './task-tracker'
 import { TelegramNotifier } from './telegram-notifier'
 import { DiscordNotifier } from './discord-notifier'
 
 export class NotificationManager extends EventEmitter {
   private settings: NotificationSettings
   private storage: SecureStorage
-  private detector: PatternDetector
+  private parser: OutputParser
+  private focusDetector: FocusDetector
+  private taskTracker: TaskTracker
   private window: BrowserWindow | null = null
   private cleanupInterval: NodeJS.Timeout | null = null
+
+  // Map terminalId -> projectName for context
+  private terminalProjects: Map<string, string> = new Map()
 
   constructor() {
     super()
     this.storage = new SecureStorage()
-    this.detector = new PatternDetector()
+    this.parser = new OutputParser()
+    this.focusDetector = new FocusDetector()
+    this.taskTracker = new TaskTracker()
+
     this.settings = {
       ...DEFAULT_NOTIFICATION_SETTINGS,
       telegramConfigured: this.storage.hasTelegram(),
       discordConfigured: this.storage.hasDiscord()
     }
 
-    // Cleanup debounce entries every minute
-    this.cleanupInterval = setInterval(() => this.detector.cleanup(), 60000)
+    // Listen for task events from parser
+    this.parser.on('taskEvent', (event: TaskEvent) => {
+      this.handleTaskEvent(event)
+    })
+
+    // Cleanup stale entries periodically
+    this.cleanupInterval = setInterval(() => {
+      this.parser.cleanup()
+      this.taskTracker.cleanup()
+    }, TASK_TRACKER_CLEANUP_INTERVAL_MS)
   }
 
   setWindow(window: BrowserWindow): void {
     this.window = window
+    this.focusDetector.setWindow(window)
+  }
+
+  setActiveTerminal(terminalId: string | null): void {
+    this.focusDetector.setActiveTerminal(terminalId)
+  }
+
+  setTerminalProject(terminalId: string, projectName: string): void {
+    this.terminalProjects.set(terminalId, projectName)
+  }
+
+  clearTerminal(terminalId: string): void {
+    this.terminalProjects.delete(terminalId)
+    this.taskTracker.clearTerminal(terminalId)
+    this.parser.clearTerminal(terminalId)
+  }
+
+  getFocusDetector(): FocusDetector {
+    return this.focusDetector
+  }
+
+  getTaskTracker(): TaskTracker {
+    return this.taskTracker
   }
 
   getSettings(): NotificationSettings {
@@ -42,49 +84,74 @@ export class NotificationManager extends EventEmitter {
 
   updateSettings(partial: Partial<NotificationSettings>): NotificationSettings {
     this.settings = { ...this.settings, ...partial }
+
+    // Update parser mode if changed
+    if (partial.outputMode) {
+      this.parser.setMode(partial.outputMode)
+    }
+
     return this.getSettings()
   }
 
-  // Process terminal output for pattern detection
+  // Process terminal output through the parser
   processOutput(terminalId: string, output: string): void {
-    const result = this.detector.detect(terminalId, output)
-    if (result) {
-      this.triggerNotification(result.type, terminalId, result.match)
-    }
+    const projectName = this.terminalProjects.get(terminalId) || 'Unknown'
+    this.parser.parse(terminalId, output, projectName)
   }
 
-  private async triggerNotification(
-    type: NotificationEventType,
-    terminalId: string,
-    message: string
-  ): Promise<void> {
+  private handleTaskEvent(event: TaskEvent): void {
     const settings = this.getSettings()
 
     // Check if event type is enabled
     const eventEnabled =
-      (type === 'taskComplete' && settings.onTaskComplete) ||
-      (type === 'taskFailed' && settings.onTaskFailed) ||
-      (type === 'reviewNeeded' && settings.onReviewNeeded)
+      (event.type === 'taskComplete' && settings.onTaskComplete) ||
+      (event.type === 'taskFailed' && settings.onTaskFailed) ||
+      (event.type === 'reviewNeeded' && settings.onReviewNeeded)
 
     if (!eventEnabled) return
 
-    const event: NotificationEvent = {
-      type,
-      terminalId,
+    // Check focus (if notifyOnlyBackground is enabled)
+    if (settings.notifyOnlyBackground) {
+      if (!this.focusDetector.shouldNotify(event.terminalId)) {
+        return // User is watching this terminal
+      }
+    }
+
+    // Check dedup
+    if (!this.taskTracker.shouldNotify(event.terminalId, event.id)) {
+      return // Already notified for this task
+    }
+
+    // Trigger notification
+    this.triggerNotification(event)
+  }
+
+  private async triggerNotification(event: TaskEvent): Promise<void> {
+    const settings = this.getSettings()
+
+    // Build message
+    const message = settings.includeTaskSummary
+      ? `${event.projectName}: ${event.taskName}`
+      : event.taskName
+
+    // Legacy NotificationEvent for renderer (sound playback)
+    const legacyEvent: NotificationEvent = {
+      type: event.type,
+      terminalId: event.terminalId,
       message,
-      timestamp: Date.now()
+      timestamp: event.timestamp
     }
 
     // Send to renderer for sound playback
     if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_EVENT, event)
+      this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_EVENT, legacyEvent)
     }
 
     // Show native notification
-    this.showNativeNotification(type, message)
+    this.showNativeNotification(event.type, message)
 
-    // Send to external platforms
-    await this.sendExternalNotifications(type, message)
+    // Send to external platforms with rich formatting
+    await this.sendExternalNotifications(event)
   }
 
   private showNativeNotification(type: NotificationEventType, message: string): void {
@@ -100,35 +167,24 @@ export class NotificationManager extends EventEmitter {
     }).show()
   }
 
-  private async sendExternalNotifications(
-    type: NotificationEventType,
-    message: string
-  ): Promise<void> {
+  private async sendExternalNotifications(event: TaskEvent): Promise<void> {
     const settings = this.getSettings()
-    const emoji: Record<NotificationEventType, string> = {
-      taskComplete: '✅',
-      taskFailed: '❌',
-      reviewNeeded: '👀'
-    }
 
-    const formattedMessage = `${emoji[type]} <b>MultiClaude</b>\n${message}`
-
-    // Telegram
+    // Telegram with HTML formatting
     if (settings.telegramEnabled && settings.telegramConfigured) {
       const creds = this.storage.getTelegram()
       if (creds) {
         const notifier = new TelegramNotifier(creds.botToken, creds.chatId)
-        notifier.send(formattedMessage).catch(console.error)
+        notifier.sendTaskEvent(event).catch(console.error)
       }
     }
 
-    // Discord
+    // Discord with rich embed
     if (settings.discordEnabled && settings.discordConfigured) {
       const webhookUrl = this.storage.getDiscord()
       if (webhookUrl) {
-        const discordMessage = `${emoji[type]} **MultiClaude**\n${message}`
         const notifier = new DiscordNotifier(webhookUrl)
-        notifier.send(discordMessage).catch(console.error)
+        notifier.sendTaskEvent(event).catch(console.error)
       }
     }
   }
@@ -166,5 +222,8 @@ export class NotificationManager extends EventEmitter {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval)
     }
+    this.focusDetector.destroy()
+    this.taskTracker.clearAll()
+    this.terminalProjects.clear()
   }
 }

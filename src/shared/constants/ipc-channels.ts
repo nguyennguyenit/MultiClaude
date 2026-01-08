@@ -81,6 +81,7 @@ export const IPC_CHANNELS = {
   NOTIFICATION_CLEAR_TELEGRAM: 'notification:clear-telegram',
   NOTIFICATION_CLEAR_DISCORD: 'notification:clear-discord',
   NOTIFICATION_EVENT: 'notification:event',
+  NOTIFICATION_SET_ACTIVE_TERMINAL: 'notification:set-active-terminal',
 
   // YOLO Mode channels
   YOLO_MODE_GET: 'yolo:get',

@@ -181,6 +181,111 @@ export const TERMINAL_THEMES: Record<`${ColorTheme}-${'dark' | 'light'}`, ITheme
     selectionBackground: '#bbf7d0',
     selectionForeground: '#000000',
     ...ANSI_COLORS.light
+  },
+
+  // Neon Cyber theme - DeFi/crypto cyberpunk with neon cyan
+  'neon-cyber-dark': {
+    background: '#0A0E17',
+    foreground: '#E0F7FF',
+    cursor: '#00E5FF',
+    cursorAccent: '#0A0E17',
+    selectionBackground: '#1E3A5F',
+    selectionForeground: '#E0F7FF',
+    black: '#0A0E17',
+    red: '#FF3366',
+    green: '#00FF9F',
+    yellow: '#FFE600',
+    blue: '#00E5FF',
+    magenta: '#B026FF',
+    cyan: '#00E5FF',
+    white: '#E0F7FF',
+    brightBlack: '#4A7A8C',
+    brightRed: '#FF6B8A',
+    brightGreen: '#33FFAF',
+    brightYellow: '#FFED33',
+    brightBlue: '#33ECFF',
+    brightMagenta: '#C951FF',
+    brightCyan: '#66F0FF',
+    brightWhite: '#FFFFFF'
+  },
+  'neon-cyber-light': {
+    background: '#EDF8FF',
+    foreground: '#0A1628',
+    cursor: '#0095A3',
+    cursorAccent: '#EDF8FF',
+    selectionBackground: '#7DD3FC',
+    selectionForeground: '#0A1628',
+    ...ANSI_COLORS.light
+  },
+
+  // Pro Dark theme - Professional trading platform aesthetic
+  'pro-dark-dark': {
+    background: '#0D1117',
+    foreground: '#E6EDF3',
+    cursor: '#3B82F6',
+    cursorAccent: '#0D1117',
+    selectionBackground: '#30363D',
+    selectionForeground: '#E6EDF3',
+    black: '#0D1117',
+    red: '#F85149',
+    green: '#3FB950',
+    yellow: '#D29922',
+    blue: '#58A6FF',
+    magenta: '#BC8CFF',
+    cyan: '#39C5CF',
+    white: '#E6EDF3',
+    brightBlack: '#6E7681',
+    brightRed: '#FF7B72',
+    brightGreen: '#56D364',
+    brightYellow: '#E3B341',
+    brightBlue: '#79C0FF',
+    brightMagenta: '#D2A8FF',
+    brightCyan: '#56D4DD',
+    brightWhite: '#FFFFFF'
+  },
+  'pro-dark-light': {
+    background: '#F6F8FA',
+    foreground: '#1F2328',
+    cursor: '#2563EB',
+    cursorAccent: '#F6F8FA',
+    selectionBackground: '#D1D5DB',
+    selectionForeground: '#1F2328',
+    ...ANSI_COLORS.light
+  },
+
+  // Vibrant theme - Music streaming inspired with warm gradients
+  'vibrant-dark': {
+    background: '#121212',
+    foreground: '#FFFFFF',
+    cursor: '#FF5E62',
+    cursorAccent: '#121212',
+    selectionBackground: '#404040',
+    selectionForeground: '#FFFFFF',
+    black: '#121212',
+    red: '#FF5E62',
+    green: '#1ED760',
+    yellow: '#FFBA08',
+    blue: '#1DB954',
+    magenta: '#A855F7',
+    cyan: '#2DD4BF',
+    white: '#FFFFFF',
+    brightBlack: '#727272',
+    brightRed: '#FF7A7D',
+    brightGreen: '#34E576',
+    brightYellow: '#FFC93C',
+    brightBlue: '#34D369',
+    brightMagenta: '#C084FC',
+    brightCyan: '#5EEAD4',
+    brightWhite: '#FFFFFF'
+  },
+  'vibrant-light': {
+    background: '#FFFBFB',
+    foreground: '#1F1F1F',
+    cursor: '#E11D48',
+    cursorAccent: '#FFFBFB',
+    selectionBackground: '#FECACA',
+    selectionForeground: '#1F1F1F',
+    ...ANSI_COLORS.light
   }
 }
 
