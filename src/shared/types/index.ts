@@ -150,6 +150,17 @@ export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo'
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 
+// WSL detection types (Windows only)
+export interface WslDistro {
+  name: string
+  isDefault: boolean
+}
+
+export interface WslInfo {
+  available: boolean
+  distros: WslDistro[]
+}
+
 // Terminal limit types
 export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
 export interface TerminalLimit {

@@ -19,7 +19,8 @@ import type {
   NotificationTestResult,
   GitHubIssue,
   GitHubPR,
-  UpdateState
+  UpdateState,
+  WslInfo
 } from '@shared/types'
 
 // Type-safe API for renderer
@@ -31,6 +32,7 @@ export interface ElectronAPI {
     resize: (terminalId: string, cols: number, rows: number) => void
     list: () => Promise<Terminal[]>
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
+    detectWsl: () => Promise<WslInfo>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
@@ -142,6 +144,7 @@ const api: ElectronAPI = {
     resize: (terminalId, cols, rows) => ipcRenderer.send(IPC_CHANNELS.TERMINAL_RESIZE, { terminalId, cols, rows }),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST),
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
+    detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
     onOutput: (callback) => {
       const listener = (_: any, data: any) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)

@@ -17,6 +17,7 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
+- **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
@@ -132,6 +133,7 @@ src/
 │   │   └── *.spec.ts        # Test files
 │   ├── terminal/            # PTY management
 │   │   ├── terminal-manager.ts
+│   │   ├── wsl-detector.ts      # WSL detection (Windows)
 │   │   └── pty-handler.ts
 │   ├── git/                 # Git operations
 │   │   ├── git-manager.ts
@@ -214,11 +216,12 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (80 total)
+## IPC Channels (81 total)
 
-### Terminal (8 channels)
+### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
 - `terminal:resize`, `terminal:list`, `terminal:invoke-claude`, `terminal:title-change`
+- `terminal:detect-wsl`
 
 ### Project (6 channels)
 - `project:list`, `project:create`, `project:delete`, `project:set-active`
@@ -274,6 +277,9 @@ interface Terminal {
   projectId?: string
   createdAt: Date
 }
+
+interface WslDistro { name: string; isDefault: boolean }
+interface WslInfo { available: boolean; distros: WslDistro[] }
 ```
 
 ### Project

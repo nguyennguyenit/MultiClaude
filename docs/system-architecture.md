@@ -32,6 +32,7 @@ src/main/
 ├── index.ts                  # App entry, window creation, menu
 ├── terminal/
 │   ├── terminal-manager.ts   # PTY lifecycle management
+│   ├── wsl-detector.ts       # WSL detection (Windows)
 │   └── index.ts
 ├── git/
 │   ├── git-manager.ts        # Git operations via simple-git
@@ -165,11 +166,11 @@ src/renderer/
 
 ## IPC Channel Architecture
 
-### Channel Categories (79 total)
+### Channel Categories (80 total)
 
 | Category | Count | Purpose |
 |----------|-------|---------|
-| Terminal | 8 | PTY lifecycle, I/O |
+| Terminal | 9 | PTY lifecycle, I/O, WSL detection |
 | Project | 6 | CRUD, folder ops |
 | Git | 35 | Full git workflow |
 | GitHub | 5 | Auth, repo, issues/PRs |
@@ -191,6 +192,7 @@ interface ElectronAPI {
     destroy: (id: string) => Promise<void>
     input: (id: string, data: string) => void
     onOutput: (callback) => () => void
+    detectWsl: () => Promise<WslInfo>  // Windows only
   }
   git: {
     status: (path: string) => Promise<GitStatus>
