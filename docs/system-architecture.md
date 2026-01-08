@@ -71,6 +71,7 @@ src/renderer/
 │   │   ├── terminal-pane.tsx      # Pane wrapper with header
 │   │   ├── terminal-view.tsx      # xterm.js renderer
 │   │   ├── terminal-action-bar.tsx
+│   │   ├── shell-selector-dropdown.tsx  # WSL shell context menu
 │   │   └── index.ts
 │   ├── sidebar/
 │   │   ├── sidebar.tsx            # Navigation + tools
@@ -125,7 +126,9 @@ src/renderer/
 │   ├── toast-store.ts             # Toast queue
 │   └── index.ts
 └── utils/
-    └── file-drop-handler.ts       # File drop processing
+    ├── shell-utils.ts             # WindowsShell key helper
+    ├── file-drop-handler.ts       # File drop processing
+    └── index.ts
 ```
 
 ## Data Flow

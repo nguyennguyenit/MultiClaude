@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 
 const STORAGE_KEY = 'multiclaude-settings'
 
 interface SettingsState {
   settings: AppSettings
+  wslInfo: WslInfo | null // Cached WSL detection result (Windows only)
   gitPanelOpen: boolean
   settingsModalOpen: boolean
   setThemeMode: (mode: ThemeMode) => void
@@ -13,10 +14,12 @@ interface SettingsState {
   setGlassmorphismEnabled: (enabled: boolean) => void
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
+  setWindowsShell: (shell: WindowsShell) => void
   getTerminalLimitValue: () => number
   setGitPanelOpen: (open: boolean) => void
   setSettingsModalOpen: (open: boolean) => void
   loadSettings: () => void
+  detectWsl: () => Promise<void>
 }
 
 function loadFromStorage(): AppSettings {
@@ -41,6 +44,7 @@ function saveToStorage(settings: AppSettings): void {
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
+  wslInfo: null,
   gitPanelOpen: false,
   settingsModalOpen: false,
 
@@ -74,6 +78,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ settings: newSettings })
   },
 
+  setWindowsShell: (shell) => {
+    const newSettings = { ...get().settings, windowsShell: shell }
+    saveToStorage(newSettings)
+    set({ settings: newSettings })
+  },
+
   getTerminalLimitValue: () => {
     const { terminalLimit } = get().settings
     // Handle undefined or missing terminalLimit (from old localStorage data)
@@ -92,5 +102,29 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadSettings: () => {
     set({ settings: loadFromStorage() })
+  },
+
+  detectWsl: async () => {
+    // Only run on Windows - check if API exists
+    if (typeof window !== 'undefined' && window.electron?.terminal?.detectWsl) {
+      try {
+        const info = await window.electron.terminal.detectWsl()
+        set({ wslInfo: info })
+
+        // Validate saved shell preference - reset if saved distro no longer exists
+        const currentShell = get().settings.windowsShell
+        if (currentShell?.type === 'wsl' && info.available) {
+          const distroExists = info.distros.some(d => d.name === currentShell.distro)
+          if (!distroExists) {
+            const newSettings = { ...get().settings, windowsShell: { type: 'cmd' as const } }
+            saveToStorage(newSettings)
+            set({ settings: newSettings })
+          }
+        }
+      } catch {
+        // WSL detection failed - set as unavailable
+        set({ wslInfo: { available: false, distros: [] } })
+      }
+    }
   }
 }))

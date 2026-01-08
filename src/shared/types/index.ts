@@ -161,6 +161,12 @@ export interface WslInfo {
   distros: WslDistro[]
 }
 
+// Windows shell selection type
+export type WindowsShell =
+  | { type: 'cmd' }
+  | { type: 'powershell' }
+  | { type: 'wsl'; distro: string }
+
 // Terminal limit types
 export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
 export interface TerminalLimit {
@@ -188,6 +194,8 @@ export interface AppSettings {
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   glassmorphismEnabled: boolean
+  // Windows-only: default shell for new terminals
+  windowsShell?: WindowsShell
 }
 
 // GitHub Issues/PRs types

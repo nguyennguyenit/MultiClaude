@@ -1,10 +1,13 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { useSettingsStore } from '../../stores'
+import { ShellSelectorDropdown } from './shell-selector-dropdown'
+import type { WindowsShell } from '@shared/types'
 
 interface TerminalActionBarProps {
   terminalCount: number
   terminalLimit: number
   yoloEnabled: boolean
-  onAddTerminal: () => void
+  onAddTerminal: (shell?: WindowsShell) => void
   onToggleYolo: (enabled: boolean) => void
   onKillAll: () => void
   disabled?: boolean
@@ -20,6 +23,30 @@ export function TerminalActionBar({
   disabled
 }: TerminalActionBarProps) {
   const [showKillConfirm, setShowKillConfirm] = useState(false)
+  const [showShellSelector, setShowShellSelector] = useState(false)
+  const addButtonRef = useRef<HTMLButtonElement>(null)
+  const { wslInfo, settings } = useSettingsStore()
+
+  // Show shell selector only on Windows with WSL available
+  const canSelectShell = wslInfo?.available === true
+
+  // Handle click - use default shell from settings
+  const handleAddClick = useCallback(() => {
+    onAddTerminal(settings.windowsShell)
+  }, [onAddTerminal, settings.windowsShell])
+
+  // Handle right-click - show dropdown for shell selection
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!canSelectShell) return
+    e.preventDefault()
+    setShowShellSelector(true)
+  }, [canSelectShell])
+
+  // Handle shell selection from dropdown
+  const handleShellSelect = useCallback((shell: WindowsShell) => {
+    onAddTerminal(shell)
+    setShowShellSelector(false)
+  }, [onAddTerminal])
 
   // All hooks MUST be called before any early returns (React Rules of Hooks)
   const handleKillAllClick = useCallback(() => {
@@ -50,15 +77,28 @@ export function TerminalActionBar({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {/* New Terminal */}
-        <button
-          type="button"
-          onClick={onAddTerminal}
-          disabled={disabled || terminalCount >= terminalLimit}
-          className="px-3 py-1 text-xs rounded bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          + New
-        </button>
+        {/* New Terminal - with right-click shell selector */}
+        <div className="relative">
+          <button
+            ref={addButtonRef}
+            type="button"
+            onClick={handleAddClick}
+            onContextMenu={handleContextMenu}
+            disabled={disabled || terminalCount >= terminalLimit}
+            className="px-3 py-1 text-xs rounded bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={canSelectShell ? 'Click: default shell, Right-click: select shell' : 'Add new terminal'}
+          >
+            + New
+          </button>
+
+          {showShellSelector && (
+            <ShellSelectorDropdown
+              onSelect={handleShellSelect}
+              onClose={() => setShowShellSelector(false)}
+              anchorRef={addButtonRef}
+            />
+          )}
+        </div>
 
         {/* YOLO Toggle */}
         <button

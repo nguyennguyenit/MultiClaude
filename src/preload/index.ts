@@ -20,13 +20,14 @@ import type {
   GitHubIssue,
   GitHubPR,
   UpdateState,
-  WslInfo
+  WslInfo,
+  WindowsShell
 } from '@shared/types'
 
 // Type-safe API for renderer
 export interface ElectronAPI {
   terminal: {
-    create: (options?: { cwd?: string; projectId?: string }) => Promise<Terminal>
+    create: (options?: { cwd?: string; projectId?: string; shell?: WindowsShell }) => Promise<Terminal>
     destroy: (id: string) => Promise<boolean>
     write: (terminalId: string, data: string) => void
     resize: (terminalId: string, cols: number, rows: number) => void

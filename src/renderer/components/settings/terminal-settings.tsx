@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
-import type { TerminalLimitPreset, TerminalRenderMode } from '@shared/types'
+import { getShellKey } from '../../utils'
+import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
 import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
@@ -18,7 +19,7 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
 ]
 
 export function TerminalSettings() {
-  const { settings, setTerminalLimit, setTerminalRenderMode } = useSettingsStore()
+  const { settings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
   const { terminalLimit } = settings
 
   const [customValue, setCustomValue] = useState(
@@ -49,6 +50,30 @@ export function TerminalSettings() {
       }
     }
   }
+
+  // Build shell options for dropdown (Windows with WSL only)
+  const shellOptions = useMemo(() => {
+    const options: { value: WindowsShell; label: string }[] = [
+      { value: { type: 'cmd' }, label: 'Command Prompt' },
+      { value: { type: 'powershell' }, label: 'PowerShell' }
+    ]
+
+    if (wslInfo?.distros) {
+      wslInfo.distros.forEach((distro) => {
+        options.push({
+          value: { type: 'wsl', distro: distro.name },
+          label: `WSL: ${distro.name}${distro.isDefault ? ' (default)' : ''}`
+        })
+      })
+    }
+
+    return options
+  }, [wslInfo])
+
+  // Show shell settings only on Windows with WSL available
+  const showShellSettings = wslInfo?.available === true
+
+  const currentShellKey = getShellKey(settings.windowsShell || { type: 'cmd' })
 
   return (
     <div className="space-y-6">
@@ -108,6 +133,46 @@ export function TerminalSettings() {
           )}
         </div>
       </div>
+
+      {/* Default Shell Section - Windows only, WSL available */}
+      {showShellSettings && (
+        <div>
+          <SettingsSubheading>Default Shell</SettingsSubheading>
+          <div className="space-y-3">
+            <div>
+              <span className="text-sm">Shell for New Terminals</span>
+              <p className="text-xs text-[var(--mc-text-muted)]">
+                Select the default shell when creating new terminals
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {shellOptions.map((option) => {
+                const optionKey = getShellKey(option.value)
+                const isSelected = optionKey === currentShellKey
+
+                return (
+                  <button
+                    key={optionKey}
+                    onClick={() => setWindowsShell(option.value)}
+                    className={`
+                      px-4 py-2 rounded-lg border-2 text-sm
+                      transition-all duration-150
+                      ${isSelected
+                        ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
+                        : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
+                    `}
+                  >
+                    <span className="flex items-center gap-2">
+                      {option.label}
+                      {isSelected && <span className="text-[var(--mc-accent)]">✓</span>}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Terminal Rendering Mode */}
       <div>

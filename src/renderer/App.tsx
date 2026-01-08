@@ -9,6 +9,7 @@ import { SettingsModal } from './components/settings'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
+import type { WindowsShell } from '@shared/types'
 
 function App() {
   const {
@@ -29,7 +30,7 @@ function App() {
     activeView
   } = useAppStore()
 
-  const { settings, loadSettings, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
+  const { settings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -104,7 +105,7 @@ function App() {
   }, [projects, projectSwitching, setActiveProject, removeProject])
 
   // Handler: Add new terminal in active project
-  const handleAddTerminal = useCallback(async () => {
+  const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
     // Get fresh state to avoid stale closure
     const { terminals } = useAppStore.getState()
     const currentProjectTerminals = activeProjectId
@@ -123,7 +124,8 @@ function App() {
 
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
-      projectId: activeProject?.id
+      projectId: activeProject?.id,
+      shell
     })
     addTerminal(terminal)
   }, [activeProject, activeProjectId, addTerminal])
@@ -182,9 +184,10 @@ function App() {
     onSelectProject: handleSelectProject
   })
 
-  // Load settings on mount
+  // Load settings and detect WSL on mount
   useEffect(() => {
     loadSettings()
+    detectWsl()
   }, [])
 
   // Load YOLO status when project changes

@@ -1,9 +1,9 @@
 # MultiClaude Codebase Summary
 
 ## Overview
-MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management, and user settings (themes and notifications).
+MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management (with WSL support on Windows), and user settings (themes and notifications).
 
-**Codebase Stats**: ~10K LOC, 88 TypeScript files, 79 IPC channels
+**Codebase Stats**: ~10K LOC, 90 TypeScript files, 80 IPC channels
 
 ## Architecture
 
@@ -18,6 +18,7 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
 - **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
+- **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
@@ -173,6 +174,12 @@ src/
 │   ├── App.tsx
 │   ├── components/
 │   │   ├── terminal/        # Terminal UI
+│   │   │   ├── terminal-grid.tsx
+│   │   │   ├── terminal-pane.tsx
+│   │   │   ├── terminal-view.tsx
+│   │   │   ├── terminal-action-bar.tsx
+│   │   │   ├── shell-selector-dropdown.tsx  # WSL/shell context menu
+│   │   │   └── index.ts
 │   │   ├── sidebar/         # Project/settings sidebar
 │   │   │   ├── sidebar.tsx
 │   │   │   ├── sidebar-header.tsx      # Logo + collapse toggle
@@ -199,6 +206,9 @@ src/
 │   │   ├── settings-store.ts
 │   │   ├── notification-store.ts
 │   │   ├── update-store.ts          # Update state management
+│   │   └── index.ts
+│   ├── utils/               # Utility functions
+│   │   ├── shell-utils.ts        # WindowsShell key generation
 │   │   └── index.ts
 │   └── styles/              # CSS
 ├── preload/                 # IPC bridge
@@ -280,6 +290,7 @@ interface Terminal {
 
 interface WslDistro { name: string; isDefault: boolean }
 interface WslInfo { available: boolean; distros: WslDistro[] }
+type WindowsShell = { type: 'cmd' } | { type: 'powershell' } | { type: 'wsl'; distro: string }
 ```
 
 ### Project
