@@ -14,7 +14,7 @@ Get the latest version from [GitHub Releases](https://github.com/nguyennguyenit/
 
 ### First Run Notes
 
-- **macOS**: Right-click the app > Open > Open (to bypass Gatekeeper)
+- **macOS**: Run `xattr -cr /Applications/MultiClaude.app` in Terminal to remove quarantine, then open the app
 - **Windows**: Click "More info" > "Run anyway" (for SmartScreen warning)
 - **Linux AppImage**: Make executable with `chmod +x MultiClaude-*.AppImage`
 
