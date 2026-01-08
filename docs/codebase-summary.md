@@ -182,6 +182,7 @@ src/
 │   │       ├── telegram-config-modal.tsx
 │   │       ├── discord-config-modal.tsx
 │   │       ├── update-settings.tsx      # In-app update management UI
+│   │       ├── settings-typography.tsx  # Shared typography (SettingsTitle, SettingsSubheading)
 │   │       └── index.ts
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-file-drop.ts       # Drag-drop file paths into terminal

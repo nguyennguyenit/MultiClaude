@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../../stores'
 import type { TerminalLimitPreset, TerminalRenderMode } from '@shared/types'
+import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 2, label: '2' },
@@ -52,16 +53,13 @@ export function TerminalSettings() {
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div>
-        <h3 className="text-lg font-medium">Terminals</h3>
-        <p className="text-sm text-[var(--mc-text-muted)]">
-          Configure terminal behavior and limits
-        </p>
-        <hr className="my-4 border-[var(--mc-border)]" />
-      </div>
+      <SettingsTitle description="Configure terminal behavior and limits">
+        Terminals
+      </SettingsTitle>
 
       {/* Terminal Limit Section */}
-      <SettingsSection title="General">
+      <div>
+        <SettingsSubheading>General</SettingsSubheading>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -109,10 +107,11 @@ export function TerminalSettings() {
             </div>
           )}
         </div>
-      </SettingsSection>
+      </div>
 
       {/* Terminal Rendering Mode */}
-      <SettingsSection title="Rendering">
+      <div>
+        <SettingsSubheading>Rendering</SettingsSubheading>
         <div className="space-y-3">
           <div>
             <span className="text-sm">Rendering Mode</span>
@@ -142,17 +141,7 @@ export function TerminalSettings() {
             ))}
           </div>
         </div>
-      </SettingsSection>
-    </div>
-  )
-}
-
-// Reusable settings section component
-function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h4 className="text-sm font-medium mb-3 text-[var(--mc-text-secondary)]">{title}</h4>
-      <div className="space-y-3">{children}</div>
+      </div>
     </div>
   )
 }
