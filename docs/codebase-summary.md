@@ -19,7 +19,7 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
-- **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
+- **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
 - **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
   - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
   - 5-line threshold reduces button flicker on minor scroll changes
@@ -35,6 +35,10 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
   - Deferred `initialOutput` write until terminal fully mounted
   - `isTransitioning` state in App.tsx with rapid-switch guard to prevent race conditions
+- **Terminal Refresh**: Manual and automatic WebGL context recovery
+  - Refresh button in TerminalPane header (100ms debounce)
+  - Auto-recovery on WebGL context lost events with toast notification
+  - `use-terminal.ts` exposes `refresh()` callback via `onRefreshReady` prop
 
 #### Sidebar & UI Components
 - **Sidebar**: Left-side navigation with collapsible layout (240px expanded / 60px collapsed)

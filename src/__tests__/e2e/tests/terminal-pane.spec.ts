@@ -153,14 +153,14 @@ test.describe('Terminal Pane Interactions', () => {
     await expect(terminalPanes.nth(0)).toHaveClass(/terminal-pane-active/)
   })
 
-  test('Claude mode indicator displays correctly', async ({ window }) => {
+  test('Terminal header buttons display correctly', async ({ window }) => {
     // First terminal should show header elements
     const terminalPane = window.locator('.terminal-pane').first()
     await expect(terminalPane).toBeVisible()
 
-    // Start Claude button should be visible
-    const startClaudeButton = window.locator('button[title="Start Claude"]').first()
-    await expect(startClaudeButton).toBeVisible()
+    // Refresh terminal button should be visible
+    const refreshButton = window.locator('button[title="Refresh terminal display"]').first()
+    await expect(refreshButton).toBeVisible()
 
     // Insert file path button should be visible
     const insertPathButton = window.locator('button[title*="Insert file path"]').first()
