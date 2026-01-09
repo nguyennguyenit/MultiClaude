@@ -118,9 +118,12 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('window-all-closed', () => {
-  // Cleanup
-  terminalManager?.destroyAll()
+app.on('window-all-closed', async () => {
+  // Cleanup terminals with proper process destruction
+  if (terminalManager?.hasTerminals()) {
+    await terminalManager.destroyAllAsync()
+  }
+
   gitHeadWatcher?.destroy()
   notificationManager?.destroy()
 

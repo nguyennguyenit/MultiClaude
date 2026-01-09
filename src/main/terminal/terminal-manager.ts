@@ -4,7 +4,7 @@ import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
 
-const DESTROY_TIMEOUT_MS = 2000
+const DESTROY_TIMEOUT_MS = 3000
 
 interface PTYProcess {
   id: string
@@ -12,6 +12,7 @@ interface PTYProcess {
   metadata: Terminal
   outputBuffer: string
   oscBuffer: string // Buffer for incomplete OSC sequences
+  destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
 }
 
 export class TerminalManager extends EventEmitter {
@@ -214,12 +215,15 @@ export class TerminalManager extends EventEmitter {
     try {
       if (process.platform === 'win32') {
         // Use spawnSync with array args to prevent command injection
+        console.debug(`[terminal-manager] Force killing Windows process tree: PID ${term.pty.pid}`)
         spawnSync('taskkill', ['/PID', String(term.pty.pid), '/T', '/F'], { stdio: 'ignore' })
       } else {
+        console.debug(`[terminal-manager] Force killing Unix process: PID ${term.pty.pid}`)
         process.kill(term.pty.pid, 'SIGKILL')
       }
-    } catch {
+    } catch (error) {
       // Process already dead or permission denied - safe to ignore
+      console.debug(`[terminal-manager] Force kill failed (likely already dead): ${(error as Error).message}`)
     }
   }
 
@@ -230,6 +234,10 @@ export class TerminalManager extends EventEmitter {
   async destroyAsync(id: string): Promise<boolean> {
     const term = this.terminals.get(id)
     if (!term) return false
+
+    // Guard against duplicate calls
+    if (term.destroying) return true
+    term.destroying = true
 
     return new Promise((resolve) => {
       let resolved = false

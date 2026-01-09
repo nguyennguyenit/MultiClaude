@@ -73,7 +73,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
     notificationManager.clearTerminal(id)
-    return terminalManager.destroy(id)
+    return terminalManager.destroyAsync(id)
   })
 
   ipcMain.on(IPC_CHANNELS.TERMINAL_INPUT, (_, { terminalId, data }) => {

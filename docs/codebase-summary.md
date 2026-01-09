@@ -17,10 +17,15 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
-  - **Async Destruction**: `destroyAsync(id)` with graceful exit + 2s timeout + platform-specific force kill fallback
+  - **Async Destruction**: `destroyAsync(id)` with graceful exit + 3s timeout + platform-specific force kill fallback
+    - Guard flag (`destroying`) prevents duplicate destroy calls
+    - Waits for process `exit` event or timeout (3000ms via `DESTROY_TIMEOUT_MS`)
+    - Force kill on timeout: Windows uses `taskkill /T /F` for process tree, Unix uses `SIGKILL`
+    - Debug logging for timeout/force kill scenarios
   - **Batch Destruction**: `destroyAllAsync()` for parallel cleanup via `Promise.allSettled()`
-  - **Process Kill Strategy**: Windows uses `taskkill /T /F` for tree kill, Unix uses `SIGKILL`
+  - **Integration**: App quit (`src/main/index.ts`) uses `destroyAllAsync()`, IPC terminal destroy uses `destroyAsync()`
   - **Sync Methods**: Legacy `destroy(id)` and `destroyAll()` retained for compatibility
+  - **Test Coverage**: 6 async tests covering graceful exit, timeout, force kill, invalid IDs, batch destruction
 - **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
 - **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
