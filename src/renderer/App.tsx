@@ -52,7 +52,8 @@ function App() {
     const path = await window.electron.project.openFolder()
     if (!path) return
 
-    const name = path.split('/').pop() || 'Untitled'
+    // Handle both Unix (/) and Windows (\) path separators
+    const name = path.split(/[/\\]/).pop() || 'Untitled'
     const project = await window.electron.project.create({ name, path })
     addProject(project)
     setActiveProject(project.id)
@@ -183,6 +184,29 @@ function App() {
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject
   })
+
+  // Listen for custom terminal events from xterm key handler
+  useEffect(() => {
+    const onAddTerminalEvent = () => handleAddTerminal()
+    const onCloseTerminalEvent = () => handleCloseTerminal()
+    const onSelectProjectEvent = (e: Event) => {
+      const { index } = (e as CustomEvent<{ index: number }>).detail
+      const project = projects[index]
+      if (project) {
+        handleSelectProject(project.id)
+      }
+    }
+
+    window.addEventListener('mc:add-terminal', onAddTerminalEvent)
+    window.addEventListener('mc:close-terminal', onCloseTerminalEvent)
+    window.addEventListener('mc:select-project', onSelectProjectEvent)
+
+    return () => {
+      window.removeEventListener('mc:add-terminal', onAddTerminalEvent)
+      window.removeEventListener('mc:close-terminal', onCloseTerminalEvent)
+      window.removeEventListener('mc:select-project', onSelectProjectEvent)
+    }
+  }, [handleAddTerminal, handleCloseTerminal, handleSelectProject, projects])
 
   // Load settings and detect WSL on mount
   useEffect(() => {

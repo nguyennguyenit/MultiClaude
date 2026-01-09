@@ -203,9 +203,33 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       }
     })
 
-    // Ctrl+V paste - detect image in clipboard and save to temp file
+    // Intercept global shortcuts before xterm processes them
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
+
+      // Alt+1~9: Switch project by index (dispatch event for validation in App.tsx)
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const index = parseInt(e.key) - 1
+        window.dispatchEvent(new CustomEvent('mc:select-project', { detail: { index } }))
+        return false
+      }
+
+      // Ctrl+N or Ctrl+T: New terminal
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 't')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('mc:add-terminal'))
+        return false
+      }
+
+      // Ctrl+W: Close active terminal
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('mc:close-terminal'))
+        return false
+      }
+
+      // Ctrl+V paste - detect image in clipboard and save to temp file
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
 
       // Prevent browser's native paste event to avoid duplicate paste from xterm's paste listener
