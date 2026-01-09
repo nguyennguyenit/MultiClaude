@@ -33,7 +33,7 @@ function App() {
     activeView
   } = useAppStore()
 
-  const { settings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
+  const { pendingSettings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -249,8 +249,8 @@ function App() {
 
     // Determine actual mode
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const isDark = settings.themeMode === 'dark' ||
-      (settings.themeMode === 'system' && prefersDark)
+    const isDark = pendingSettings.themeMode === 'dark' ||
+      (pendingSettings.themeMode === 'system' && prefersDark)
 
     // Remove old classes
     root.classList.remove('light', 'dark')
@@ -258,13 +258,13 @@ function App() {
 
     // Apply new classes
     root.classList.add(isDark ? 'dark' : 'light')
-    root.classList.add(`theme-${settings.colorTheme}`)
+    root.classList.add(`theme-${pendingSettings.colorTheme}`)
 
     // Update title bar overlay to match theme (--mc-bg-tertiary)
     const bgColor = isDark ? '#2d2d2d' : '#ebebeb'
     const symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
     window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
-  }, [settings.themeMode, settings.colorTheme])
+  }, [pendingSettings.themeMode, pendingSettings.colorTheme])
 
   // Load saved projects on mount and validate folder existence
   useEffect(() => {

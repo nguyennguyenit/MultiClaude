@@ -19,8 +19,8 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
 ]
 
 export function TerminalSettings() {
-  const { settings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
-  const { terminalLimit } = settings
+  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
+  const { terminalLimit } = pendingSettings
 
   const [customValue, setCustomValue] = useState(
     terminalLimit.preset === 'custom' ? (terminalLimit.customValue ?? 9) : 9
@@ -73,7 +73,7 @@ export function TerminalSettings() {
   // Show shell settings on Windows (wslInfo is only set on Windows platform)
   const showShellSettings = wslInfo !== null
 
-  const currentShellKey = getShellKey(settings.windowsShell || { type: 'cmd' })
+  const currentShellKey = getShellKey(pendingSettings.windowsShell || { type: 'cmd' })
 
   return (
 
@@ -194,14 +194,14 @@ export function TerminalSettings() {
                   className={`
                     flex flex-col px-4 py-3 rounded-lg border-2 w-[140px]
                     transition-all duration-150
-                    ${settings.terminalRenderMode === mode.id
+                    ${pendingSettings.terminalRenderMode === mode.id
                       ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
                       : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
                   `}
                 >
                   <span className="text-sm font-medium flex items-center gap-1">
                     {mode.name}
-                    {settings.terminalRenderMode === mode.id && <span className="text-[var(--mc-accent)]">✓</span>}
+                    {pendingSettings.terminalRenderMode === mode.id && <span className="text-[var(--mc-accent)]">✓</span>}
                   </span>
                   <span className="text-xs text-[var(--mc-text-muted)] mt-1 text-left">{mode.description}</span>
                 </button>

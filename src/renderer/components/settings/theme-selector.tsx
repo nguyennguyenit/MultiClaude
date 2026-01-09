@@ -4,10 +4,10 @@ import type { ThemeMode, ColorThemeDefinition } from '@shared/types'
 import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 export function ThemeSelector() {
-  const { settings, setThemeMode, setColorTheme } = useSettingsStore()
+  const { pendingSettings, setThemeMode, setColorTheme } = useSettingsStore()
 
-  const isDark = settings.themeMode === 'dark' ||
-    (settings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const isDark = pendingSettings.themeMode === 'dark' ||
+    (pendingSettings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   return (
     <div className="space-y-8 pb-4 max-w-2xl">
@@ -29,7 +29,7 @@ export function ThemeSelector() {
                 <ModeCard
                   key={mode}
                   mode={mode}
-                  selected={settings.themeMode === mode}
+                  selected={pendingSettings.themeMode === mode}
                   onClick={() => setThemeMode(mode)}
                 />
               ))}
@@ -49,7 +49,7 @@ export function ThemeSelector() {
                 <ThemeCard
                   key={theme.id}
                   theme={theme}
-                  selected={settings.colorTheme === theme.id}
+                  selected={pendingSettings.colorTheme === theme.id}
                   isDark={isDark}
                   onClick={() => setColorTheme(theme.id)}
                 />

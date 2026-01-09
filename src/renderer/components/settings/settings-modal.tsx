@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSettingsStore } from '../../stores'
 import { SettingsSidebar, type SettingsTab } from './settings-sidebar'
 import { ThemeSelector } from './theme-selector'
 import { TerminalSettings } from './terminal-settings'
@@ -12,15 +13,34 @@ interface SettingsModalProps {
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  const [isSaving, setIsSaving] = useState(false)
+  const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
 
-  // ESC key to close
+  const handleCancel = useCallback(() => {
+    cancelSettings()
+    onClose()
+  }, [cancelSettings, onClose])
+
+  // ESC key to close (cancel changes)
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') handleCancel()
     }
     if (isOpen) window.addEventListener('keydown', handleEsc)
     return () => window.removeEventListener('keydown', handleEsc)
-  }, [isOpen, onClose])
+  }, [isOpen, handleCancel])
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await saveSettings()
+      onClose()
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -30,7 +50,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       <div
         data-testid="settings-backdrop"
         className="absolute inset-0 bg-[var(--mc-backdrop)]"
-        onClick={onClose}
+        onClick={handleCancel}
         aria-hidden="true"
       />
 
@@ -47,7 +67,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
           <button
             data-testid="settings-close-button"
-            onClick={onClose}
+            onClick={handleCancel}
             className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded transition-colors"
             title="Close"
           >
@@ -70,18 +90,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <div className="flex justify-end gap-2 p-4 border-t border-[var(--mc-border)]">
           <button
             data-testid="settings-cancel-button"
-            onClick={onClose}
+            onClick={handleCancel}
             className="px-4 py-2 rounded text-sm bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
           >
             Cancel
           </button>
           <button
             data-testid="settings-save-button"
-            onClick={onClose}
-            className="px-4 py-2 rounded text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-1.5"
+            onClick={handleSave}
+            disabled={!hasUnsavedChanges || isSaving}
+            className="px-4 py-2 rounded text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <SaveIcon />
-            Save Settings
+            {isSaving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>

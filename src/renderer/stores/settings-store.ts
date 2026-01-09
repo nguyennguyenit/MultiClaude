@@ -1,95 +1,206 @@
 import { create } from 'zustand'
 import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
+import { useToastStore } from './toast-store'
 
-const STORAGE_KEY = 'multiclaude-settings'
+const STORAGE_KEY = 'multiclaude-settings' // For migration check
+
+// Track if migration has been attempted this session (avoid repeated checks)
+let migrationAttempted = false
 
 interface SettingsState {
+  // Persisted settings (source of truth from disk)
+  savedSettings: AppSettings
+  // Pending/preview settings (edited but not saved)
+  pendingSettings: AppSettings
+  // Backward-compatible alias for pendingSettings (used by components outside settings modal)
   settings: AppSettings
-  wslInfo: WslInfo | null // Cached WSL detection result (Windows only)
+  // Track unsaved changes
+  hasUnsavedChanges: boolean
+  // UI state (not persisted)
+  wslInfo: WslInfo | null
   gitPanelOpen: boolean
   settingsModalOpen: boolean
+
+  // Pending setters (preview only, no persist)
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
   setGlassmorphismEnabled: (enabled: boolean) => void
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setWindowsShell: (shell: WindowsShell) => void
+
+  // Actions
+  saveSettings: () => Promise<void>      // Persist pending → saved
+  cancelSettings: () => void             // Revert pending → saved
+  loadSettings: () => Promise<void>      // Load from disk on startup
+
+  // Helpers
   getTerminalLimitValue: () => number
   setGitPanelOpen: (open: boolean) => void
   setSettingsModalOpen: (open: boolean) => void
-  loadSettings: () => void
   detectWsl: () => Promise<void>
 }
 
-function loadFromStorage(): AppSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return DEFAULT_SETTINGS
-}
+/**
+ * Optimized deep equality check for AppSettings.
+ * Compares individual fields instead of full JSON.stringify.
+ */
+function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
+  // Compare primitive fields
+  if (a.themeMode !== b.themeMode) return false
+  if (a.colorTheme !== b.colorTheme) return false
+  if (a.terminalRenderMode !== b.terminalRenderMode) return false
+  if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
 
-function saveToStorage(settings: AppSettings): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-  } catch {
-    // Ignore storage errors
+  // Compare terminalLimit
+  if (a.terminalLimit.preset !== b.terminalLimit.preset) return false
+  if (a.terminalLimit.preset === 'custom' && b.terminalLimit.preset === 'custom') {
+    if (a.terminalLimit.customValue !== b.terminalLimit.customValue) return false
   }
+
+  // Compare windowsShell
+  const aShell = a.windowsShell
+  const bShell = b.windowsShell
+  if (!aShell && bShell) return false
+  if (aShell && !bShell) return false
+  if (aShell && bShell) {
+    if (aShell.type !== bShell.type) return false
+    if (aShell.type === 'wsl' && bShell.type === 'wsl') {
+      if (aShell.distro !== bShell.distro) return false
+    }
+  }
+
+  return true
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  settings: DEFAULT_SETTINGS,
+  savedSettings: DEFAULT_SETTINGS,
+  pendingSettings: DEFAULT_SETTINGS,
+  // Backward-compatible alias - always points to pendingSettings for live preview
+  get settings() { return get().pendingSettings },
+  hasUnsavedChanges: false,
   wslInfo: null,
   gitPanelOpen: false,
   settingsModalOpen: false,
 
+  // Pending setters - update preview only
   setThemeMode: (mode) => {
-    const newSettings = { ...get().settings, themeMode: mode }
-    saveToStorage(newSettings)
-    set({ settings: newSettings })
+    const pending = { ...get().pendingSettings, themeMode: mode }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
   },
 
   setColorTheme: (theme) => {
-    const newSettings = { ...get().settings, colorTheme: theme }
-    saveToStorage(newSettings)
-    set({ settings: newSettings })
+    const pending = { ...get().pendingSettings, colorTheme: theme }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
   },
 
   setGlassmorphismEnabled: (enabled) => {
-    const newSettings = { ...get().settings, glassmorphismEnabled: enabled }
-    saveToStorage(newSettings)
-    set({ settings: newSettings })
+    const pending = { ...get().pendingSettings, glassmorphismEnabled: enabled }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
   },
 
   setTerminalLimit: (limit) => {
-    const newSettings = { ...get().settings, terminalLimit: limit }
-    saveToStorage(newSettings)
-    set({ settings: newSettings })
+    const pending = { ...get().pendingSettings, terminalLimit: limit }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
   },
 
   setTerminalRenderMode: (mode) => {
-    const newSettings = { ...get().settings, terminalRenderMode: mode }
-    saveToStorage(newSettings)
-    set({ settings: newSettings })
+    const pending = { ...get().pendingSettings, terminalRenderMode: mode }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
   },
 
   setWindowsShell: (shell) => {
-    const newSettings = { ...get().settings, windowsShell: shell }
-    saveToStorage(newSettings)
-    set({ settings: newSettings })
+    const pending = { ...get().pendingSettings, windowsShell: shell }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  // Save: persist pending to disk, update saved state
+  saveSettings: async () => {
+    const pending = get().pendingSettings
+    try {
+      await window.electron.settings.set(pending)
+      set({
+        savedSettings: pending,
+        hasUnsavedChanges: false
+      })
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+      throw err
+    }
+  },
+
+  // Cancel: revert pending to saved
+  cancelSettings: () => {
+    set({
+      pendingSettings: { ...get().savedSettings },
+      hasUnsavedChanges: false
+    })
+  },
+
+  // Load from disk on startup
+  loadSettings: async () => {
+    try {
+      const settings = await window.electron.settings.get()
+      set({
+        savedSettings: settings,
+        pendingSettings: settings,
+        hasUnsavedChanges: false
+      })
+
+      // One-time migration from localStorage (only try once per session)
+      if (!migrationAttempted) {
+        migrationAttempted = true
+        const oldData = localStorage.getItem(STORAGE_KEY)
+        if (oldData) {
+          try {
+            const parsed = JSON.parse(oldData)
+            const merged = { ...settings, ...parsed }
+            await window.electron.settings.set(merged)
+            set({
+              savedSettings: merged,
+              pendingSettings: merged
+            })
+            localStorage.removeItem(STORAGE_KEY)
+          } catch {
+            // Ignore migration errors
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load settings from disk:', err)
+      useToastStore.getState().addToast(
+        'Failed to load settings. Using defaults.',
+        'warning'
+      )
+      set({
+        savedSettings: DEFAULT_SETTINGS,
+        pendingSettings: DEFAULT_SETTINGS
+      })
+    }
   },
 
   getTerminalLimitValue: () => {
-    const { terminalLimit } = get().settings
-    // Handle undefined or missing terminalLimit (from old localStorage data)
-    if (!terminalLimit) {
-      return 9 // default
-    }
+    const { terminalLimit } = get().pendingSettings
+    if (!terminalLimit) return 9
     if (terminalLimit.preset === 'custom') {
       return terminalLimit.customValue ?? 9
     }
@@ -98,33 +209,35 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setGitPanelOpen: (open) => set({ gitPanelOpen: open }),
 
-  setSettingsModalOpen: (open) => set({ settingsModalOpen: open }),
-
-  loadSettings: () => {
-    set({ settings: loadFromStorage() })
+  setSettingsModalOpen: (open) => {
+    if (open) {
+      // Reset pending to saved when opening modal
+      set({
+        settingsModalOpen: true,
+        pendingSettings: { ...get().savedSettings },
+        hasUnsavedChanges: false
+      })
+    } else {
+      set({ settingsModalOpen: false })
+    }
   },
 
   detectWsl: async () => {
-    // Only run on Windows - check if API exists
     if (typeof window !== 'undefined' && window.electron?.terminal?.detectWsl) {
       try {
         const info = await window.electron.terminal.detectWsl()
-        // info is null on non-Windows platforms (main process returns null)
         if (!info) return
         set({ wslInfo: info })
 
-        // Validate saved shell preference - reset if saved distro no longer exists
-        const currentShell = get().settings.windowsShell
+        const currentShell = get().pendingSettings.windowsShell
         if (currentShell?.type === 'wsl' && info.available) {
           const distroExists = info.distros.some(d => d.name === currentShell.distro)
           if (!distroExists) {
-            const newSettings = { ...get().settings, windowsShell: { type: 'cmd' as const } }
-            saveToStorage(newSettings)
-            set({ settings: newSettings })
+            const pending = { ...get().pendingSettings, windowsShell: { type: 'cmd' as const } }
+            set({ pendingSettings: pending })
           }
         }
       } catch {
-        // WSL detection failed - set as unavailable
         set({ wslInfo: { available: false, distros: [] } })
       }
     }
