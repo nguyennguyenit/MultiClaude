@@ -10,6 +10,7 @@ const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.op
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
+const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 
 interface UseTerminalOptions {
   terminalId: string
@@ -59,6 +60,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
+  const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
 
   // Helper to attach WebGL context lost listener (defined early to avoid hoisting issues)
   // NOTE: Accesses @xterm/addon-webgl internal API. Tested with v0.18.0.
@@ -177,6 +179,12 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (selection) {
         try {
           await navigator.clipboard.writeText(selection)
+          // Debounce notification to prevent spam on rapid selections
+          const now = Date.now()
+          if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
+            useToastStore.getState().addToast('Copied to clipboard', 'info')
+            lastCopyToastTimeRef.current = now
+          }
         } catch {
           // Clipboard permission denied - ignore silently
         }
