@@ -14,6 +14,7 @@ import type {
   GitStashEntry,
   GitOperationResult,
   AppSession,
+  AppSettings,
   NotificationSettings,
   NotificationEvent,
   NotificationTestResult,
@@ -127,6 +128,18 @@ export interface ElectronAPI {
     download: () => Promise<void>
     install: () => Promise<void>
     onStatusChanged: (callback: (state: UpdateState) => void) => () => void
+  }
+  /**
+   * Settings API for app-wide preferences persistence.
+   * Settings are stored via electron-store to disk.
+   */
+  settings: {
+    /** Get current settings from disk. */
+    get: () => Promise<AppSettings>
+    /** Update settings with partial values. Returns updated settings. */
+    set: (settings: Partial<AppSettings>) => Promise<AppSettings>
+    /** Reset all settings to defaults. Returns default settings. */
+    reset: () => Promise<AppSettings>
   }
   utils: {
     getFilePath: (file: File) => string
@@ -265,6 +278,11 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
     }
+  },
+  settings: {
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
+    set: (settings) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, settings),
+    reset: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_RESET)
   },
   utils: {
     getFilePath: (file) => webUtils.getPathForFile(file)

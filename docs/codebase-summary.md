@@ -75,7 +75,13 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 - Channels: status, init, add-remote, push
 
 #### Settings
-- **SettingsStore** (Zustand): Theme preferences in-memory + localStorage
+- **SettingsStore** (Main Process): electron-store based persistence for app-wide preferences
+  - Persists to disk via electron-store (`multiclaude-settings`)
+  - Handlers in `src/main/ipc/handlers.ts` with error handling and validation
+  - IPC: get/set/reset operations with atomic updates
+- **SettingsStore** (Zustand): In-memory UI state + localStorage sync
+  - Theme preferences, terminal rendering mode
+  - Local caching with optimistic updates
 - **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates)
 - **ThemeSelector**: Color theme and dark/light mode selection
 - **Terminal Rendering Mode**: WebGL optimization for xterm.js (Settings > Appearance > Terminal Rendering)
@@ -231,7 +237,7 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (81 total)
+## IPC Channels (84 total)
 
 ### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
@@ -278,6 +284,9 @@ src/
 
 ### YOLO Mode (2 channels)
 - `yolo:get`, `yolo:set`
+
+### Settings (3 channels)
+- `settings:get`, `settings:set`, `settings:reset`
 
 ## Key Data Structures
 

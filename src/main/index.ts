@@ -62,6 +62,7 @@ function createWindow() {
     gitManager,
     gitHeadWatcher,
     projectStore,
+    settingsStore,
     notificationManager
   })
 

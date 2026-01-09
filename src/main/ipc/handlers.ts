@@ -2,10 +2,12 @@ import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { IPC_CHANNELS } from '@shared/constants'
+import type { AppSettings } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { GitHeadWatcher } from '../git/git-head-watcher'
 import type { ProjectStore } from '../project/project-store'
+import type { SettingsStore } from '../settings'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
 import { detectWsl } from '../terminal/wsl-detector'
@@ -16,6 +18,7 @@ interface Managers {
   gitManager: GitManager
   gitHeadWatcher: GitHeadWatcher
   projectStore: ProjectStore
+  settingsStore: SettingsStore
   notificationManager: NotificationManager
 }
 
@@ -24,7 +27,7 @@ interface Managers {
 const GIT_BRANCH_CHANGE_PATTERN = /Switched to (?:a new )?branch '|Already on '/
 
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
-  const { terminalManager, gitManager, gitHeadWatcher, projectStore, notificationManager } = managers
+  const { terminalManager, gitManager, gitHeadWatcher, projectStore, settingsStore, notificationManager } = managers
 
   // Register git head watcher callback to emit branch changes from external terminals
   gitHeadWatcher.onBranchChange((projectPath) => {
@@ -467,5 +470,37 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, () => {
     installUpdate()
+  })
+
+  // Settings handlers
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
+    try {
+      return settingsStore.getSettings()
+    } catch (error) {
+      console.error('[handlers] Failed to get settings:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, settings: Partial<AppSettings>) => {
+    try {
+      // Basic validation: ensure settings is a non-null object
+      if (!settings || typeof settings !== 'object') {
+        throw new Error('Invalid settings: must be an object')
+      }
+      return settingsStore.setSettings(settings)
+    } catch (error) {
+      console.error('[handlers] Failed to set settings:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_RESET, () => {
+    try {
+      return settingsStore.resetSettings()
+    } catch (error) {
+      console.error('[handlers] Failed to reset settings:', error)
+      throw error
+    }
   })
 }

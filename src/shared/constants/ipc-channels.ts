@@ -99,7 +99,12 @@ export const IPC_CHANNELS = {
   UPDATE_CHECK: 'update:check',
   UPDATE_DOWNLOAD: 'update:download',
   UPDATE_INSTALL: 'update:install',
-  UPDATE_STATUS_CHANGED: 'update:status-changed'
+  UPDATE_STATUS_CHANGED: 'update:status-changed',
+
+  // Settings channels
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_SET: 'settings:set',
+  SETTINGS_RESET: 'settings:reset'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

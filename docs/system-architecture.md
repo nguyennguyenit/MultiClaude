@@ -169,7 +169,7 @@ src/renderer/
 
 ## IPC Channel Architecture
 
-### Channel Categories (80 total)
+### Channel Categories (84 total)
 
 | Category | Count | Purpose |
 |----------|-------|---------|
@@ -184,6 +184,7 @@ src/renderer/
 | Clipboard | 1 | Image handling |
 | File Picker | 1 | Folder selection |
 | Update | 5 | Auto-update system |
+| Settings | 3 | App preferences persistence |
 
 ### IPC Type Safety
 
@@ -201,6 +202,11 @@ interface ElectronAPI {
     status: (path: string) => Promise<GitStatus>
     commit: (path: string, message: string) => Promise<void>
     // ... 30+ methods
+  }
+  settings: {
+    get: () => Promise<AppSettings>           // Get from electron-store
+    set: (settings: Partial<AppSettings>) => Promise<AppSettings>
+    reset: () => Promise<AppSettings>         // Reset to defaults
   }
   // ... other namespaces
 }
