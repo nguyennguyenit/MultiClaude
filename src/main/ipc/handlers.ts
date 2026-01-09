@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { IPC_CHANNELS } from '@shared/constants'
+import { IPC_CHANNELS, DEFAULT_SETTINGS } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
@@ -478,15 +478,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       return settingsStore.getSettings()
     } catch (error) {
       console.error('[handlers] Failed to get settings:', error)
-      throw error
+      // Fallback to defaults on catastrophic failure
+      return DEFAULT_SETTINGS
     }
   })
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, settings: Partial<AppSettings>) => {
     try {
-      // Basic validation: ensure settings is a non-null object
-      if (!settings || typeof settings !== 'object') {
-        throw new Error('Invalid settings: must be an object')
+      // Basic validation: ensure settings is a non-null object and not an array
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        throw new Error('Invalid settings: must be a non-array object')
       }
       return settingsStore.setSettings(settings)
     } catch (error) {

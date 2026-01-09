@@ -154,12 +154,18 @@ src/renderer/
 
 ```
 +----------+    action    +-----------+    persist    +---------------+
-| Component| ----------->| Zustand   | ------------->| localStorage  |
+| Component| ----------->| Zustand   | ------------->| electron-store|
 | (React)  |             | Store     |               | (settings)    |
 +----------+             +-----------+               +---------------+
      ^                        |
-     |     subscription       |
+     |  subscription/preview  |
      +------------------------+
+
+Architecture: Save/Cancel Flow
+- savedSettings: Disk source of truth (from electron-store)
+- pendingSettings: Live preview (edited but not saved)
+- Changes preview immediately, persist only on Save
+- localStorage migration: One-time automatic on first load
 
 +----------+    IPC       +-----------+    persist    +---------------+
 | Component| ----------->| Main      | ------------->| electron-store|
@@ -204,8 +210,8 @@ interface ElectronAPI {
     // ... 30+ methods
   }
   settings: {
-    get: () => Promise<AppSettings>           // Get from electron-store
-    set: (settings: Partial<AppSettings>) => Promise<AppSettings>
+    get: () => Promise<AppSettings>           // Get from electron-store with validation
+    set: (settings: Partial<AppSettings>) => Promise<AppSettings>  // Save to disk with validation
     reset: () => Promise<AppSettings>         // Reset to defaults
   }
   // ... other namespaces

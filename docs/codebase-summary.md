@@ -76,13 +76,16 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 
 #### Settings
 - **SettingsStore** (Main Process): electron-store based persistence for app-wide preferences
-  - Persists to disk via electron-store (`multiclaude-settings`)
-  - Handlers in `src/main/ipc/handlers.ts` with error handling and validation
-  - IPC: get/set/reset operations with atomic updates
-- **SettingsStore** (Zustand): In-memory UI state + localStorage sync
-  - Theme preferences, terminal rendering mode
-  - Local caching with optimistic updates
-- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates)
+  - Storage path: `%APPDATA%/multiclaude/multiclaude-settings.json` (Windows), `~/.config/multiclaude/multiclaude-settings.json` (Linux), `~/Library/Application Support/multiclaude/multiclaude-settings.json` (macOS)
+  - Validation: Enum validation for themeMode/colorTheme/terminalRenderMode, range checks for terminalLimit, object structure checks for windowsShell
+  - IPC: SETTINGS_GET/SET/RESET with fallback to defaults on errors, Array.isArray check for input validation
+  - Handlers in `src/main/ipc/handlers.ts` with error handling
+- **SettingsStore** (Zustand): Renderer store with explicit Save/Cancel flow
+  - Architecture: savedSettings (disk source of truth) + pendingSettings (live preview)
+  - Save/Cancel: Changes preview immediately, persist only on Save button
+  - localStorage migration: One-time automatic migration of old data on first load
+  - Optimized equality check: Field-by-field comparison instead of JSON.stringify
+- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates) with Save/Cancel buttons
 - **ThemeSelector**: Color theme and dark/light mode selection
 - **Terminal Rendering Mode**: WebGL optimization for xterm.js (Settings > Appearance > Terminal Rendering)
   - **Performance**: No WebGL, best for many terminals (lower GPU usage)

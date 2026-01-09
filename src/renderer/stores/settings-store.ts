@@ -3,6 +3,22 @@ import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderM
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
+/**
+ * Settings store for app-wide preferences with explicit Save/Cancel flow.
+ *
+ * Architecture:
+ * - savedSettings: Last persisted state from disk (source of truth)
+ * - pendingSettings: Working copy for live preview (not yet persisted)
+ * - On Save: pendingSettings → disk → savedSettings
+ * - On Cancel: savedSettings → pendingSettings (discard changes)
+ *
+ * Validation Strategy:
+ * - Input validation happens in main process (SettingsStore.setSettings)
+ * - Each field validated against allowed values (enums, ranges)
+ * - Invalid values replaced with current valid values (not defaults)
+ * - This prevents data corruption from malformed IPC payloads
+ */
+
 const STORAGE_KEY = 'multiclaude-settings' // For migration check
 
 // Track if migration has been attempted this session (avoid repeated checks)
@@ -180,8 +196,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
               pendingSettings: merged
             })
             localStorage.removeItem(STORAGE_KEY)
-          } catch {
-            // Ignore migration errors
+          } catch (migrationErr) {
+            // Log migration errors for debugging but don't fail the app
+            console.warn('[settings] localStorage migration failed:', migrationErr)
           }
         }
       }
