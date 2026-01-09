@@ -18,133 +18,145 @@ export function UpdateSettings() {
     : `https://github.com/${GITHUB_REPO}/releases`
 
   return (
-    <div className="space-y-6">
+
+    <div className="space-y-8 pb-4 max-w-2xl">
       {/* Header */}
       <SettingsTitle description="Manage MultiClaude updates">Updates</SettingsTitle>
 
-      {/* VERSION Section */}
-      <div className="space-y-4">
-        <SettingsSubheading>Version</SettingsSubheading>
+      <div className="space-y-6">
+        {/* Version Info Card */}
+        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+          <SettingsSubheading>Version</SettingsSubheading>
+          <div className="space-y-4 mt-3">
+            <div className="flex items-center gap-2">
+              <span className="text-3xl font-bold text-[var(--mc-text-primary)]">
+                {currentVersion || '...'}
+              </span>
+              <button
+                type="button"
+                className="p-1 text-[var(--mc-text-muted)] hover:text-[var(--mc-text-secondary)] transition-colors"
+                title="Current installed version"
+              >
+                <InfoIcon />
+              </button>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-3xl font-bold text-[var(--mc-text-primary)]">
-            {currentVersion || '...'}
-          </span>
-          <button
-            type="button"
-            className="p-1 text-[var(--mc-text-muted)] hover:text-[var(--mc-text-secondary)] transition-colors"
-            title="Current installed version"
-          >
-            <InfoIcon />
-          </button>
+            {/* New Version Available Link */}
+            {hasUpdate && latestVersion && (
+              <a
+                href={releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-[var(--mc-accent)] hover:underline block"
+              >
+                New version available: {latestVersion}
+              </a>
+            )}
+
+            {/* Status: Up to date */}
+            {status === 'idle' && !latestVersion && (
+              <p className="text-sm text-[var(--mc-text-muted)]">You&apos;re running the latest version</p>
+            )}
+
+            {/* Status: Error */}
+            {status === 'error' && error && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-md">
+                <p className="text-sm text-red-500">{error}</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* New Version Available Link */}
-        {hasUpdate && latestVersion && (
-          <a
-            href={releaseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-[var(--mc-accent)] hover:underline"
-          >
-            New version available: {latestVersion}
-          </a>
-        )}
-
-        {/* Status: Up to date */}
-        {status === 'idle' && !latestVersion && (
-          <p className="text-sm text-[var(--mc-text-muted)]">You&apos;re running the latest version</p>
-        )}
-
-        {/* Status: Error */}
-        {status === 'error' && error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-md">
-            <p className="text-sm text-red-500">{error}</p>
+        {/* Release Notes */}
+        {hasUpdate && releaseNotes && (
+          <div className="border-l-4 border-[var(--mc-accent)] bg-[var(--mc-bg-tertiary)] rounded-r-md p-4 space-y-2">
+            <span className="text-sm font-semibold text-[var(--mc-text-primary)]">
+              ✨ What&apos;s New
+            </span>
+            <pre className="text-sm text-[var(--mc-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto">
+              {releaseNotes}
+            </pre>
           </div>
         )}
+
+        {/* Action Card */}
+        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+          <SettingsSubheading>Actions</SettingsSubheading>
+          <div className="space-y-4 mt-3">
+            {/* Download Progress */}
+            {status === 'downloading' && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-[var(--mc-text-muted)]">
+                  <span>Downloading...</span>
+                  <span>{downloadProgress}%</span>
+                </div>
+                <div className="h-2 bg-[var(--mc-bg-tertiary)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--mc-accent)] transition-all duration-300"
+                    style={{ width: `${downloadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons Row */}
+            <div className="flex flex-col gap-3">
+              {hasUpdate && status !== 'downloading' && (
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <a
+                    href={releaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-[var(--mc-accent)] hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLinkIcon />
+                    View full release on GitHub
+                  </a>
+
+                  {status === 'available' && (
+                    <button
+                      type="button"
+                      onClick={downloadUpdate}
+                      className="px-4 py-2 text-sm rounded-md bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-2"
+                    >
+                      <DownloadIcon />
+                      Download Update
+                    </button>
+                  )}
+
+                  {status === 'ready' && (
+                    <button
+                      type="button"
+                      onClick={installUpdate}
+                      className="px-4 py-2 text-sm rounded-md bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-2"
+                    >
+                      <InstallIcon />
+                      Install and Restart
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Check for Updates Button */}
+              <button
+                type="button"
+                onClick={checkForUpdates}
+                disabled={status === 'checking' || status === 'downloading'}
+                className={`
+                  w-full px-4 py-2.5 text-sm rounded-md flex items-center justify-center gap-2 transition-all
+                  ${status === 'checking' || status === 'downloading'
+                    ? 'bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] cursor-not-allowed'
+                    : 'border border-[var(--mc-border)] text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-hover)]'
+                  }
+                `}
+              >
+                <RefreshIcon spinning={status === 'checking'} />
+                {status === 'checking' ? 'Checking for updates...' : 'Check for Updates'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-
-      {/* Release Notes */}
-      {hasUpdate && releaseNotes && (
-        <div className="border-l-4 border-[var(--mc-accent)] bg-[var(--mc-bg-tertiary)] rounded-r-md p-4 space-y-2">
-          <span className="text-sm font-semibold text-[var(--mc-text-primary)]">
-            ✨ What&apos;s New
-          </span>
-          <pre className="text-sm text-[var(--mc-text-secondary)] whitespace-pre-wrap max-h-40 overflow-y-auto">
-            {releaseNotes}
-          </pre>
-        </div>
-      )}
-
-      {/* Download Progress */}
-      {status === 'downloading' && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm text-[var(--mc-text-muted)]">
-            <span>Downloading...</span>
-            <span>{downloadProgress}%</span>
-          </div>
-          <div className="h-2 bg-[var(--mc-bg-tertiary)] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[var(--mc-accent)] transition-all duration-300"
-              style={{ width: `${downloadProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Action Buttons Row */}
-      {hasUpdate && status !== 'downloading' && (
-        <div className="flex flex-wrap items-center gap-3">
-          <a
-            href={releaseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-[var(--mc-accent)] hover:underline flex items-center gap-1"
-          >
-            <ExternalLinkIcon />
-            View full release on GitHub
-          </a>
-
-          {status === 'available' && (
-            <button
-              type="button"
-              onClick={downloadUpdate}
-              className="px-4 py-2 text-sm rounded-md bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-2"
-            >
-              <DownloadIcon />
-              Download Update
-            </button>
-          )}
-
-          {status === 'ready' && (
-            <button
-              type="button"
-              onClick={installUpdate}
-              className="px-4 py-2 text-sm rounded-md bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-2"
-            >
-              <InstallIcon />
-              Install and Restart
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Check for Updates Button */}
-      <button
-        type="button"
-        onClick={checkForUpdates}
-        disabled={status === 'checking' || status === 'downloading'}
-        className={`
-          w-full px-4 py-2.5 text-sm rounded-md flex items-center justify-center gap-2 transition-all
-          ${status === 'checking' || status === 'downloading'
-            ? 'bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] cursor-not-allowed'
-            : 'border border-[var(--mc-border)] text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-hover)]'
-          }
-        `}
-      >
-        <RefreshIcon spinning={status === 'checking'} />
-        {status === 'checking' ? 'Checking for updates...' : 'Check for Updates'}
-      </button>
     </div>
   )
 }

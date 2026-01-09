@@ -10,46 +10,52 @@ export function ThemeSelector() {
     (settings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-4 max-w-2xl">
       {/* Section Header */}
       <SettingsTitle description="Customize how MultiClaude looks">
         Appearance
       </SettingsTitle>
 
-      {/* Appearance Mode */}
-      <div>
-        <SettingsSubheading>Appearance Mode</SettingsSubheading>
-        <p className="text-xs text-[var(--mc-text-muted)] mb-3">
-          Choose light, dark, or system preference
-        </p>
-        <div className="flex gap-3">
-          {(['system', 'light', 'dark'] as ThemeMode[]).map((mode) => (
-            <ModeCard
-              key={mode}
-              mode={mode}
-              selected={settings.themeMode === mode}
-              onClick={() => setThemeMode(mode)}
-            />
-          ))}
+      <div className="space-y-6">
+        {/* Appearance Mode */}
+        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+          <SettingsSubheading>Appearance Mode</SettingsSubheading>
+          <div className="mt-3">
+            <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+              Choose light, dark, or system preference
+            </p>
+            <div className="flex gap-3">
+              {(['system', 'light', 'dark'] as ThemeMode[]).map((mode) => (
+                <ModeCard
+                  key={mode}
+                  mode={mode}
+                  selected={settings.themeMode === mode}
+                  onClick={() => setThemeMode(mode)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Color Theme */}
-      <div>
-        <SettingsSubheading>Color Theme</SettingsSubheading>
-        <p className="text-xs text-[var(--mc-text-muted)] mb-3">
-          Select a color palette for the interface
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {COLOR_THEMES.map((theme) => (
-            <ThemeCard
-              key={theme.id}
-              theme={theme}
-              selected={settings.colorTheme === theme.id}
-              isDark={isDark}
-              onClick={() => setColorTheme(theme.id)}
-            />
-          ))}
+        {/* Color Theme */}
+        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+          <SettingsSubheading>Color Theme</SettingsSubheading>
+          <div className="mt-3">
+            <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+              Select a color palette for the interface
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {COLOR_THEMES.map((theme) => (
+                <ThemeCard
+                  key={theme.id}
+                  theme={theme}
+                  selected={settings.colorTheme === theme.id}
+                  isDark={isDark}
+                  onClick={() => setColorTheme(theme.id)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
