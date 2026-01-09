@@ -89,7 +89,8 @@
     "publish": {
       "provider": "github",
       "owner": "nguyennguyenit",
-      "repo": "MultiClaude"
+      "repo": "MultiClaude",
+      "releaseType": "release"
     },
     "directories": {
       "output": "release"
