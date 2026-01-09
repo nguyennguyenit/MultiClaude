@@ -1,7 +1,10 @@
 import * as pty from '@lydell/node-pty'
 import os from 'os'
+import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
+
+const DESTROY_TIMEOUT_MS = 2000
 
 interface PTYProcess {
   id: string
@@ -200,6 +203,77 @@ export class TerminalManager extends EventEmitter {
     for (const [id] of this.terminals) {
       this.destroy(id)
     }
+  }
+
+  /**
+   * Force kill process - platform specific
+   * Windows: taskkill for process tree (using array args to prevent injection)
+   * Unix: SIGKILL
+   */
+  private forceKill(term: PTYProcess): void {
+    try {
+      if (process.platform === 'win32') {
+        // Use spawnSync with array args to prevent command injection
+        spawnSync('taskkill', ['/PID', String(term.pty.pid), '/T', '/F'], { stdio: 'ignore' })
+      } else {
+        process.kill(term.pty.pid, 'SIGKILL')
+      }
+    } catch {
+      // Process already dead or permission denied - safe to ignore
+    }
+  }
+
+  /**
+   * Async destroy with graceful exit + force kill fallback
+   * Tries graceful exit first, force kills after timeout
+   */
+  async destroyAsync(id: string): Promise<boolean> {
+    const term = this.terminals.get(id)
+    if (!term) return false
+
+    return new Promise((resolve) => {
+      let resolved = false
+
+      const cleanup = () => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(timeout)
+        this.terminals.delete(id)
+      }
+
+      // Attach exit listener BEFORE initiating kill to avoid race condition
+      term.pty.onExit(() => {
+        cleanup()
+        resolve(true)
+      })
+
+      // Timeout handler - force kill if graceful fails
+      const timeout = setTimeout(() => {
+        if (resolved) return
+        this.forceKill(term)
+        cleanup()
+        resolve(true)
+      }, DESTROY_TIMEOUT_MS)
+
+      // Initiate graceful kill after listener attached
+      term.pty.kill()
+    })
+  }
+
+  /**
+   * Async destroy all terminals in parallel
+   * Uses allSettled to ensure all destroy attempts complete even if some fail
+   */
+  async destroyAllAsync(): Promise<void> {
+    const ids = Array.from(this.terminals.keys())
+    await Promise.allSettled(ids.map(id => this.destroyAsync(id)))
+  }
+
+  /**
+   * Check if any terminals exist
+   */
+  hasTerminals(): boolean {
+    return this.terminals.size > 0
   }
 
   list(): Terminal[] {
