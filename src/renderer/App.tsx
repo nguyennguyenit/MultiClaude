@@ -11,6 +11,9 @@ import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
 import type { WindowsShell } from '@shared/types'
 
+// Detect macOS for title bar layout (traffic lights on left)
+const isMac = navigator.platform.toLowerCase().includes('mac')
+
 function App() {
   const {
     terminals,
@@ -342,18 +345,18 @@ function App() {
       <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
 
       {/* Title Bar */}
-      <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag">
+      <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag relative">
         <button
           data-testid="titlebar-sidebar-toggle"
           onClick={toggleSidebar}
-          className="p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag mr-2"
+          className={`p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag ${isMac ? 'ml-16' : ''}`}
           title="Toggle Sidebar"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-sm font-medium">MultiClaude</span>
+        <span className="absolute left-1/2 -translate-x-1/2 text-sm font-medium">MultiClaude</span>
       </div>
 
       {/* Project Tabs */}

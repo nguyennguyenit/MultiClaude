@@ -65,7 +65,7 @@ export function TerminalActionBar({
   if (terminalCount === 0) return null
 
   return (
-    <div className="h-10 px-4 flex items-center justify-between bg-[var(--mc-bg-secondary)] border-b border-[var(--mc-border)]">
+    <div className="h-10 px-4 flex items-center justify-between bg-[var(--mc-bg-secondary)] border-b border-[var(--mc-border)] relative z-10">
       {/* Left: Terminal count */}
       <div className="flex items-center gap-2 text-sm text-[var(--mc-text-secondary)]">
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
