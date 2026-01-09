@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useSettingsStore } from '../../stores'
+import { ShellSelectorDropdown } from './shell-selector-dropdown'
 import type { WindowsShell } from '@shared/types'
 
 interface TerminalActionBarProps {
@@ -22,12 +23,29 @@ export function TerminalActionBar({
   disabled
 }: TerminalActionBarProps) {
   const [showKillConfirm, setShowKillConfirm] = useState(false)
-  const { settings } = useSettingsStore()
+  const [showShellSelector, setShowShellSelector] = useState(false)
+  const addButtonRef = useRef<HTMLButtonElement>(null)
+  const { wslInfo, settings } = useSettingsStore()
+
+  // Show shell dropdown on Windows only (wslInfo is only set on Windows platform)
+  const isWindows = wslInfo !== null
 
   // Handle click - use default shell from settings
   const handleAddClick = useCallback(() => {
     onAddTerminal(settings.windowsShell)
   }, [onAddTerminal, settings.windowsShell])
+
+  // Handle dropdown toggle (Windows only)
+  const handleDropdownToggle = useCallback(() => {
+    if (!isWindows) return
+    setShowShellSelector((prev) => !prev)
+  }, [isWindows])
+
+  // Handle shell selection from dropdown
+  const handleShellSelect = useCallback((shell: WindowsShell) => {
+    onAddTerminal(shell)
+    setShowShellSelector(false)
+  }, [onAddTerminal])
 
   // All hooks MUST be called before any early returns (React Rules of Hooks)
   const handleKillAllClick = useCallback(() => {
@@ -58,16 +76,47 @@ export function TerminalActionBar({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {/* New Terminal */}
-        <button
-          type="button"
-          onClick={handleAddClick}
-          disabled={disabled || terminalCount >= terminalLimit}
-          className="px-3 py-1 text-xs rounded bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Add new terminal"
-        >
-          + New
-        </button>
+        {/* New Terminal - split button with dropdown on Windows */}
+        <div className="relative">
+          <div className="flex items-center">
+            <button
+              ref={addButtonRef}
+              type="button"
+              onClick={handleAddClick}
+              disabled={disabled || terminalCount >= terminalLimit}
+              className={`px-3 py-1 text-xs bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isWindows ? 'rounded-l' : 'rounded'
+              }`}
+              title="Add new terminal"
+            >
+              + New
+            </button>
+            {isWindows && (
+              <button
+                type="button"
+                onClick={handleDropdownToggle}
+                disabled={disabled || terminalCount >= terminalLimit}
+                className="px-1.5 py-1 text-xs rounded-r bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed border-l border-[var(--mc-bg-primary)]/20"
+                title="Select shell type"
+                aria-label="Select shell type"
+                aria-haspopup="menu"
+                aria-expanded={showShellSelector}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {showShellSelector && (
+            <ShellSelectorDropdown
+              onSelect={handleShellSelect}
+              onClose={() => setShowShellSelector(false)}
+              anchorRef={addButtonRef}
+            />
+          )}
+        </div>
 
         {/* YOLO Toggle */}
         <button
