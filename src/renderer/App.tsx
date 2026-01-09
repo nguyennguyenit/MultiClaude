@@ -191,28 +191,6 @@ function App() {
     onSelectProject: handleSelectProject
   })
 
-  // Listen for custom terminal events from xterm key handler
-  useEffect(() => {
-    const onAddTerminalEvent = () => handleAddTerminal()
-    const onCloseTerminalEvent = () => handleCloseTerminal()
-    const onSelectProjectEvent = (e: Event) => {
-      const { index } = (e as CustomEvent<{ index: number }>).detail
-      const project = projects[index]
-      if (project) {
-        handleSelectProject(project.id)
-      }
-    }
-
-    window.addEventListener('mc:add-terminal', onAddTerminalEvent)
-    window.addEventListener('mc:close-terminal', onCloseTerminalEvent)
-    window.addEventListener('mc:select-project', onSelectProjectEvent)
-
-    return () => {
-      window.removeEventListener('mc:add-terminal', onAddTerminalEvent)
-      window.removeEventListener('mc:close-terminal', onCloseTerminalEvent)
-      window.removeEventListener('mc:select-project', onSelectProjectEvent)
-    }
-  }, [handleAddTerminal, handleCloseTerminal, handleSelectProject, projects])
 
   // Load settings and detect WSL on mount
   useEffect(() => {

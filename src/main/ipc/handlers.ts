@@ -68,7 +68,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Terminal handlers
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
-    return terminalManager.create(options)
+    const terminal = terminalManager.create(options)
+    // Serialize Date to ISO string for IPC cloning
+    return {
+      ...terminal,
+      createdAt: terminal.createdAt instanceof Date ? terminal.createdAt.toISOString() : terminal.createdAt
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
@@ -103,11 +108,23 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Project handlers
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async () => {
-    return projectStore.getProjects()
+    const projects = projectStore.getProjects()
+    // Serialize Date fields for IPC cloning
+    return projects.map(p => ({
+      ...p,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+      updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt
+    }))
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_CREATE, async (_, project) => {
-    return projectStore.addProject(project)
+    const newProject = projectStore.addProject(project)
+    // Serialize Date fields for IPC cloning
+    return {
+      ...newProject,
+      createdAt: newProject.createdAt instanceof Date ? newProject.createdAt.toISOString() : newProject.createdAt,
+      updatedAt: newProject.updatedAt instanceof Date ? newProject.updatedAt.toISOString() : newProject.updatedAt
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, async (_, id: string) => {

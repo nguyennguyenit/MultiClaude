@@ -6,7 +6,7 @@ export interface Terminal {
   isClaudeMode: boolean
   claudeSessionId?: string
   projectId?: string
-  createdAt: Date
+  createdAt: Date | string // Date in main process, ISO string in renderer (after IPC serialization)
   // Allow OSC title updates only after activity starts (e.g., Claude mode)
   allowTitleUpdate?: boolean
 }
@@ -27,8 +27,8 @@ export interface Project {
   name: string
   path: string
   gitRemote?: string
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date | string // Date in main process, ISO string in renderer (after IPC serialization)
+  updatedAt: Date | string // Date in main process, ISO string in renderer (after IPC serialization)
 }
 
 export interface ProjectState {

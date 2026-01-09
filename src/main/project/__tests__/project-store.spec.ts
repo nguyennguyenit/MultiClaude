@@ -45,7 +45,8 @@ describe('ProjectStore', () => {
       // Small delay to ensure different timestamp
       const updated = store.updateProject(project.id, { name: 'Updated' })
       expect(updated?.name).toBe('Updated')
-      expect(updated?.updatedAt.getTime()).toBeGreaterThanOrEqual(originalUpdatedAt.getTime())
+      // In main process, these are always Date objects
+      expect((updated?.updatedAt as Date).getTime()).toBeGreaterThanOrEqual((originalUpdatedAt as Date).getTime())
     })
 
     it('returns null when updating non-existent project', () => {
