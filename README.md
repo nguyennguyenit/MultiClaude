@@ -86,6 +86,8 @@ src/
   ```
   > Error `WSL_E_DISTRO_NOT_FOUND` means WSL is installed but no distribution exists. Run the command above to fix.
 
+  > **Note**: WSL terminals take 2-5 seconds to start (cold start) due to Linux kernel initialization. Subsequent terminals are faster while WSL is running.
+
 ## Usage
 
 1. **Add Project**: Click the + button in the sidebar to add a project folder
