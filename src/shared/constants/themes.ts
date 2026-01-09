@@ -68,5 +68,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   colorTheme: 'default',
   terminalLimit: { preset: 9 },
   terminalRenderMode: 'balanced',
-  glassmorphismEnabled: false
+  glassmorphismEnabled: false,
+  windowsShell: { type: 'cmd' }
 }

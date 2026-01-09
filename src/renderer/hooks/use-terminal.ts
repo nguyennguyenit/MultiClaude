@@ -2,13 +2,15 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { useSettingsStore } from '../stores'
+import { useSettingsStore, useToastStore } from '../stores'
 import { getTerminalTheme } from '@shared/constants'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
+const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
+const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 
 interface UseTerminalOptions {
   terminalId: string
@@ -56,6 +58,32 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
+  const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
+
+  // Helper to attach WebGL context lost listener (defined early to avoid hoisting issues)
+  // NOTE: Accesses @xterm/addon-webgl internal API. Tested with v0.18.0.
+  // If xterm updates break this, fallback is safe - manual refresh button still works.
+  const attachContextLostListener = useCallback((addon: WebglAddon) => {
+    // Access WebGL canvas via internal renderer API
+    const canvas = (addon as any)._renderer?._renderLayers?.[0]?._canvas as HTMLCanvasElement | undefined
+    if (!canvas) return
+
+    const handleContextLost = () => {
+      console.warn('WebGL context lost, auto-refreshing terminal...')
+      refreshFnRef.current?.(true)  // Show notification on auto-refresh
+    }
+
+    canvas.addEventListener('webglcontextlost', handleContextLost)
+
+    // Wrap dispose to cleanup listener
+    const originalDispose = addon.dispose.bind(addon)
+    addon.dispose = () => {
+      canvas.removeEventListener('webglcontextlost', handleContextLost)
+      originalDispose()
+    }
+  }, [])
 
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
@@ -123,6 +151,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
           terminal.loadAddon(webglAddon)
+          attachContextLostListener(webglAddon)
         } catch (e) {
           console.warn('WebGL addon failed to load:', e)
         }
@@ -150,6 +179,12 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (selection) {
         try {
           await navigator.clipboard.writeText(selection)
+          // Debounce notification to prevent spam on rapid selections
+          const now = Date.now()
+          if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
+            useToastStore.getState().addToast('Copied to clipboard', 'info')
+            lastCopyToastTimeRef.current = now
+          }
         } catch {
           // Clipboard permission denied - ignore silently
         }
@@ -168,9 +203,33 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       }
     })
 
-    // Ctrl+V paste - detect image in clipboard and save to temp file
+    // Intercept global shortcuts before xterm processes them
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
+
+      // Alt+1~9: Switch project by index (dispatch event for validation in App.tsx)
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const index = parseInt(e.key) - 1
+        window.dispatchEvent(new CustomEvent('mc:select-project', { detail: { index } }))
+        return false
+      }
+
+      // Ctrl+N or Ctrl+T: New terminal
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 't')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('mc:add-terminal'))
+        return false
+      }
+
+      // Ctrl+W: Close active terminal
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('mc:close-terminal'))
+        return false
+      }
+
+      // Ctrl+V paste - detect image in clipboard and save to temp file
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
 
       // Prevent browser's native paste event to avoid duplicate paste from xterm's paste listener
@@ -240,7 +299,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-  }, [terminalId, initialOutput, onResize])
+  }, [terminalId, initialOutput, onResize, attachContextLostListener])
 
   // Write data to terminal with smart scroll
   const write = useCallback((data: string) => {
@@ -278,6 +337,59 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     terminalRef.current?.scrollToBottom()
   }, [])
 
+  // Refresh terminal display (dispose WebGL, redraw, reinit WebGL)
+  const refresh = useCallback((showNotification = false) => {
+    if (disposedRef.current || !terminalRef.current) return
+
+    // Clear pending refresh
+    if (refreshDebounceRef.current) {
+      clearTimeout(refreshDebounceRef.current)
+      refreshDebounceRef.current = null
+    }
+
+    refreshDebounceRef.current = setTimeout(() => {
+      if (disposedRef.current || !terminalRef.current) return
+
+      // 1. Dispose current WebGL addon
+      try {
+        webglAddonRef.current?.dispose()
+      } catch { /* ignore */ }
+      webglAddonRef.current = null
+
+      // 2. Redraw all terminal rows (canvas fallback)
+      terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+
+      // 3. Re-init WebGL if needed
+      if (shouldUseWebGL(isActiveRef.current)) {
+        try {
+          const webglAddon = new WebglAddon()
+          webglAddonRef.current = webglAddon
+          terminalRef.current.loadAddon(webglAddon)
+          attachContextLostListener(webglAddon)
+        } catch (e) {
+          console.warn('WebGL addon failed to load:', e)
+        }
+      }
+
+      // 4. Refit
+      try {
+        fitAddonRef.current?.fit()
+      } catch { /* ignore */ }
+
+      // 5. Show notification if auto-triggered
+      if (showNotification) {
+        try {
+          useToastStore.getState().addToast('Terminal display refreshed', 'info')
+        } catch { /* ignore notification errors */ }
+      }
+    }, REFRESH_DEBOUNCE)
+  }, [attachContextLostListener])
+
+  // Keep refreshFnRef in sync with refresh callback for context lost handler
+  useEffect(() => {
+    refreshFnRef.current = refresh
+  }, [refresh])
+
   // Cleanup on unmount
   useEffect(() => {
     // Reset disposed flag on mount
@@ -286,6 +398,12 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     return () => {
       // Set disposed flag before any cleanup to prevent race conditions
       disposedRef.current = true
+
+      // Clear pending refresh
+      if (refreshDebounceRef.current) {
+        clearTimeout(refreshDebounceRef.current)
+        refreshDebounceRef.current = null
+      }
 
       // Capture refs before nullifying
       const terminal = terminalRef.current
@@ -368,6 +486,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
             const webglAddon = new WebglAddon()
             webglAddonRef.current = webglAddon
             terminalRef.current.loadAddon(webglAddon)
+            attachContextLostListener(webglAddon)
           } catch (e) {
             console.warn('WebGL addon failed to load:', e)
           }
@@ -393,7 +512,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive])
+  }, [isActive, attachContextLostListener])
 
   // React to render mode setting changes
   useEffect(() => {
@@ -415,6 +534,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
             const webglAddon = new WebglAddon()
             webglAddonRef.current = webglAddon
             terminalRef.current.loadAddon(webglAddon)
+            attachContextLostListener(webglAddon)
           } catch (e) {
             console.warn('WebGL addon failed to load:', e)
           }
@@ -430,7 +550,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       }
     })
     return unsubscribe
-  }, [])
+  }, [attachContextLostListener])
 
   return {
     containerRef,
@@ -441,6 +561,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     clear,
     scrollToBottom,
     isAtBottom,
+    refresh,
     terminal: terminalRef.current
   }
 }

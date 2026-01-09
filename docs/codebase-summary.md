@@ -1,9 +1,9 @@
 # MultiClaude Codebase Summary
 
 ## Overview
-MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management, and user settings (themes and notifications).
+MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management (with WSL support on Windows), and user settings (themes and notifications).
 
-**Codebase Stats**: ~10K LOC, 88 TypeScript files, 79 IPC channels
+**Codebase Stats**: ~10K LOC, 90 TypeScript files, 80 IPC channels
 
 ## Architecture
 
@@ -17,9 +17,16 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
 
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
+- **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
+- **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
-- **TerminalPane**: Resizable wrapper with header bar containing editable title, Claude button, close button
+- **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
+  - **Active Terminal Styling** (`globals.css`): Visual distinction via glow + opacity
+    - `--terminal-active-glow`: CSS var for active pane outer glow (`color-mix()` animated)
+    - `--terminal-transition`: Unified 0.25s ease timing for opacity/glow transitions
+    - Active pane: animated glow effect; Inactive: 0.85 opacity
+    - `will-change: opacity, box-shadow` for GPU-optimized transitions
 - **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
   - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
   - 5-line threshold reduces button flicker on minor scroll changes
@@ -35,6 +42,10 @@ MultiClaude v1.1.4 is an Electron 33 + React 19 + TypeScript desktop application
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
   - Deferred `initialOutput` write until terminal fully mounted
   - `isTransitioning` state in App.tsx with rapid-switch guard to prevent race conditions
+- **Terminal Refresh**: Manual and automatic WebGL context recovery
+  - Refresh button in TerminalPane header (100ms debounce)
+  - Auto-recovery on WebGL context lost events with toast notification
+  - `use-terminal.ts` exposes `refresh()` callback via `onRefreshReady` prop
 
 #### Sidebar & UI Components
 - **Sidebar**: Left-side navigation with collapsible layout (240px expanded / 60px collapsed)
@@ -128,6 +139,7 @@ src/
 │   │   └── *.spec.ts        # Test files
 │   ├── terminal/            # PTY management
 │   │   ├── terminal-manager.ts
+│   │   ├── wsl-detector.ts      # WSL detection (Windows)
 │   │   └── pty-handler.ts
 │   ├── git/                 # Git operations
 │   │   ├── git-manager.ts
@@ -167,6 +179,12 @@ src/
 │   ├── App.tsx
 │   ├── components/
 │   │   ├── terminal/        # Terminal UI
+│   │   │   ├── terminal-grid.tsx
+│   │   │   ├── terminal-pane.tsx
+│   │   │   ├── terminal-view.tsx
+│   │   │   ├── terminal-action-bar.tsx
+│   │   │   ├── shell-selector-dropdown.tsx  # WSL/shell context menu
+│   │   │   └── index.ts
 │   │   ├── sidebar/         # Project/settings sidebar
 │   │   │   ├── sidebar.tsx
 │   │   │   ├── sidebar-header.tsx      # Logo + collapse toggle
@@ -182,6 +200,7 @@ src/
 │   │       ├── telegram-config-modal.tsx
 │   │       ├── discord-config-modal.tsx
 │   │       ├── update-settings.tsx      # In-app update management UI
+│   │       ├── settings-typography.tsx  # Shared typography (SettingsTitle, SettingsSubheading)
 │   │       └── index.ts
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-file-drop.ts       # Drag-drop file paths into terminal
@@ -192,6 +211,9 @@ src/
 │   │   ├── settings-store.ts
 │   │   ├── notification-store.ts
 │   │   ├── update-store.ts          # Update state management
+│   │   └── index.ts
+│   ├── utils/               # Utility functions
+│   │   ├── shell-utils.ts        # WindowsShell key generation
 │   │   └── index.ts
 │   └── styles/              # CSS
 ├── preload/                 # IPC bridge
@@ -209,11 +231,12 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (80 total)
+## IPC Channels (81 total)
 
-### Terminal (8 channels)
+### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
 - `terminal:resize`, `terminal:list`, `terminal:invoke-claude`, `terminal:title-change`
+- `terminal:detect-wsl`
 
 ### Project (6 channels)
 - `project:list`, `project:create`, `project:delete`, `project:set-active`
@@ -269,6 +292,10 @@ interface Terminal {
   projectId?: string
   createdAt: Date
 }
+
+interface WslDistro { name: string; isDefault: boolean }
+interface WslInfo { available: boolean; distros: WslDistro[] }
+type WindowsShell = { type: 'cmd' } | { type: 'powershell' } | { type: 'wsl'; distro: string }
 ```
 
 ### Project
@@ -528,8 +555,10 @@ interface ProjectTerminal {
   - TerminalGrid filters terminals by `activeProjectId` for per-project isolation
 - **useKeyboardShortcuts Hook**: Global keyboard shortcuts via `useKeyboardShortcuts()` in App.tsx
   - Alt+1~9: Switch to project by index (1st-9th project in projects list)
-  - Ctrl+N: Create new terminal in active project
+  - Ctrl+N / Ctrl+T: Create new terminal in active project
   - Ctrl+W: Close active terminal
+  - Mac support: Cmd key works as alternative to Ctrl
+  - Terminal intercept: xterm key handler prevents shortcuts from being captured by terminal
 - **Session Management**: Simplified startup - always creates single initial terminal (removed session restoration)
 - **Handlers**: App.tsx now contains handlers for project/terminal operations
   - `handleAddProject`: Opens folder picker, creates project, sets as active

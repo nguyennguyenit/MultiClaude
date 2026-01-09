@@ -6,7 +6,7 @@
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.1.4 |
+| Version | 1.1.6 |
 | License | MIT |
 | Platforms | Linux (AppImage/deb), macOS (dmg), Windows (exe) |
 | Repository | github.com/nguyennguyenit/MultiClaude |
@@ -30,6 +30,7 @@
 | FR-1.3 | WebGL rendering with configurable modes (Performance/Balanced/Quality) | Complete |
 | FR-1.4 | Terminal title editing via double-click | Complete |
 | FR-1.5 | Claude mode indicator badge when Claude active | Complete |
+| FR-1.6 | WSL shell support (Windows): auto-detect distros, default shell setting, right-click shell selector | Complete |
 
 #### FR-2: Project Management
 | ID | Requirement | Status |
@@ -118,6 +119,7 @@
 - Auto-update system
 - 7 themes with dark/light modes
 - Terminal rendering modes
+- WSL shell support for Windows (auto-detect, default shell, per-terminal shell selector)
 
 ### Planned (v1.2.x)
 - Terminal output search

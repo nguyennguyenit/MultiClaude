@@ -85,10 +85,10 @@ export function ChangesList({
       </div>
       <div className="flex-1 min-w-0 flex flex-col">
         <span className="truncate text-xs font-medium text-[var(--mc-text-primary)] leading-tight mb-0.5">
-          {file.path.split('/').pop()}
+          {file.path.split(/[/\\]/).pop()}
         </span>
         <span className="truncate text-[10px] text-[var(--mc-text-muted)] leading-tight opacity-70">
-          {file.path.split('/').slice(0, -1).join('/') || './'}
+          {file.path.split(/[/\\]/).slice(0, -1).join('/') || './'}
         </span>
       </div>
       <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity ml-1">

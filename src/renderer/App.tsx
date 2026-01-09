@@ -9,6 +9,10 @@ import { SettingsModal } from './components/settings'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { COLOR_THEMES } from '@shared/constants'
+import type { WindowsShell } from '@shared/types'
+
+// Detect macOS for title bar layout (traffic lights on left)
+const isMac = navigator.platform.toLowerCase().includes('mac')
 
 function App() {
   const {
@@ -29,7 +33,7 @@ function App() {
     activeView
   } = useAppStore()
 
-  const { settings, loadSettings, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
+  const { settings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -51,7 +55,8 @@ function App() {
     const path = await window.electron.project.openFolder()
     if (!path) return
 
-    const name = path.split('/').pop() || 'Untitled'
+    // Handle both Unix (/) and Windows (\) path separators
+    const name = path.split(/[/\\]/).pop() || 'Untitled'
     const project = await window.electron.project.create({ name, path })
     addProject(project)
     setActiveProject(project.id)
@@ -104,7 +109,7 @@ function App() {
   }, [projects, projectSwitching, setActiveProject, removeProject])
 
   // Handler: Add new terminal in active project
-  const handleAddTerminal = useCallback(async () => {
+  const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
     // Get fresh state to avoid stale closure
     const { terminals } = useAppStore.getState()
     const currentProjectTerminals = activeProjectId
@@ -123,7 +128,8 @@ function App() {
 
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
-      projectId: activeProject?.id
+      projectId: activeProject?.id,
+      shell
     })
     addTerminal(terminal)
   }, [activeProject, activeProjectId, addTerminal])
@@ -182,9 +188,33 @@ function App() {
     onSelectProject: handleSelectProject
   })
 
-  // Load settings on mount
+  // Listen for custom terminal events from xterm key handler
+  useEffect(() => {
+    const onAddTerminalEvent = () => handleAddTerminal()
+    const onCloseTerminalEvent = () => handleCloseTerminal()
+    const onSelectProjectEvent = (e: Event) => {
+      const { index } = (e as CustomEvent<{ index: number }>).detail
+      const project = projects[index]
+      if (project) {
+        handleSelectProject(project.id)
+      }
+    }
+
+    window.addEventListener('mc:add-terminal', onAddTerminalEvent)
+    window.addEventListener('mc:close-terminal', onCloseTerminalEvent)
+    window.addEventListener('mc:select-project', onSelectProjectEvent)
+
+    return () => {
+      window.removeEventListener('mc:add-terminal', onAddTerminalEvent)
+      window.removeEventListener('mc:close-terminal', onCloseTerminalEvent)
+      window.removeEventListener('mc:select-project', onSelectProjectEvent)
+    }
+  }, [handleAddTerminal, handleCloseTerminal, handleSelectProject, projects])
+
+  // Load settings and detect WSL on mount
   useEffect(() => {
     loadSettings()
+    detectWsl()
   }, [])
 
   // Load YOLO status when project changes
@@ -315,18 +345,18 @@ function App() {
       <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
 
       {/* Title Bar */}
-      <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag">
+      <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag relative">
         <button
           data-testid="titlebar-sidebar-toggle"
           onClick={toggleSidebar}
-          className="p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag mr-2"
+          className={`p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag ${isMac ? 'ml-16' : ''}`}
           title="Toggle Sidebar"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-sm font-medium">MultiClaude</span>
+        <span className="absolute left-1/2 -translate-x-1/2 text-sm font-medium">MultiClaude</span>
       </div>
 
       {/* Project Tabs */}
@@ -362,7 +392,6 @@ function App() {
                       onTerminalClick={setActiveTerminal}
                       onAddTerminal={handleAddTerminal}
                       onCloseTerminal={handleCloseTerminal}
-                      onStartClaude={handleStartClaude}
                       onInsertFilePath={handleInsertFilePath}
                       onTitleChange={updateTerminalTitle}
                     />

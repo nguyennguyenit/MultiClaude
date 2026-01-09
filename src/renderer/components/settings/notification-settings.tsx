@@ -4,6 +4,7 @@ import { TelegramConfigModal } from './telegram-config-modal'
 import { DiscordConfigModal } from './discord-config-modal'
 import { SOUND_PRESETS } from '@shared/constants'
 import type { SoundPreset, OutputMode } from '@shared/types'
+import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 export function NotificationSettings() {
   const { settings, loadSettings, updateSettings } = useNotificationStore()
@@ -36,9 +37,14 @@ export function NotificationSettings() {
 
   return (
     <div className="space-y-4">
+      {/* Section Header */}
+      <SettingsTitle description="Configure notification triggers and channels">
+        Notifications
+      </SettingsTitle>
+
       {/* Events Section */}
       <div>
-        <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">Events</div>
+        <SettingsSubheading>Events</SettingsSubheading>
         <div className="space-y-2">
           <ToggleRow
             label="On Task Complete"
@@ -60,7 +66,7 @@ export function NotificationSettings() {
 
       {/* Behavior Section */}
       <div>
-        <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">Behavior</div>
+        <SettingsSubheading>Behavior</SettingsSubheading>
         <div className="space-y-2">
           {/* Detection Mode */}
           <div className="flex items-center justify-between">
@@ -97,7 +103,7 @@ export function NotificationSettings() {
 
       {/* Sound Section */}
       <div>
-        <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">Sound</div>
+        <SettingsSubheading>Sound</SettingsSubheading>
         <div className="space-y-2">
           <ToggleRow
             label="Enable Sound"
@@ -125,7 +131,7 @@ export function NotificationSettings() {
 
       {/* External Notifications Section */}
       <div>
-        <div className="text-xs text-[var(--mc-text-muted)] uppercase mb-2">External</div>
+        <SettingsSubheading>External</SettingsSubheading>
         <div className="space-y-2">
           {/* Telegram */}
           <div className="flex items-center justify-between">

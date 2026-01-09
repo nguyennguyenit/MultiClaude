@@ -167,6 +167,37 @@ export function useTerminal(terminalId: string) {
 }
 ```
 
+### Shared Component Patterns
+
+Extract repeated UI patterns into shared components to maintain DRY principle:
+
+```typescript
+// components/settings/settings-typography.tsx
+// Shared typography for consistent styling across Settings tabs
+export function SettingsTitle({ children, description }: SettingsTitleProps) {
+  return (
+    <div>
+      <h3 className="text-lg font-medium text-[var(--mc-text-primary)]">{children}</h3>
+      {description && <p className="text-sm text-[var(--mc-text-muted)]">{description}</p>}
+      <hr className="my-4 border-[var(--mc-border)]" />
+    </div>
+  )
+}
+
+export function SettingsSubheading({ children }: { children: ReactNode }) {
+  return (
+    <h4 className="text-xs font-medium uppercase text-[var(--mc-text-muted)] mb-2 tracking-wide">
+      {children}
+    </h4>
+  )
+}
+```
+
+Guidelines:
+- Extract when 3+ components share identical styling patterns
+- Keep shared components simple and focused on single responsibility
+- Use CSS variables for theme-aware styling
+
 ### State Management (Zustand)
 
 ```typescript

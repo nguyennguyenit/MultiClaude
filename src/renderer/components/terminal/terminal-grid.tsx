@@ -14,7 +14,6 @@ interface TerminalGridProps {
   onTerminalClick: (id: string) => void
   onAddTerminal?: () => void
   onCloseTerminal?: (id: string) => void
-  onStartClaude?: (id: string) => void
   onInsertFilePath?: (terminalId: string, paths: string[]) => void
   onTitleChange?: (terminalId: string, title: string) => void
 }
@@ -45,7 +44,6 @@ export const TerminalGrid = memo(function TerminalGrid({
   onTerminalClick,
   onAddTerminal,
   onCloseTerminal,
-  onStartClaude,
   onInsertFilePath,
   onTitleChange
 }: TerminalGridProps) {
@@ -98,7 +96,6 @@ export const TerminalGrid = memo(function TerminalGrid({
                         initialOutput={terminal.output}
                         onActivate={() => onTerminalClick(terminal.id)}
                         onClose={() => onCloseTerminal?.(terminal.id)}
-                        onStartClaude={() => onStartClaude?.(terminal.id)}
                         onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
                         onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
                       />

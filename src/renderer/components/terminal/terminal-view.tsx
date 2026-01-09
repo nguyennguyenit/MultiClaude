@@ -28,10 +28,12 @@ interface TerminalViewProps {
   initialOutput?: string
   /** Callback to expose fit function to parent for resize handling */
   onFitReady?: (fit: () => void) => void
+  /** Callback to expose refresh function to parent for manual refresh */
+  onRefreshReady?: (refresh: () => void) => void
 }
 
-export const TerminalView = memo(function TerminalView({ terminalId, isActive, initialOutput, onFitReady }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, scrollToBottom, isAtBottom } = useTerminal({
+export const TerminalView = memo(function TerminalView({ terminalId, isActive, initialOutput, onFitReady, onRefreshReady }: TerminalViewProps) {
+  const { containerRef, initTerminal, write, fit, focus, scrollToBottom, isAtBottom, refresh } = useTerminal({
     terminalId,
     initialOutput,
     isActive
@@ -83,6 +85,11 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, i
   useEffect(() => {
     onFitReady?.(fit)
   }, [fit, onFitReady])
+
+  // Expose refresh function to parent for manual refresh
+  useEffect(() => {
+    onRefreshReady?.(refresh)
+  }, [refresh, onRefreshReady])
 
   return (
     <div

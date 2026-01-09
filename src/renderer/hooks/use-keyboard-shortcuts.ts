@@ -36,15 +36,22 @@ export function useKeyboardShortcuts({
         return
       }
 
-      // Ctrl+N: New terminal
-      if (e.ctrlKey && e.key === 'n') {
+      // Ctrl+N: New terminal (Cmd+N on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
         onAddTerminal()
         return
       }
 
-      // Ctrl+W: Close active terminal
-      if (e.ctrlKey && e.key === 'w') {
+      // Ctrl+T: New terminal alternative (Cmd+T on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+        e.preventDefault()
+        onAddTerminal()
+        return
+      }
+
+      // Ctrl+W: Close active terminal (Cmd+W on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
         e.preventDefault()
         onCloseTerminal()
         return

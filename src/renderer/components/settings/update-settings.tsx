@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useUpdateStore } from '../../stores'
+import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 const GITHUB_REPO = 'nguyennguyenit/MultiClaude'
 
@@ -19,19 +20,11 @@ export function UpdateSettings() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h3 className="text-lg font-semibold text-[var(--mc-text-primary)]">Updates</h3>
-        <p className="text-sm text-[var(--mc-text-muted)]">Manage MultiClaude updates</p>
-      </div>
-
-      {/* Divider */}
-      <hr className="border-[var(--mc-border)]" />
+      <SettingsTitle description="Manage MultiClaude updates">Updates</SettingsTitle>
 
       {/* VERSION Section */}
       <div className="space-y-4">
-        <span className="text-xs font-semibold text-[var(--mc-text-muted)] uppercase tracking-wider">
-          Version
-        </span>
+        <SettingsSubheading>Version</SettingsSubheading>
 
         <div className="flex items-center gap-2">
           <span className="text-3xl font-bold text-[var(--mc-text-primary)]">
