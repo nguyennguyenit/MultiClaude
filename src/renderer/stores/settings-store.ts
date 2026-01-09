@@ -109,6 +109,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (typeof window !== 'undefined' && window.electron?.terminal?.detectWsl) {
       try {
         const info = await window.electron.terminal.detectWsl()
+        // info is null on non-Windows platforms (main process returns null)
+        if (!info) return
         set({ wslInfo: info })
 
         // Validate saved shell preference - reset if saved distro no longer exists

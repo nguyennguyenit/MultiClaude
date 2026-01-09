@@ -77,37 +77,35 @@ export function TerminalActionBar({
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
         {/* New Terminal - split button with dropdown on Windows */}
-        <div className="relative">
-          <div className="flex items-center">
-            <button
-              ref={addButtonRef}
-              type="button"
-              onClick={handleAddClick}
-              disabled={disabled || terminalCount >= terminalLimit}
-              className={`px-3 py-1 text-xs bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isWindows ? 'rounded-l' : 'rounded'
+        {/* New Terminal - split button with dropdown on Windows */}
+        <div className="relative inline-flex shadow-sm isolate">
+          <button
+            ref={addButtonRef}
+            type="button"
+            onClick={handleAddClick}
+            disabled={disabled || terminalCount >= terminalLimit}
+            className={`relative items-center px-3 py-1.5 text-xs font-medium bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${isWindows ? 'rounded-l-md' : 'rounded-md'
               }`}
-              title="Add new terminal"
+            title="Add new terminal"
+          >
+            + New
+          </button>
+          {isWindows && (
+            <button
+              type="button"
+              onClick={handleDropdownToggle}
+              disabled={disabled || terminalCount >= terminalLimit}
+              className="relative -ml-px items-center px-2 py-1.5 text-xs rounded-r-md bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed border-l border-[var(--mc-bg-primary)]/20 transition-colors"
+              title="Select shell type"
+              aria-label="Select shell type"
+              aria-haspopup="menu"
+              aria-expanded={showShellSelector}
             >
-              + New
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-            {isWindows && (
-              <button
-                type="button"
-                onClick={handleDropdownToggle}
-                disabled={disabled || terminalCount >= terminalLimit}
-                className="px-1.5 py-1 text-xs rounded-r bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed border-l border-[var(--mc-bg-primary)]/20"
-                title="Select shell type"
-                aria-label="Select shell type"
-                aria-haspopup="menu"
-                aria-expanded={showShellSelector}
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            )}
-          </div>
+          )}
 
           {showShellSelector && (
             <ShellSelectorDropdown
@@ -123,11 +121,10 @@ export function TerminalActionBar({
           type="button"
           onClick={() => onToggleYolo(!yoloEnabled)}
           disabled={disabled}
-          className={`px-3 py-1 text-xs rounded flex items-center gap-1 transition-colors ${
-            yoloEnabled
-              ? 'bg-orange-500 text-white'
-              : 'bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-hover)]'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`px-3 py-1 text-xs rounded flex items-center gap-1 transition-colors ${yoloEnabled
+            ? 'bg-orange-500 text-white'
+            : 'bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-hover)]'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
           title={yoloEnabled ? 'YOLO Mode: On (Claude skips confirmations)' : 'YOLO Mode: Off'}
         >
           <span>⚡</span>

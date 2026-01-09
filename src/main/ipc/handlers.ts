@@ -90,7 +90,11 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // WSL detection handler (Windows only)
+  // Returns null on non-Windows platforms so renderer can correctly identify platform
   ipcMain.handle(IPC_CHANNELS.TERMINAL_DETECT_WSL, async () => {
+    if (process.platform !== 'win32') {
+      return null
+    }
     return detectWsl()
   })
 
