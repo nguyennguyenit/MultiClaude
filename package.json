@@ -90,7 +90,7 @@
       "provider": "github",
       "owner": "nguyennguyenit",
       "repo": "MultiClaude",
-      "releaseType": "release"
+      "releaseType": "draft"
     },
     "directories": {
       "output": "release"

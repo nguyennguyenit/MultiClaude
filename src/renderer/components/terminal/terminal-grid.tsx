@@ -47,19 +47,46 @@ export const TerminalGrid = memo(function TerminalGrid({
   onInsertFilePath,
   onTitleChange
 }: TerminalGridProps) {
-  // Empty state with add button
+  // Empty state - Agent Terminals welcome screen
   if (terminals.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-[var(--mc-text-muted)]">
+      <div className="flex items-center justify-center h-full bg-[var(--mc-bg-primary)]">
         <div className="text-center">
-          <p className="mb-2">No terminals open</p>
+          {/* Grid Icon */}
+          <div className="w-16 h-16 mx-auto mb-6 rounded-xl bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center">
+            <svg className="w-8 h-8 text-[var(--mc-accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </div>
+
+          {/* Title */}
+          <h2 className="text-xl font-semibold text-[var(--mc-text-primary)] mb-2">
+            Agent Terminals
+          </h2>
+
+          {/* Description */}
+          <p className="text-[var(--mc-text-secondary)] mb-6 max-w-sm mx-auto">
+            Spawn multiple terminals to run Claude agents in parallel. Use{' '}
+            <kbd className="px-1.5 py-0.5 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] rounded text-xs font-mono">
+              Ctrl+T
+            </kbd>{' '}
+            to create a new terminal.
+          </p>
+
+          {/* New Terminal Button */}
           {onAddTerminal && (
             <button
               type="button"
               onClick={onAddTerminal}
-              className="px-4 py-2 bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] rounded hover:opacity-90"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] font-medium rounded-lg hover:opacity-90 transition-opacity"
             >
-              + New Terminal
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              New Terminal
             </button>
           )}
         </div>

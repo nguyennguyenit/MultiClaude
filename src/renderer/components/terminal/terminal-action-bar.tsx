@@ -30,10 +30,10 @@ export function TerminalActionBar({
   // Show shell dropdown on Windows only (wslInfo is only set on Windows platform)
   const isWindows = wslInfo !== null
 
-  // Handle click - use default shell from settings
+  // Handle click - default shell is handled by parent (App.tsx handleAddTerminal)
   const handleAddClick = useCallback(() => {
-    onAddTerminal(settings.windowsShell)
-  }, [onAddTerminal, settings.windowsShell])
+    onAddTerminal()
+  }, [onAddTerminal])
 
   // Handle dropdown toggle (Windows only)
   const handleDropdownToggle = useCallback(() => {

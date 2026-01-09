@@ -42,17 +42,17 @@ test.describe('State Transitions', () => {
         await window.waitForTimeout(500)
       }
 
-      // Verify "No terminals open" message
-      const noTerminalsText = window.locator('text=No terminals open')
-      await expect(noTerminalsText).toBeVisible()
+      // Verify "Agent Terminals" welcome screen
+      const agentTerminalsText = window.locator('text=Agent Terminals')
+      await expect(agentTerminalsText).toBeVisible()
 
-      // Verify "+ New Terminal" button is visible
-      const newTerminalBtn = window.locator('button:has-text("+ New Terminal")')
+      // Verify "New Terminal" button is visible
+      const newTerminalBtn = window.locator('button:has-text("New Terminal")')
       await expect(newTerminalBtn).toBeVisible()
     })
 
     // Skip: Flaky due to async terminal management - requires closing all terminals
-    test.skip('clicking "+ New Terminal" creates a terminal', async ({ window }) => {
+    test.skip('clicking "New Terminal" creates a terminal', async ({ window }) => {
       // Setup with project and no terminals
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(200)
@@ -68,8 +68,8 @@ test.describe('State Transitions', () => {
         await window.waitForTimeout(500)
       }
 
-      // Click "+ New Terminal" button
-      const newTerminalBtn = window.locator('button:has-text("+ New Terminal")')
+      // Click "New Terminal" button
+      const newTerminalBtn = window.locator('button:has-text("New Terminal")')
       if (await newTerminalBtn.isVisible()) {
         await newTerminalBtn.click()
         await window.waitForTimeout(300)
@@ -233,16 +233,16 @@ test.describe('State Transitions', () => {
         await window.waitForTimeout(500)
       }
 
-      // Verify empty state
-      const noTerminals = window.locator('text=No terminals open')
-      await expect(noTerminals).toBeVisible()
+      // Verify empty state (Agent Terminals welcome screen)
+      const agentTerminals = window.locator('text=Agent Terminals')
+      await expect(agentTerminals).toBeVisible()
 
       // Add terminal
       await window.keyboard.press('Control+n')
       await window.waitForTimeout(300)
 
       // Empty state should be gone
-      await expect(noTerminals).not.toBeVisible()
+      await expect(agentTerminals).not.toBeVisible()
 
       // Terminal should be visible
       const terminal = window.locator('.terminal-pane')

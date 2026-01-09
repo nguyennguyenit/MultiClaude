@@ -126,10 +126,13 @@ function App() {
       return
     }
 
+    // Use default shell from settings if not specified (Windows only)
+    const effectiveShell = shell ?? useSettingsStore.getState().settings.windowsShell
+
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
       projectId: activeProject?.id,
-      shell
+      shell: effectiveShell
     })
     addTerminal(terminal)
   }, [activeProject, activeProjectId, addTerminal])
@@ -304,12 +307,8 @@ function App() {
     init()
   }, [])
 
-  // Create initial terminal when project is selected and no terminals exist
-  useEffect(() => {
-    if (activeProjectId && projectTerminals.length === 0) {
-      handleAddTerminal()
-    }
-  }, [activeProjectId, projectTerminals.length, handleAddTerminal])
+  // NOTE: Removed auto-create terminal - now shows welcome screen instead
+  // User can create terminal via "+ New Terminal" button or Ctrl+T
 
   // Handle terminal exit
   useEffect(() => {
