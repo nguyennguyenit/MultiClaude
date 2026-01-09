@@ -11,6 +11,11 @@ export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal se
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
+const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
+
+// Terminal font family - used for font loading detection
+const TERMINAL_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
+const PRIMARY_FONT = 'JetBrains Mono'
 
 interface UseTerminalOptions {
   terminalId: string
@@ -104,7 +109,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       cursorBlink: true,
       cursorStyle: 'block',
       fontSize: 14,
-      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+      fontFamily: TERMINAL_FONT_FAMILY,
       theme: getCurrentTerminalTheme(),
       allowProposedApi: true
     })
@@ -169,6 +174,29 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       } else {
         // Initial resize only for fresh terminals
         window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+      }
+
+      // Font loading detection: refit terminal after primary font loads
+      // This fixes character width calculation issues when font loads after terminal init
+      if (document.fonts && typeof document.fonts.load === 'function') {
+        document.fonts.load(`14px "${PRIMARY_FONT}"`).then(() => {
+          if (disposedRef.current || !terminalRef.current || !fitAddonRef.current) return
+          // Delay refit slightly to ensure font metrics are fully updated
+          setTimeout(() => {
+            if (disposedRef.current || !fitAddonRef.current) return
+            try {
+              fitAddonRef.current.fit()
+              // Notify PTY of new dimensions
+              if (terminalRef.current) {
+                window.electron.terminal.resize(terminalId, terminalRef.current.cols, terminalRef.current.rows)
+              }
+            } catch {
+              // Ignore fit errors
+            }
+          }, FONT_LOAD_REFIT_DELAY)
+        }).catch(() => {
+          // Font load failed, fallback font will be used - no action needed
+        })
       }
     }, TERMINAL_INIT_DELAY)
 
