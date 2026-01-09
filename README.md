@@ -80,6 +80,13 @@ src/
 - Node.js 18+
 - GitHub CLI (`gh`) for GitHub integration
 - Claude Code CLI for running Claude
+- **Windows WSL**: If using WSL shell, you must install a Linux distribution:
+  ```powershell
+  wsl --install -d Ubuntu
+  ```
+  > Error `WSL_E_DISTRO_NOT_FOUND` means WSL is installed but no distribution exists. Run the command above to fix.
+
+  > **Note**: WSL terminals take 2-5 seconds to start (cold start) due to Linux kernel initialization. Subsequent terminals are faster while WSL is running.
 
 ## Usage
 
@@ -93,12 +100,14 @@ src/
 | Action | Shortcut |
 |--------|----------|
 | Switch to Project 1-9 | Alt+1 to Alt+9 |
-| New Terminal | Ctrl+N |
+| New Terminal | Ctrl+N or Ctrl+T |
 | Close Active Terminal | Ctrl+W |
 | Copy | Select text (auto-copies) |
 | Paste | Right-click or Ctrl+V |
 | Paste Image | Ctrl+V (clipboard image > temp file > insert path) |
 | Insert File Path | Drag-and-drop file |
+
+> **Note:** All shortcuts work regardless of terminal focus. On macOS, Cmd replaces Ctrl (Alt shortcuts unchanged).
 
 ## Notifications
 

@@ -1,7 +1,7 @@
 import * as pty from '@lydell/node-pty'
 import os from 'os'
 import { EventEmitter } from 'events'
-import type { Terminal, TerminalSession } from '@shared/types'
+import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
 
 interface PTYProcess {
   id: string
@@ -25,6 +25,49 @@ export class TerminalManager extends EventEmitter {
       return process.env.COMSPEC || 'cmd.exe'
     }
     return process.env.SHELL || '/bin/bash'
+  }
+
+  /**
+   * Get shell command and args based on WindowsShell option
+   * Non-Windows: uses default shell
+   * Windows: supports cmd, powershell, or wsl distro
+   */
+  private getShellCommand(shell?: WindowsShell): { command: string; args: string[] } {
+    // Non-Windows: use default shell
+    if (process.platform !== 'win32') {
+      return {
+        command: process.env.SHELL || '/bin/bash',
+        args: []
+      }
+    }
+
+    // Windows: check shell option
+    if (!shell || shell.type === 'cmd') {
+      return {
+        command: process.env.COMSPEC || 'cmd.exe',
+        args: []
+      }
+    }
+
+    if (shell.type === 'powershell') {
+      return {
+        command: 'powershell.exe',
+        args: ['-NoLogo']
+      }
+    }
+
+    if (shell.type === 'wsl') {
+      return {
+        command: 'wsl.exe',
+        args: ['-d', shell.distro]
+      }
+    }
+
+    // Fallback
+    return {
+      command: process.env.COMSPEC || 'cmd.exe',
+      args: []
+    }
   }
 
   private generateId(): string {
@@ -76,11 +119,14 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
-  create(options: { cwd?: string; projectId?: string } = {}): Terminal {
+  create(options: { cwd?: string; projectId?: string; shell?: WindowsShell } = {}): Terminal {
     const id = this.generateId()
     const cwd = options.cwd || os.homedir()
 
-    const ptyProcess = pty.spawn(this.shell, [], {
+    // Determine shell command and args based on shell option
+    const { command, args } = this.getShellCommand(options.shell)
+
+    const ptyProcess = pty.spawn(command, args, {
       name: 'xterm-256color',
       cwd,
       env: { ...process.env, TERM: 'xterm-256color' },

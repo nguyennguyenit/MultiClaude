@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
   TERMINAL_LIST: 'terminal:list',
   TERMINAL_INVOKE_CLAUDE: 'terminal:invoke-claude',
   TERMINAL_TITLE_CHANGE: 'terminal:title-change',
+  TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
 
   // Project channels
   PROJECT_LIST: 'project:list',

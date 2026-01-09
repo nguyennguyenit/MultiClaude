@@ -89,6 +89,20 @@ export function ProjectTabs({
           </div>
         ))}
 
+        {/* Add project button - positioned right after last tab like Chrome */}
+        <button
+          type="button"
+          data-testid="project-tabs-add"
+          onClick={onAddProject}
+          className="flex-shrink-0 p-1.5 mx-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] transition-colors"
+          title="Add Project"
+          aria-label="Add Project"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+
         {/* Empty state when no projects */}
         {projects.length === 0 && (
           <div data-testid="project-tabs-empty" className="px-4 py-1.5 text-sm text-[var(--mc-text-muted)]">
@@ -97,11 +111,10 @@ export function ProjectTabs({
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-1 px-2">
-        {/* Overflow dropdown for 10+ projects */}
-        {overflowProjects.length > 0 && (
-          <div className="relative" ref={overflowRef}>
+      {/* Overflow dropdown for 10+ projects */}
+      {overflowProjects.length > 0 && (
+        <div className="flex items-center px-2" ref={overflowRef}>
+          <div className="relative">
             <button
               data-testid="project-tabs-overflow"
               onClick={() => setShowOverflow(!showOverflow)}
@@ -153,22 +166,8 @@ export function ProjectTabs({
               </div>
             )}
           </div>
-        )}
-
-        {/* Add project button */}
-        <button
-          type="button"
-          data-testid="project-tabs-add"
-          onClick={onAddProject}
-          className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded"
-          title="Add Project"
-          aria-label="Add Project"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   )
 }

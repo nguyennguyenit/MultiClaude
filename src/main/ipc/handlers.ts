@@ -8,6 +8,7 @@ import type { GitHeadWatcher } from '../git/git-head-watcher'
 import type { ProjectStore } from '../project/project-store'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
+import { detectWsl } from '../terminal/wsl-detector'
 import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
 
 interface Managers {
@@ -86,6 +87,15 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, async (_, { terminalId, sessionId }) => {
     return terminalManager.invokeClaudeCode(terminalId, sessionId)
+  })
+
+  // WSL detection handler (Windows only)
+  // Returns null on non-Windows platforms so renderer can correctly identify platform
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_DETECT_WSL, async () => {
+    if (process.platform !== 'win32') {
+      return null
+    }
+    return detectWsl()
   })
 
   // Project handlers

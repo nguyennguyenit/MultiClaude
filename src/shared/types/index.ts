@@ -150,6 +150,23 @@ export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo'
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 
+// WSL detection types (Windows only)
+export interface WslDistro {
+  name: string
+  isDefault: boolean
+}
+
+export interface WslInfo {
+  available: boolean
+  distros: WslDistro[]
+}
+
+// Windows shell selection type
+export type WindowsShell =
+  | { type: 'cmd' }
+  | { type: 'powershell' }
+  | { type: 'wsl'; distro: string }
+
 // Terminal limit types
 export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
 export interface TerminalLimit {
@@ -177,6 +194,8 @@ export interface AppSettings {
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   glassmorphismEnabled: boolean
+  // Windows-only: default shell for new terminals
+  windowsShell?: WindowsShell
 }
 
 // GitHub Issues/PRs types

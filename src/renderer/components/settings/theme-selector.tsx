@@ -1,6 +1,7 @@
 import { useSettingsStore } from '../../stores'
 import { COLOR_THEMES } from '@shared/constants'
 import type { ThemeMode, ColorThemeDefinition } from '@shared/types'
+import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 export function ThemeSelector() {
   const { settings, setThemeMode, setColorTheme } = useSettingsStore()
@@ -11,17 +12,13 @@ export function ThemeSelector() {
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div>
-        <h3 className="text-lg font-medium">Appearance</h3>
-        <p className="text-sm text-[var(--mc-text-muted)]">
-          Customize how MultiClaude looks
-        </p>
-        <hr className="my-4 border-[var(--mc-border)]" />
-      </div>
+      <SettingsTitle description="Customize how MultiClaude looks">
+        Appearance
+      </SettingsTitle>
 
       {/* Appearance Mode */}
       <div>
-        <h4 className="text-sm font-medium mb-1">Appearance Mode</h4>
+        <SettingsSubheading>Appearance Mode</SettingsSubheading>
         <p className="text-xs text-[var(--mc-text-muted)] mb-3">
           Choose light, dark, or system preference
         </p>
@@ -39,7 +36,7 @@ export function ThemeSelector() {
 
       {/* Color Theme */}
       <div>
-        <h4 className="text-sm font-medium mb-1">Color Theme</h4>
+        <SettingsSubheading>Color Theme</SettingsSubheading>
         <p className="text-xs text-[var(--mc-text-muted)] mb-3">
           Select a color palette for the interface
         </p>

@@ -9,7 +9,6 @@ interface TerminalPaneProps {
   initialOutput?: string
   onActivate: () => void
   onClose: () => void
-  onStartClaude: () => void
   onTitleChange?: (newTitle: string) => void
   onInsertFilePath?: (paths: string[]) => void
 }
@@ -23,13 +22,13 @@ export const TerminalPane = memo(function TerminalPane({
   initialOutput,
   onActivate,
   onClose,
-  onStartClaude,
   onTitleChange,
   onInsertFilePath
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeTimeoutRef = useRef<number | undefined>(undefined)
   const terminalFitRef = useRef<(() => void) | null>(null)
+  const terminalRefreshRef = useRef<(() => void) | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
 
@@ -43,6 +42,16 @@ export const TerminalPane = memo(function TerminalPane({
   // Store fit callback from TerminalView
   const handleTerminalFit = useCallback((fitFn: () => void) => {
     terminalFitRef.current = fitFn
+  }, [])
+
+  // Store refresh callback from TerminalView
+  const handleTerminalRefresh = useCallback((refreshFn: () => void) => {
+    terminalRefreshRef.current = refreshFn
+  }, [])
+
+  // Handle refresh button click
+  const handleRefreshClick = useCallback(() => {
+    terminalRefreshRef.current?.()
   }, [])
 
   // File picker handler
@@ -160,19 +169,19 @@ export const TerminalPane = memo(function TerminalPane({
           </svg>
         </button>
 
-        {/* Start Claude button */}
+        {/* Refresh terminal display button */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation()
-            onStartClaude()
+            handleRefreshClick()
           }}
-          className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)]"
-          title="Start Claude"
-          aria-label="Start Claude"
+          className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+          title="Refresh terminal display"
+          aria-label="Refresh terminal display"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
 
@@ -200,6 +209,7 @@ export const TerminalPane = memo(function TerminalPane({
           isActive={isActive}
           initialOutput={initialOutput}
           onFitReady={handleTerminalFit}
+          onRefreshReady={handleTerminalRefresh}
         />
       </div>
     </div>

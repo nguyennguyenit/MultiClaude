@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
-import type { TerminalLimitPreset, TerminalRenderMode } from '@shared/types'
+import { getShellKey } from '../../utils'
+import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
+import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 2, label: '2' },
@@ -17,7 +19,7 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
 ]
 
 export function TerminalSettings() {
-  const { settings, setTerminalLimit, setTerminalRenderMode } = useSettingsStore()
+  const { settings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
   const { terminalLimit } = settings
 
   const [customValue, setCustomValue] = useState(
@@ -49,19 +51,40 @@ export function TerminalSettings() {
     }
   }
 
+  // Build shell options for dropdown (Windows with WSL only)
+  const shellOptions = useMemo(() => {
+    const options: { value: WindowsShell; label: string }[] = [
+      { value: { type: 'cmd' }, label: 'Command Prompt' },
+      { value: { type: 'powershell' }, label: 'PowerShell' }
+    ]
+
+    if (wslInfo?.distros) {
+      wslInfo.distros.forEach((distro) => {
+        options.push({
+          value: { type: 'wsl', distro: distro.name },
+          label: `WSL: ${distro.name}${distro.isDefault ? ' (default)' : ''}`
+        })
+      })
+    }
+
+    return options
+  }, [wslInfo])
+
+  // Show shell settings on Windows (wslInfo is only set on Windows platform)
+  const showShellSettings = wslInfo !== null
+
+  const currentShellKey = getShellKey(settings.windowsShell || { type: 'cmd' })
+
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div>
-        <h3 className="text-lg font-medium">Terminals</h3>
-        <p className="text-sm text-[var(--mc-text-muted)]">
-          Configure terminal behavior and limits
-        </p>
-        <hr className="my-4 border-[var(--mc-border)]" />
-      </div>
+      <SettingsTitle description="Configure terminal behavior and limits">
+        Terminals
+      </SettingsTitle>
 
       {/* Terminal Limit Section */}
-      <SettingsSection title="General">
+      <div>
+        <SettingsSubheading>General</SettingsSubheading>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -109,10 +132,51 @@ export function TerminalSettings() {
             </div>
           )}
         </div>
-      </SettingsSection>
+      </div>
+
+      {/* Default Shell Section - Windows only, WSL available */}
+      {showShellSettings && (
+        <div>
+          <SettingsSubheading>Default Shell</SettingsSubheading>
+          <div className="space-y-3">
+            <div>
+              <span className="text-sm">Shell for New Terminals</span>
+              <p className="text-xs text-[var(--mc-text-muted)]">
+                Select the default shell when creating new terminals
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {shellOptions.map((option) => {
+                const optionKey = getShellKey(option.value)
+                const isSelected = optionKey === currentShellKey
+
+                return (
+                  <button
+                    key={optionKey}
+                    onClick={() => setWindowsShell(option.value)}
+                    className={`
+                      px-4 py-2 rounded-lg border-2 text-sm
+                      transition-all duration-150
+                      ${isSelected
+                        ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
+                        : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
+                    `}
+                  >
+                    <span className="flex items-center gap-2">
+                      {option.label}
+                      {isSelected && <span className="text-[var(--mc-accent)]">✓</span>}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Terminal Rendering Mode */}
-      <SettingsSection title="Rendering">
+      <div>
+        <SettingsSubheading>Rendering</SettingsSubheading>
         <div className="space-y-3">
           <div>
             <span className="text-sm">Rendering Mode</span>
@@ -142,17 +206,7 @@ export function TerminalSettings() {
             ))}
           </div>
         </div>
-      </SettingsSection>
-    </div>
-  )
-}
-
-// Reusable settings section component
-function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h4 className="text-sm font-medium mb-3 text-[var(--mc-text-secondary)]">{title}</h4>
-      <div className="space-y-3">{children}</div>
+      </div>
     </div>
   )
 }
