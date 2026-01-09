@@ -5,6 +5,7 @@ import { TerminalManager } from './terminal/terminal-manager'
 import { GitManager } from './git/git-manager'
 import { GitHeadWatcher } from './git/git-head-watcher'
 import { ProjectStore } from './project/project-store'
+import { SettingsStore } from './settings'
 import { NotificationManager } from './notification'
 import { registerIpcHandlers } from './ipc/handlers'
 import { registerGitHubHandlers } from './ipc/github-handlers'
@@ -20,6 +21,7 @@ let terminalManager: TerminalManager | null = null
 let gitManager: GitManager | null = null
 let gitHeadWatcher: GitHeadWatcher | null = null
 let projectStore: ProjectStore | null = null
+let settingsStore: SettingsStore | null = null
 let notificationManager: NotificationManager | null = null
 
 // Vite dev server URL (injected by vite-plugin-electron)
@@ -50,6 +52,7 @@ function createWindow() {
   gitManager = new GitManager()
   gitHeadWatcher = new GitHeadWatcher()
   projectStore = new ProjectStore()
+  settingsStore = new SettingsStore()
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
 
