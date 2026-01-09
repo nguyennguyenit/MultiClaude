@@ -27,19 +27,18 @@ export function TerminalActionBar({
   const addButtonRef = useRef<HTMLButtonElement>(null)
   const { wslInfo, settings } = useSettingsStore()
 
-  // Show shell selector only on Windows with WSL available
-  const canSelectShell = wslInfo?.available === true
+  // Allow shell selection on Windows (wslInfo is only set on Windows platform)
+  const canSelectShell = wslInfo !== null
 
   // Handle click - use default shell from settings
   const handleAddClick = useCallback(() => {
     onAddTerminal(settings.windowsShell)
   }, [onAddTerminal, settings.windowsShell])
 
-  // Handle right-click - show dropdown for shell selection
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+  // Handle dropdown toggle
+  const handleDropdownToggle = useCallback(() => {
     if (!canSelectShell) return
-    e.preventDefault()
-    setShowShellSelector(true)
+    setShowShellSelector((prev) => !prev)
   }, [canSelectShell])
 
   // Handle shell selection from dropdown
@@ -77,19 +76,38 @@ export function TerminalActionBar({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {/* New Terminal - with right-click shell selector */}
+        {/* New Terminal - split button with dropdown */}
         <div className="relative">
-          <button
-            ref={addButtonRef}
-            type="button"
-            onClick={handleAddClick}
-            onContextMenu={handleContextMenu}
-            disabled={disabled || terminalCount >= terminalLimit}
-            className="px-3 py-1 text-xs rounded bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={canSelectShell ? 'Click: default shell, Right-click: select shell' : 'Add new terminal'}
-          >
-            + New
-          </button>
+          <div className="flex items-center">
+            <button
+              ref={addButtonRef}
+              type="button"
+              onClick={handleAddClick}
+              disabled={disabled || terminalCount >= terminalLimit}
+              className={`px-3 py-1 text-xs bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                canSelectShell ? 'rounded-l' : 'rounded'
+              }`}
+              title="Add new terminal with default shell"
+            >
+              + New
+            </button>
+            {canSelectShell && (
+              <button
+                type="button"
+                onClick={handleDropdownToggle}
+                disabled={disabled || terminalCount >= terminalLimit}
+                className="px-1.5 py-1 text-xs rounded-r bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed border-l border-[var(--mc-bg-primary)]/20"
+                title="Select shell type"
+                aria-label="Select shell type"
+                aria-haspopup="menu"
+                aria-expanded={showShellSelector}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
+          </div>
 
           {showShellSelector && (
             <ShellSelectorDropdown
