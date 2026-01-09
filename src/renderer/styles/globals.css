@@ -63,6 +63,7 @@ body {
 .terminal-container .xterm {
   padding: 8px;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .terminal-container .xterm-viewport {

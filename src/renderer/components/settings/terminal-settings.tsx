@@ -70,8 +70,8 @@ export function TerminalSettings() {
     return options
   }, [wslInfo])
 
-  // Show shell settings only on Windows with WSL available
-  const showShellSettings = wslInfo?.available === true
+  // Show shell settings on Windows (wslInfo is only set on Windows platform)
+  const showShellSettings = wslInfo !== null
 
   const currentShellKey = getShellKey(settings.windowsShell || { type: 'cmd' })
 
