@@ -2,8 +2,9 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore } from '../stores'
-import { getTerminalTheme } from '@shared/constants'
+import { getTerminalTheme, isAllowedExternalUrl } from '@shared/constants'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -118,6 +119,21 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     terminal.loadAddon(fitAddon)
 
     terminal.open(container)
+
+    // Load web links addon for Ctrl+Click URL opening
+    const webLinksAddon = new WebLinksAddon(
+      (event, uri) => {
+        // Only open on Ctrl+Click (Windows/Linux) or Cmd+Click (macOS)
+        if (event.ctrlKey || event.metaKey) {
+          if (isAllowedExternalUrl(uri)) {
+            window.electron.app.openExternal(uri)
+          } else {
+            useToastStore.getState().addToast('Only http/https URLs can be opened', 'info')
+          }
+        }
+      }
+    )
+    terminal.loadAddon(webLinksAddon)
 
     // Helper function to check and update scroll position
     const updateScrollPosition = () => {

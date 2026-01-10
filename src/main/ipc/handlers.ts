@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { IPC_CHANNELS, DEFAULT_SETTINGS } from '@shared/constants'
+import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
@@ -337,6 +337,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       return { success: true, updateState: result }
     } catch (error) {
       return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.on(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_, url: string) => {
+    if (isAllowedExternalUrl(url)) {
+      shell.openExternal(url)
     }
   })
 
