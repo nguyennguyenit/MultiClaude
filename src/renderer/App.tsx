@@ -72,6 +72,7 @@ function App() {
   const handleSelectProject = useCallback(async (id: string | null) => {
     if (!id) {
       setActiveProject(null)
+      setActiveTerminal(null) // Clear terminal selection when no project
       return
     }
 
@@ -105,8 +106,14 @@ function App() {
       setActiveProject(id)
     }
 
+    // Auto-select first terminal of new project to fix cursor blink bug.
+    // Uses getState() for fresh terminals after dispose delay completes.
+    const { terminals } = useAppStore.getState()
+    const newProjectTerminals = terminals.filter(t => t.projectId === id)
+    setActiveTerminal(newProjectTerminals[0]?.id || null)
+
     prevProjectIdRef.current = id
-  }, [projects, projectSwitching, setActiveProject, removeProject])
+  }, [projects, projectSwitching, setActiveProject, setActiveTerminal, removeProject])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
