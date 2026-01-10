@@ -110,7 +110,7 @@ export const TerminalPane = memo(function TerminalPane({
     >
       {/* Header bar */}
       <div className="flex items-center h-6 px-2 bg-[var(--mc-bg-tertiary)] border-b border-[var(--mc-border)] flex-shrink-0">
-        {/* Title - editable on double-click */}
+        {/* Title - editable on double-click or edit button */}
         {isEditing ? (
           <input
             type="text"
@@ -137,13 +137,30 @@ export const TerminalPane = memo(function TerminalPane({
             className="flex-1 text-xs bg-transparent border-none outline-none text-[var(--mc-text-primary)]"
           />
         ) : (
-          <span
-            className="flex-1 text-xs truncate text-[var(--mc-text-secondary)] cursor-default"
-            onDoubleClick={() => setIsEditing(true)}
-            title="Double-click to rename"
-          >
-            {title}
-          </span>
+          <>
+            <span
+              className="flex-1 text-xs truncate text-[var(--mc-text-secondary)] cursor-default"
+              onDoubleClick={() => setIsEditing(true)}
+              title="Double-click to rename"
+            >
+              {title}
+            </span>
+            {/* Rename button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsEditing(true)
+              }}
+              className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              title="Rename terminal"
+              aria-label="Rename terminal"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </>
         )}
 
         {/* Claude mode indicator */}
