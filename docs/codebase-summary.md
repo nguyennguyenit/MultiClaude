@@ -30,12 +30,18 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 - **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
 - **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
+  - **Hidden Terminals Container**: CSS visibility-based hiding (Phase 1 of Terminal Hanging Fix)
+    - Inactive project terminals rendered with `display: none` instead of React unmount
+    - Prevents xterm.js disposal while PTY continues running, preserving terminal state
+    - Enables immediate ESC response when switching projects (no "hanging" terminals)
+    - Hidden terminals passed to TerminalGrid via `terminals` prop, filtered by `activeProjectId`
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
   - **Active Terminal Styling** (`globals.css`): Visual distinction via glow + opacity
     - `--terminal-active-glow`: CSS var for active pane outer glow (`color-mix()` animated)
     - `--terminal-transition`: Unified 0.25s ease timing for opacity/glow transitions
     - Active pane: animated glow effect; Inactive: 0.85 opacity
     - `will-change: opacity, box-shadow` for GPU-optimized transitions
+  - **Hidden Prop**: `hidden` prop disables WebGL for GPU optimization when terminal not visible
 - **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
   - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
   - 5-line threshold reduces button flicker on minor scroll changes

@@ -45,8 +45,9 @@ function App() {
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
 
-  // Filter terminals for active project
-  const projectTerminals = activeProjectId
+  // Get visible terminals for UI displays (action bar count)
+  // Note: All terminals are passed to TerminalGrid which handles hiding via CSS
+  const visibleTerminals = activeProjectId
     ? terminals.filter(t => t.projectId === activeProjectId)
     : terminals
 
@@ -62,11 +63,18 @@ function App() {
     setActiveProject(project.id)
   }, [addProject, setActiveProject])
 
-  // Handler: Delete project
+  // Handler: Delete project (cleanup terminals first to prevent orphans)
   const handleDeleteProject = useCallback(async (id: string) => {
+    // Close all terminals for this project to prevent orphaned hidden terminals
+    const projectTerminals = terminals.filter(t => t.projectId === id)
+    for (const terminal of projectTerminals) {
+      await window.electron.terminal.destroy(terminal.id)
+      removeTerminal(terminal.id)
+    }
+
     await window.electron.project.delete(id)
     removeProject(id)
-  }, [removeProject])
+  }, [terminals, removeProject, removeTerminal])
 
   // Handler: Switch to project with folder validation
   const handleSelectProject = useCallback(async (id: string | null) => {
@@ -180,7 +188,7 @@ function App() {
 
   // Handler: Kill all terminals in active project (with delay to prevent WebGL warnings)
   const handleKillAll = useCallback(async () => {
-    const terminalsToKill = [...projectTerminals]
+    const terminalsToKill = [...visibleTerminals]
     for (const terminal of terminalsToKill) {
       await window.electron.terminal.destroy(terminal.id)
       removeTerminal(terminal.id)
@@ -189,7 +197,7 @@ function App() {
         await new Promise(resolve => setTimeout(resolve, TERMINAL_DISPOSE_DELAY + 50))
       }
     }
-  }, [projectTerminals, removeTerminal])
+  }, [visibleTerminals, removeTerminal])
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
@@ -361,7 +369,7 @@ function App() {
               {activeView === 'terminals' && (
                 <>
                   <TerminalActionBar
-                    terminalCount={projectTerminals.length}
+                    terminalCount={visibleTerminals.length}
                     terminalLimit={getTerminalLimitValue()}
                     yoloEnabled={yoloEnabled}
                     onAddTerminal={handleAddTerminal}
@@ -370,7 +378,8 @@ function App() {
                   />
                   <div data-testid="terminal-area" className="flex-1 min-h-0">
                     <TerminalGrid
-                      terminals={projectTerminals}
+                      terminals={terminals}
+                      activeProjectId={activeProjectId}
                       activeTerminalId={activeTerminalId}
                       isTransitioning={projectSwitching}
                       onTerminalClick={setActiveTerminal}

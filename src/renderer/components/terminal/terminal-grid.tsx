@@ -9,6 +9,7 @@ interface TerminalWithOutput extends Terminal {
 
 interface TerminalGridProps {
   terminals: TerminalWithOutput[]
+  activeProjectId: string | null
   activeTerminalId: string | null
   isTransitioning?: boolean
   onTerminalClick: (id: string) => void
@@ -39,6 +40,7 @@ function splitIntoRows<T>(items: T[], cols: number): T[][] {
 
 export const TerminalGrid = memo(function TerminalGrid({
   terminals,
+  activeProjectId,
   activeTerminalId,
   isTransitioning = false,
   onTerminalClick,
@@ -47,8 +49,13 @@ export const TerminalGrid = memo(function TerminalGrid({
   onInsertFilePath,
   onTitleChange
 }: TerminalGridProps) {
-  // Empty state - Agent Terminals welcome screen
-  if (terminals.length === 0) {
+  // Calculate visible terminals for the active project (for grid layout)
+  const visibleTerminals = activeProjectId
+    ? terminals.filter(t => t.projectId === activeProjectId)
+    : terminals
+
+  // Empty state - Agent Terminals welcome screen (based on visible terminals)
+  if (visibleTerminals.length === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-[var(--mc-bg-primary)] relative overflow-hidden">
         {/* Background Glow */}
@@ -99,15 +106,42 @@ export const TerminalGrid = memo(function TerminalGrid({
     )
   }
 
-  // Calculate grid based only on actual terminals (no placeholder)
-  const { cols } = calculateGrid(terminals.length)
-  const rows = splitIntoRows(terminals, cols)
+  // Calculate grid based only on visible terminals for proper sizing
+  const { cols } = calculateGrid(visibleTerminals.length)
+  const rows = splitIntoRows(visibleTerminals, cols)
+
+  // Get hidden terminals (other projects) - these stay mounted but hidden
+  const hiddenTerminals = activeProjectId
+    ? terminals.filter(t => t.projectId !== activeProjectId)
+    : []
 
   return (
     <div
       className={`h-full transition-opacity duration-100 ${isTransitioning ? 'opacity-50 pointer-events-none' : 'opacity-100'
         }`}
     >
+      {/* Hidden terminals container - keeps terminals mounted but invisible */}
+      {hiddenTerminals.length > 0 && (
+        <div style={{ display: 'none' }} aria-hidden="true">
+          {hiddenTerminals.map((terminal) => (
+            <TerminalPane
+              key={terminal.id}
+              terminalId={terminal.id}
+              title={terminal.title}
+              isActive={false}
+              hidden={true}
+              isClaudeMode={terminal.isClaudeMode}
+              initialOutput={terminal.output}
+              onActivate={() => onTerminalClick(terminal.id)}
+              onClose={() => onCloseTerminal?.(terminal.id)}
+              onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
+              onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Visible terminals in grid layout */}
       <Group orientation="vertical" className="h-full">
         {rows.map((rowTerminals, rowIndex) => {
           const cellCount = rowTerminals.length
@@ -123,6 +157,7 @@ export const TerminalGrid = memo(function TerminalGrid({
                           terminalId={terminal.id}
                           title={terminal.title}
                           isActive={terminal.id === activeTerminalId}
+                          hidden={false}
                           isClaudeMode={terminal.isClaudeMode}
                           initialOutput={terminal.output}
                           onActivate={() => onTerminalClick(terminal.id)}

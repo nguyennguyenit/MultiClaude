@@ -22,6 +22,7 @@ interface UseTerminalOptions {
   terminalId: string
   initialOutput?: string
   isActive?: boolean  // Required for balanced render mode WebGL toggle
+  isHidden?: boolean  // Hidden terminals have WebGL disabled to save GPU resources
   onResize?: (cols: number, rows: number) => void
 }
 
@@ -37,9 +38,13 @@ function getCurrentTerminalTheme() {
 }
 
 /**
- * Determine if WebGL should be used based on render mode and active state
+ * Determine if WebGL should be used based on render mode, active state, and hidden state
+ * Hidden terminals never use WebGL to save GPU resources
  */
-function shouldUseWebGL(isActive: boolean): boolean {
+function shouldUseWebGL(isActive: boolean, isHidden: boolean): boolean {
+  // Never use WebGL for hidden terminals (saves GPU resources)
+  if (isHidden) return false
+
   const mode = useSettingsStore.getState().settings.terminalRenderMode ?? 'balanced'
   switch (mode) {
     case 'performance':
@@ -51,13 +56,14 @@ function shouldUseWebGL(isActive: boolean): boolean {
   }
 }
 
-export function useTerminal({ terminalId, initialOutput, isActive = true, onResize }: UseTerminalOptions) {
+export function useTerminal({ terminalId, initialOutput, isActive = true, isHidden = false, onResize }: UseTerminalOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
   const webglAddonRef = useRef<WebglAddon | null>(null)
   const isActiveRef = useRef(isActive)
+  const isHiddenRef = useRef(isHidden)
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
@@ -167,7 +173,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (disposedRef.current || !terminalRef.current) return
 
       // Conditionally load WebGL based on render mode setting
-      if (shouldUseWebGL(isActiveRef.current)) {
+      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -400,7 +406,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       terminalRef.current.refresh(0, terminalRef.current.rows - 1)
 
       // 3. Re-init WebGL if needed
-      if (shouldUseWebGL(isActiveRef.current)) {
+      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -497,9 +503,10 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     return unsubscribe
   }, [])
 
-  // Toggle WebGL addon based on active state and render mode (debounced)
+  // Toggle WebGL addon based on active state, hidden state, and render mode (debounced)
   useEffect(() => {
     isActiveRef.current = isActive
+    isHiddenRef.current = isHidden
     if (!terminalRef.current || disposedRef.current) return
 
     // Clear pending toggle
@@ -511,7 +518,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     const toggleWebGL = () => {
       if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
 
-      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
       const hasWebGL = webglAddonRef.current !== null
 
       if (needsWebGL && !hasWebGL) {
@@ -552,7 +559,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive, attachContextLostListener])
+  }, [isActive, isHidden, attachContextLostListener])
 
   // React to render mode setting changes
   useEffect(() => {
@@ -560,7 +567,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (!terminalRef.current || disposedRef.current) return
       if (state.settings.terminalRenderMode === prevState.settings.terminalRenderMode) return
 
-      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
       const hasWebGL = webglAddonRef.current !== null
 
       if (needsWebGL && !hasWebGL && !webglLoadingRef.current) {

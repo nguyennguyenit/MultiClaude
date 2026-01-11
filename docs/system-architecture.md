@@ -148,6 +148,13 @@ src/renderer/
                      | PatternDetector  |
                      | (notifications)  |
                      +------------------+
+
+Terminal Lifecycle (Phase 1 - Hybrid Fix):
+- ALL terminals render in TerminalGrid (visible + hidden)
+- Hidden terminals: display:none container, WebGL disabled
+- NO React unmount on project switch (preserves xterm.js state)
+- PTY continues running in background for hidden terminals
+- Prevents "hanging" on ESC when switching projects
 ```
 
 ### State Management Flow

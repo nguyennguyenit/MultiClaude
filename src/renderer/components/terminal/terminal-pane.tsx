@@ -5,6 +5,7 @@ interface TerminalPaneProps {
   terminalId: string
   title: string
   isActive: boolean
+  hidden?: boolean
   isClaudeMode?: boolean
   initialOutput?: string
   onActivate: () => void
@@ -18,6 +19,7 @@ export const TerminalPane = memo(function TerminalPane({
   terminalId,
   title,
   isActive,
+  hidden = false,
   isClaudeMode = false,
   initialOutput,
   onActivate,
@@ -224,6 +226,7 @@ export const TerminalPane = memo(function TerminalPane({
         <TerminalView
           terminalId={terminalId}
           isActive={isActive}
+          hidden={hidden}
           initialOutput={initialOutput}
           onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}

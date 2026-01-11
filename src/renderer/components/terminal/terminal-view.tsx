@@ -25,6 +25,7 @@ const scrollButtonIconStyle: CSSProperties = {
 interface TerminalViewProps {
   terminalId: string
   isActive: boolean
+  hidden?: boolean
   initialOutput?: string
   /** Callback to expose fit function to parent for resize handling */
   onFitReady?: (fit: () => void) => void
@@ -32,11 +33,12 @@ interface TerminalViewProps {
   onRefreshReady?: (refresh: () => void) => void
 }
 
-export const TerminalView = memo(function TerminalView({ terminalId, isActive, initialOutput, onFitReady, onRefreshReady }: TerminalViewProps) {
+export const TerminalView = memo(function TerminalView({ terminalId, isActive, hidden = false, initialOutput, onFitReady, onRefreshReady }: TerminalViewProps) {
   const { containerRef, initTerminal, write, fit, focus, scrollToBottom, isAtBottom, refresh } = useTerminal({
     terminalId,
     initialOutput,
-    isActive
+    isActive,
+    isHidden: hidden
   })
   const appendOutput = useAppStore((state) => state.appendOutput)
   const settingsModalOpen = useSettingsStore((state) => state.settingsModalOpen)
