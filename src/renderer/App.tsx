@@ -381,7 +381,6 @@ function App() {
                       terminals={terminals}
                       activeProjectId={activeProjectId}
                       activeTerminalId={activeTerminalId}
-                      isTransitioning={projectSwitching}
                       onTerminalClick={setActiveTerminal}
                       onAddTerminal={handleAddTerminal}
                       onCloseTerminal={handleCloseTerminal}

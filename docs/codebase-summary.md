@@ -29,12 +29,16 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 - **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
 - **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
-- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
-  - **Hidden Terminals Container**: CSS visibility-based hiding (Phase 1 of Terminal Hanging Fix)
-    - Inactive project terminals rendered with `display: none` instead of React unmount
-    - Prevents xterm.js disposal while PTY continues running, preserving terminal state
-    - Enables immediate ESC response when switching projects (no "hanging" terminals)
-    - Hidden terminals passed to TerminalGrid via `terminals` prop, filtered by `activeProjectId`
+- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals
+  - **Single-Parent Pattern** (Phase 1 of Terminal Cursor Fix)
+    - All project grids render simultaneously in single parent hierarchy
+    - Inactive projects hidden via CSS `display: none` (not React unmount)
+    - Prevents React reconciliation from destroying terminals on project switch
+    - Preserves xterm.js cursor position, buffer content, and WebGL state
+    - `projectGroups` memo groups terminals by projectId with isActive flag
+    - `getProjectId(terminal)` helper with DEFAULT_PROJECT_ID fallback
+    - Accessibility: role="region", aria-label for each project grid
+    - Memory proportional to total terminals; cleanup for inactive projects TBD
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
   - **Active Terminal Styling** (`globals.css`): Visual distinction via glow + opacity
     - `--terminal-active-glow`: CSS var for active pane outer glow (`color-mix()` animated)
@@ -56,7 +60,7 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
   - Deferred `initialOutput` write until terminal fully mounted
-  - `isTransitioning` state in App.tsx with rapid-switch guard to prevent race conditions
+  - Phase 1: Removed `isTransitioning` state - no longer needed with single-parent pattern
 - **Terminal Refresh**: Manual and automatic WebGL context recovery
   - Refresh button in TerminalPane header (100ms debounce)
   - Auto-recovery on WebGL context lost events with toast notification

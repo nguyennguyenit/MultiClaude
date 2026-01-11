@@ -1,4 +1,4 @@
-import { Fragment, memo } from 'react'
+import { Fragment, memo, useMemo } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { TerminalPane } from './terminal-pane'
 import type { Terminal } from '@shared/types'
@@ -11,12 +11,19 @@ interface TerminalGridProps {
   terminals: TerminalWithOutput[]
   activeProjectId: string | null
   activeTerminalId: string | null
-  isTransitioning?: boolean
   onTerminalClick: (id: string) => void
   onAddTerminal?: () => void
   onCloseTerminal?: (id: string) => void
   onInsertFilePath?: (terminalId: string, paths: string[]) => void
   onTitleChange?: (terminalId: string, title: string) => void
+}
+
+/** Default project ID for terminals without explicit projectId */
+const DEFAULT_PROJECT_ID = 'default'
+
+/** Get project ID from terminal, using default fallback */
+function getProjectId(terminal: Pick<Terminal, 'projectId'>): string {
+  return terminal.projectId || DEFAULT_PROJECT_ID
 }
 
 /** Calculate grid dimensions based on terminal count */
@@ -42,20 +49,44 @@ export const TerminalGrid = memo(function TerminalGrid({
   terminals,
   activeProjectId,
   activeTerminalId,
-  isTransitioning = false,
   onTerminalClick,
   onAddTerminal,
   onCloseTerminal,
   onInsertFilePath,
   onTitleChange
 }: TerminalGridProps) {
-  // Calculate visible terminals for the active project (for grid layout)
-  const visibleTerminals = activeProjectId
-    ? terminals.filter(t => t.projectId === activeProjectId)
-    : terminals
+  /**
+   * Groups terminals by project for stable rendering (single-parent pattern).
+   * All project grids are rendered simultaneously in a single parent hierarchy,
+   * with inactive projects hidden via CSS `display: none`.
+   *
+   * This prevents React reconciliation from unmounting terminals when switching
+   * projects, preserving cursor position, buffer content, and WebGL state.
+   *
+   * Note: Memory impact is proportional to total terminals across all projects.
+   * Consider implementing cleanup for long-inactive projects if memory becomes a concern.
+   */
+  const projectGroups = useMemo(() => {
+    const groups = new Map<string, TerminalWithOutput[]>()
+    for (const t of terminals) {
+      const pid = getProjectId(t)
+      if (!groups.has(pid)) groups.set(pid, [])
+      const group = groups.get(pid)
+      if (group) group.push(t)
+    }
+    return Array.from(groups.entries()).map(([projectId, terms]) => ({
+      projectId,
+      isActive: projectId === activeProjectId,
+      terminals: terms
+    }))
+  }, [terminals, activeProjectId])
+
+  // Get active project's terminals for empty state check
+  const activeGroup = projectGroups.find(g => g.isActive)
+  const visibleTerminalCount = activeGroup?.terminals.length ?? 0
 
   // Empty state - Agent Terminals welcome screen (based on visible terminals)
-  if (visibleTerminals.length === 0) {
+  if (visibleTerminalCount === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-[var(--mc-bg-primary)] relative overflow-hidden">
         {/* Background Glow */}
@@ -106,82 +137,69 @@ export const TerminalGrid = memo(function TerminalGrid({
     )
   }
 
-  // Calculate grid based only on visible terminals for proper sizing
-  const { cols } = calculateGrid(visibleTerminals.length)
-  const rows = splitIntoRows(visibleTerminals, cols)
-
-  // Get hidden terminals (other projects) - these stay mounted but hidden
-  const hiddenTerminals = activeProjectId
-    ? terminals.filter(t => t.projectId !== activeProjectId)
-    : []
-
   return (
-    <div
-      className={`h-full transition-opacity duration-100 ${isTransitioning ? 'opacity-50 pointer-events-none' : 'opacity-100'
-        }`}
-    >
-      {/* Hidden terminals container - keeps terminals mounted but invisible */}
-      {hiddenTerminals.length > 0 && (
-        <div style={{ display: 'none' }} aria-hidden="true">
-          {hiddenTerminals.map((terminal) => (
-            <TerminalPane
-              key={terminal.id}
-              terminalId={terminal.id}
-              title={terminal.title}
-              isActive={false}
-              hidden={true}
-              isClaudeMode={terminal.isClaudeMode}
-              initialOutput={terminal.output}
-              onActivate={() => onTerminalClick(terminal.id)}
-              onClose={() => onCloseTerminal?.(terminal.id)}
-              onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
-              onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
-            />
-          ))}
-        </div>
-      )}
+    <div className="h-full">
+      {/* All project grids rendered in single parent - inactive hidden with CSS */}
+      {/* This prevents React reconciliation from unmounting terminals on project switch */}
+      {projectGroups.map(group => {
+        const { cols } = calculateGrid(group.terminals.length)
+        const rows = splitIntoRows(group.terminals, cols)
 
-      {/* Visible terminals in grid layout */}
-      <Group orientation="vertical" className="h-full">
-        {rows.map((rowTerminals, rowIndex) => {
-          const cellCount = rowTerminals.length
+        return (
+          <div
+            key={group.projectId}
+            role="region"
+            aria-label={`Terminal grid for project ${group.projectId}`}
+            style={{
+              display: group.isActive ? 'flex' : 'none',
+              flexDirection: 'column',
+              height: '100%'
+            }}
+            aria-hidden={!group.isActive}
+          >
+            <Group orientation="vertical" className="h-full">
+              {rows.map((rowTerminals, rowIndex) => {
+                const cellCount = rowTerminals.length
 
-          return (
-            <Fragment key={`row-${rowIndex}`}>
-              <Panel defaultSize={100 / rows.length}>
-                <Group orientation="horizontal" className="h-full">
-                  {rowTerminals.map((terminal, colIndex) => (
-                    <Fragment key={terminal.id}>
-                      <Panel defaultSize={100 / cellCount}>
-                        <TerminalPane
-                          terminalId={terminal.id}
-                          title={terminal.title}
-                          isActive={terminal.id === activeTerminalId}
-                          hidden={false}
-                          isClaudeMode={terminal.isClaudeMode}
-                          initialOutput={terminal.output}
-                          onActivate={() => onTerminalClick(terminal.id)}
-                          onClose={() => onCloseTerminal?.(terminal.id)}
-                          onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
-                          onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
-                        />
-                      </Panel>
-                      {/* Resize handle between columns */}
-                      {colIndex < rowTerminals.length - 1 && (
-                        <Separator className="terminal-resize-handle terminal-resize-handle-horizontal" />
-                      )}
-                    </Fragment>
-                  ))}
-                </Group>
-              </Panel>
-              {/* Resize handle between rows (not after last) */}
-              {rowIndex < rows.length - 1 && (
-                <Separator className="terminal-resize-handle terminal-resize-handle-vertical" />
-              )}
-            </Fragment>
-          )
-        })}
-      </Group>
+                return (
+                  <Fragment key={`row-${rowIndex}`}>
+                    <Panel defaultSize={100 / rows.length}>
+                      <Group orientation="horizontal" className="h-full">
+                        {rowTerminals.map((terminal, colIndex) => (
+                          <Fragment key={terminal.id}>
+                            <Panel defaultSize={100 / cellCount}>
+                              <TerminalPane
+                                terminalId={terminal.id}
+                                title={terminal.title}
+                                isActive={terminal.id === activeTerminalId}
+                                hidden={!group.isActive}
+                                isClaudeMode={terminal.isClaudeMode}
+                                initialOutput={terminal.output}
+                                onActivate={() => onTerminalClick(terminal.id)}
+                                onClose={() => onCloseTerminal?.(terminal.id)}
+                                onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
+                                onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
+                              />
+                            </Panel>
+                            {/* Resize handle between columns */}
+                            {colIndex < rowTerminals.length - 1 && (
+                              <Separator className="terminal-resize-handle terminal-resize-handle-horizontal" />
+                            )}
+                          </Fragment>
+                        ))}
+                      </Group>
+                    </Panel>
+                    {/* Resize handle between rows (not after last) */}
+                    {rowIndex < rows.length - 1 && (
+                      <Separator className="terminal-resize-handle terminal-resize-handle-vertical" />
+                    )}
+                  </Fragment>
+                )
+              })}
+            </Group>
+          </div>
+        )
+      })}
     </div>
   )
 })

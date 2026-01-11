@@ -149,12 +149,12 @@ src/renderer/
                      | (notifications)  |
                      +------------------+
 
-Terminal Lifecycle (Phase 1 - Hybrid Fix):
-- ALL terminals render in TerminalGrid (visible + hidden)
-- Hidden terminals: display:none container, WebGL disabled
-- NO React unmount on project switch (preserves xterm.js state)
-- PTY continues running in background for hidden terminals
-- Prevents "hanging" on ESC when switching projects
+Terminal Lifecycle (Phase 1 - Single-Parent Pattern):
+- ALL project grids render in single parent hierarchy
+- Inactive projects: CSS display:none, WebGL disabled via hidden prop
+- NO React unmount on project switch (prevents reconciliation)
+- Preserves xterm.js cursor position, buffer, and WebGL context
+- PTY continues running in background for all terminals
 ```
 
 ### State Management Flow
