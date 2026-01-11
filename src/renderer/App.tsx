@@ -28,7 +28,6 @@ function App() {
     setProjects,
     setActiveProject,
     setActiveTerminal,
-    sidebarOpen,
     toggleSidebar,
     activeView
   } = useAppStore()
@@ -38,8 +37,6 @@ function App() {
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
 
-  // Project switch transition state
-  const [projectSwitching, setProjectSwitching] = useState(false)
   const prevProjectIdRef = useRef<string | null>(null)
 
   // Get active project for terminal creation
@@ -80,12 +77,9 @@ function App() {
   const handleSelectProject = useCallback(async (id: string | null) => {
     if (!id) {
       setActiveProject(null)
-      setActiveTerminal(null) // Clear terminal selection when no project
+      setActiveTerminal(null)
       return
     }
-
-    // Guard against rapid switching - ignore if already transitioning
-    if (projectSwitching) return
 
     const project = projects.find(p => p.id === id)
     if (!project) return
@@ -102,26 +96,16 @@ function App() {
       return
     }
 
-    // Start transition if switching between projects (not initial load)
-    if (prevProjectIdRef.current && prevProjectIdRef.current !== id) {
-      setProjectSwitching(true)
-      // Allow old terminals to start unmounting
-      setActiveProject(id)
-      // Wait for disposal + buffer (TERMINAL_DISPOSE_DELAY + 50ms safety margin)
-      await new Promise(resolve => setTimeout(resolve, TERMINAL_DISPOSE_DELAY + 50))
-      setProjectSwitching(false)
-    } else {
-      setActiveProject(id)
-    }
+    // Instant switch - terminals stay mounted (CSS hiding only)
+    setActiveProject(id)
 
-    // Auto-select first terminal of new project to fix cursor blink bug.
-    // Uses getState() for fresh terminals after dispose delay completes.
+    // Auto-select first terminal of new project
     const { terminals } = useAppStore.getState()
     const newProjectTerminals = terminals.filter(t => t.projectId === id)
     setActiveTerminal(newProjectTerminals[0]?.id || null)
 
     prevProjectIdRef.current = id
-  }, [projects, projectSwitching, setActiveProject, setActiveTerminal, removeProject])
+  }, [projects, setActiveProject, setActiveTerminal, removeProject])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
@@ -159,11 +143,6 @@ function App() {
     await window.electron.terminal.destroy(idToClose)
     removeTerminal(idToClose)
   }, [activeTerminalId, removeTerminal])
-
-  // Handler: Start Claude in terminal
-  const handleStartClaude = useCallback(async (terminalId: string) => {
-    await window.electron.terminal.invokeClaude(terminalId)
-  }, [])
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {

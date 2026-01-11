@@ -75,6 +75,11 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - Tools: New Terminal, Start Claude, Kill All with terminal counting
   - Settings toggle at bottom
 - **ProjectTabs**: Top tab bar for switching between projects with keyboard shortcuts (Alt+1-9)
+- **App.tsx State Cleanup** (Phase 2 of Terminal Cursor Fix)
+  - Removed `projectSwitching` state - no longer needed with single-parent pattern
+  - Removed `sidebarOpen` unused state variable
+  - Removed `handleStartClaude` unused handler
+  - Simplified `handleSelectProject`: instant CSS-only project switch, removed 150ms delay workaround
 
 #### Project Management & Persistence
 - **ProjectStore**: electron-store persistence layer for projects and terminal layouts
