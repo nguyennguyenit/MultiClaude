@@ -97,6 +97,7 @@ export interface ElectronAPI {
   }
   app: {
     getPath: (name: string) => Promise<string>
+    openExternal: (url: string) => void
   }
   notification: {
     getSettings: () => Promise<NotificationSettings>
@@ -236,7 +237,8 @@ const api: ElectronAPI = {
     restore: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESTORE)
   },
   app: {
-    getPath: (name) => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_PATH, name)
+    getPath: (name) => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_PATH, name),
+    openExternal: (url) => ipcRenderer.send(IPC_CHANNELS.APP_OPEN_EXTERNAL, url)
   },
   notification: {
     getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS),
