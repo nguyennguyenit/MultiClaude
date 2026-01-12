@@ -168,11 +168,17 @@ export const TerminalGrid = memo(function TerminalGrid({
                         {rowTerminals.map((terminal, colIndex) => (
                           <Fragment key={terminal.id}>
                             <Panel defaultSize={100 / cellCount}>
+                              {/*
+                                Hidden when:
+                                1. Project is inactive (!group.isActive), OR
+                                2. Terminal is not the active terminal (terminal.id !== activeTerminalId)
+                                This triggers viewport save/restore in use-terminal.ts for scroll preservation
+                              */}
                               <TerminalPane
                                 terminalId={terminal.id}
                                 title={terminal.title}
                                 isActive={terminal.id === activeTerminalId}
-                                hidden={!group.isActive}
+                                hidden={!group.isActive || terminal.id !== activeTerminalId}
                                 isClaudeMode={terminal.isClaudeMode}
                                 initialOutput={terminal.output}
                                 onActivate={() => onTerminalClick(terminal.id)}

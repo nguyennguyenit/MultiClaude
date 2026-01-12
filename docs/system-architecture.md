@@ -155,6 +155,17 @@ Terminal Lifecycle (Phase 1 - Single-Parent Pattern):
 - NO React unmount on project switch (prevents reconciliation)
 - Preserves xterm.js cursor position, buffer, and WebGL context
 - PTY continues running in background for all terminals
+
+Viewport Scroll Position Preservation:
+- **Save Phase** (Render): When terminal hidden via prop, synchronously captures buffer state
+  - `savedViewportRef` stores: viewportY (current scroll line), baseY (total lines), isAtBottom flag
+- **Hide Phase** (DOM): CSS display:none applied via TerminalPane hidden prop
+- **Show Phase** (Fit): When terminal re-shown and fit() called
+  - Calculates ratio: `savedRatio = savedViewportY / savedBaseY`
+  - Restores proportional position: `newViewportY = round(savedRatio * newBaseY)`
+  - Clamps to valid range to handle buffer growth/shrinkage
+  - Restores isAtBottom to block smart-scroll during restore
+- **Benefit**: Seamless terminal switching without scroll jump within same project
 ```
 
 ### State Management Flow

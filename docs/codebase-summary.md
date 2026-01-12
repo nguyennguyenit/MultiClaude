@@ -56,6 +56,15 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
     - Accessibility: `aria-label`, `aria-hidden`, `pointer-events-none` when hidden
     - **Responsive Sizing**: CSS Container Queries with `clamp(20px, 4cqw, 32px)` for 3-4% terminal width scaling
   - Proper disposable cleanup on unmount
+- **Viewport Preservation on Terminal Hide/Show**: Maintains scroll position when switching terminals within project
+  - **Save Trigger**: During render phase when `isHidden` transitions from false to true (before DOM update)
+  - **Save Mechanism**: Captures `viewportY`, `baseY`, and `isAtBottom` to `savedViewportRef`
+  - **Restore Trigger**: After fit() is called, ratio-based position restoration
+    - Calculates `savedRatio = viewportY / baseY` from saved state
+    - After fit, applies `newViewportY = Math.round(savedRatio * newBaseY)` to maintain proportional position
+    - Clamps position to valid range: `Math.max(0, Math.min(newViewportY, baseY))`
+  - **isAtBottom Tracking**: Preserved and restored to prevent smart scroll from overriding scroll position
+  - **Thread Safety**: Render-phase save ensures capture before CSS `display:none` hides viewport
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
   - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
