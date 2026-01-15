@@ -170,9 +170,24 @@ test.describe('Settings Modal', () => {
     const modal = window.locator('[data-testid="settings-modal"]')
     await expect(modal).toBeVisible()
 
+    // Make a change to enable Save button (toggle theme mode)
+    // Click a theme mode button (light/dark/system) that's not currently selected
+    const darkModeButton = window.locator('button:has-text("dark")').first()
+    const lightModeButton = window.locator('button:has-text("light")').first()
+
+    // Toggle to a different mode to create unsaved changes
+    if (await darkModeButton.isVisible()) {
+      await darkModeButton.click()
+      await window.waitForTimeout(100)
+    } else if (await lightModeButton.isVisible()) {
+      await lightModeButton.click()
+      await window.waitForTimeout(100)
+    }
+
     // Find and click Save Settings button using data-testid
     const saveButton = window.locator('[data-testid="settings-save-button"]')
     await expect(saveButton).toBeVisible()
+    await expect(saveButton).toBeEnabled()
     await saveButton.click()
 
     // Wait for modal to close

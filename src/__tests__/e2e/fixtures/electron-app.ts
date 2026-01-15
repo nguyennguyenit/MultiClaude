@@ -106,7 +106,7 @@ export async function injectMockProject(window: Page, projects: MockProject[]): 
   await window.waitForTimeout(200)
 
   // Inject projects directly into the Zustand store via __APP_STORE__
-  await window.evaluate((projectData) => {
+  const injectionResult = await window.evaluate((projectData) => {
     interface AppStoreState {
       setProjects: (projects: unknown[]) => void
       setActiveProject: (id: string | null) => void
@@ -127,18 +127,28 @@ export async function injectMockProject(window: Page, projects: MockProject[]): 
       if (projectData.length > 0) {
         state.setActiveProject(projectData[0].id)
       }
+      return { success: true, projectCount: projectData.length }
     }
+    return { success: false, projectCount: 0 }
   }, projects)
 
   // Wait for React to re-render with new state
-  await window.waitForTimeout(200)
+  await window.waitForTimeout(300)
 
-  // Verify sidebar is visible (indicates project loaded properly)
-  try {
-    await window.waitForSelector('[data-testid="sidebar"]', { timeout: 2000 })
-  } catch {
-    // If store injection didn't work, the welcome screen is shown
-    // This is expected for some tests (like empty state tests)
+  // Verify projects are visible in UI (not just sidebar)
+  if (injectionResult.success && projects.length > 0) {
+    try {
+      // Wait for first project tab to be visible (confirms ProjectTabs rendered)
+      await window.waitForSelector(`[data-testid="project-tab-${projects[0].id}"]`, { timeout: 3000 })
+    } catch {
+      // Fallback: wait for sidebar as before
+      try {
+        await window.waitForSelector('[data-testid="sidebar"]', { timeout: 2000 })
+      } catch {
+        // If store injection didn't work, the welcome screen is shown
+        // This is expected for some tests (like empty state tests)
+      }
+    }
   }
 }
 

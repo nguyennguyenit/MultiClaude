@@ -87,12 +87,7 @@
   "build": {
     "appId": "com.multiclaude.app",
     "productName": "MultiClaude",
-    "publish": {
-      "provider": "github",
-      "owner": "nguyennguyenit",
-      "repo": "MultiClaude",
-      "releaseType": "draft"
-    },
+    "publish": null,
     "directories": {
       "output": "release"
     },
