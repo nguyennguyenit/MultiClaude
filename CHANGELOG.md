@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.1.7-beta.8 (2026-01-16)
+
+### Documentation
+
+- Update CHANGELOG for v1.1.7-beta.7
+
 ## v1.1.7-beta.7 (2026-01-16)
 
 ### Bug Fixes
