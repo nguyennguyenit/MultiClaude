@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.1.7-beta.6 (2026-01-16)
+
+### Bug Fixes
+
+- **CI:** Generate auto-update manifest files (`latest*.yml`, `.blockmap`) in release workflow
+
 ## v1.1.7-beta.5 (2026-01-16)
 
 ### Bug Fixes
