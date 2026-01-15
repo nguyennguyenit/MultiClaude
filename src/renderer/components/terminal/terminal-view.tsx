@@ -34,7 +34,7 @@ interface TerminalViewProps {
 }
 
 export const TerminalView = memo(function TerminalView({ terminalId, isActive, hidden = false, initialOutput, onFitReady, onRefreshReady }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, scrollToBottom, isAtBottom, refresh } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, scrollToBottom, isAtBottom, refresh } = useTerminal({
     terminalId,
     initialOutput,
     isActive,
@@ -44,6 +44,14 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
   const settingsModalOpen = useSettingsStore((state) => state.settingsModalOpen)
   // Skip appending output right after restore to prevent duplicates from shell prompt redraws
   const skipAppendRef = useRef(!!initialOutput)
+
+  // Handle click on terminal - force show cursor in case it was hidden by CLI
+  const handleTerminalClick = () => {
+    if (isActive) {
+      focus()
+      showCursor()
+    }
+  }
 
   // Initialize terminal on mount
   useEffect(() => {
@@ -75,13 +83,20 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
     return unsubscribe
   }, [terminalId, write, appendOutput])
 
-  // Focus when becomes active
+  // Focus when becomes active, blur when inactive
+  // Note: scroll restoration and cursor are handled by visibility effect in use-terminal.ts
   useEffect(() => {
     if (isActive) {
       focus()
-      fit()
+      // Delayed cursor restore to handle WebGL reload timing
+      const timer = setTimeout(() => {
+        showCursor()
+      }, 100)
+      return () => clearTimeout(timer)
+    } else {
+      blur()
     }
-  }, [isActive, focus, fit])
+  }, [isActive, focus, blur, showCursor])
 
   // Expose fit function to parent for resize handling
   useEffect(() => {
@@ -97,6 +112,7 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
     <div
       className="terminal-container-wrapper"
       style={scrollButtonWrapperStyle}
+      onClick={handleTerminalClick}
     >
       <div
         ref={containerRef}

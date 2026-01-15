@@ -138,9 +138,9 @@ export const TerminalGrid = memo(function TerminalGrid({
   }
 
   return (
-    <div className="h-full">
-      {/* All project grids rendered in single parent - inactive hidden with CSS */}
-      {/* This prevents React reconciliation from unmounting terminals on project switch */}
+    <div className="h-full relative">
+      {/* All project grids rendered in single parent - inactive hidden with visibility:hidden */}
+      {/* Using visibility:hidden instead of display:none preserves xterm.js scroll/cursor state */}
       {projectGroups.map(group => {
         const { cols } = calculateGrid(group.terminals.length)
         const rows = splitIntoRows(group.terminals, cols)
@@ -151,9 +151,16 @@ export const TerminalGrid = memo(function TerminalGrid({
             role="region"
             aria-label={`Terminal grid for project ${group.projectId}`}
             style={{
-              display: group.isActive ? 'flex' : 'none',
+              // Use visibility:hidden instead of display:none to prevent xterm.js from resetting
+              // scroll position and cursor state when terminals are hidden
+              visibility: group.isActive ? 'visible' : 'hidden',
+              position: group.isActive ? 'relative' : 'absolute',
+              pointerEvents: group.isActive ? 'auto' : 'none',
               flexDirection: 'column',
-              height: '100%'
+              width: '100%',
+              height: '100%',
+              top: 0,
+              left: 0
             }}
             aria-hidden={!group.isActive}
           >
