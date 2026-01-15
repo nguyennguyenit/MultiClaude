@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.1.7-beta.5 (2026-01-16)
+
+### Bug Fixes
+
+- **Release:** Prevent duplicate draft releases in workflow
+
+### Tests
+
+- Fix 5 failing E2E tests and update screenshots
+
 ## v1.1.7-beta.4 (2026-01-16)
 
 ### Bug Fixes
