@@ -10,6 +10,7 @@ import { getTerminalTheme, isAllowedExternalUrl } from '@shared/constants'
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
+const WEBGL_FOCUS_BUFFER = 10  // Extra buffer after WebGL toggle to ensure focus works
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
@@ -64,6 +65,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const webglAddonRef = useRef<WebglAddon | null>(null)
   const isActiveRef = useRef(isActive)
   const isHiddenRef = useRef(isHidden)
+  const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
@@ -598,6 +600,28 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     })
     return unsubscribe
   }, [attachContextLostListener])
+
+  // Visibility transition: focus terminal when becoming visible (hidden->visible)
+  // Delay accounts for WebGL addon loading time (WEBGL_TOGGLE_DEBOUNCE + 10ms buffer)
+  useEffect(() => {
+    const wasHidden = prevHiddenRef.current
+    prevHiddenRef.current = isHidden
+
+    // Only trigger on hidden->visible transition for active terminal
+    if (wasHidden && !isHidden && isActive && terminalRef.current) {
+      // Send ANSI cursor show sequence as fallback
+      terminalRef.current.write('\x1b[?25h')
+
+      // Delay focus to allow WebGL addon to load
+      const focusTimer = setTimeout(() => {
+        if (!disposedRef.current && terminalRef.current) {
+          terminalRef.current.focus()
+        }
+      }, WEBGL_TOGGLE_DEBOUNCE + WEBGL_FOCUS_BUFFER)
+
+      return () => clearTimeout(focusTimer)
+    }
+  }, [isHidden, isActive])
 
   return {
     containerRef,

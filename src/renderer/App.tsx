@@ -28,6 +28,7 @@ function App() {
     setProjects,
     setActiveProject,
     setActiveTerminal,
+    switchToProject,
     toggleSidebar,
     activeView
   } = useAppStore()
@@ -96,16 +97,10 @@ function App() {
       return
     }
 
-    // Instant switch - terminals stay mounted (CSS hiding only)
-    setActiveProject(id)
-
-    // Auto-select first terminal of new project
-    const { terminals } = useAppStore.getState()
-    const newProjectTerminals = terminals.filter(t => t.projectId === id)
-    setActiveTerminal(newProjectTerminals[0]?.id || null)
-
+    // Atomic project switch - updates project + terminal in single state update
+    switchToProject(id)
     prevProjectIdRef.current = id
-  }, [projects, setActiveProject, setActiveTerminal, removeProject])
+  }, [projects, switchToProject, removeProject])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
