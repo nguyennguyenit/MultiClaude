@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (no publish)
-        run: npm run build
+      - name: Build with manifests (no auto-publish)
+        run: npm run build:ci
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -43,8 +43,11 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.dmg
+            release/*.dmg.blockmap
             release/*.zip
+            release/*.zip.blockmap
             release/*.exe
+            release/*.exe.blockmap
             release/latest*.yml
           if-no-files-found: ignore
 
