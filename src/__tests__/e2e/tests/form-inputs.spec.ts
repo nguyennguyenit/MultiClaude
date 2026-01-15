@@ -20,7 +20,7 @@ test.describe('Form Inputs', () => {
 
     test.beforeEach(async ({ window }) => {
       // Ensure we have a terminal to test with
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(200)
 

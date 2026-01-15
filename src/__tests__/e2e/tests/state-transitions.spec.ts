@@ -31,7 +31,7 @@ test.describe('State Transitions', () => {
       await window.waitForTimeout(200)
 
       // Select the project
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(300)
 
@@ -57,7 +57,7 @@ test.describe('State Transitions', () => {
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(200)
 
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(300)
 
@@ -97,7 +97,7 @@ test.describe('State Transitions', () => {
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(200)
 
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(200)
 
@@ -119,7 +119,7 @@ test.describe('State Transitions', () => {
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(200)
 
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(200)
 
@@ -152,7 +152,7 @@ test.describe('State Transitions', () => {
       await window.waitForTimeout(200)
 
       // Try to select the project with invalid path
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
 
       if (await projectTab.isVisible()) {
         await projectTab.click()
@@ -187,7 +187,7 @@ test.describe('State Transitions', () => {
       await expect(root).toBeVisible()
 
       // Should be on project 3
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project3")')
+      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project3")').first()
       await expect(activeTab).toBeVisible()
     })
   })
@@ -222,7 +222,7 @@ test.describe('State Transitions', () => {
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(200)
 
-      const projectTab = window.locator('button:has-text("TestProject")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(300)
 

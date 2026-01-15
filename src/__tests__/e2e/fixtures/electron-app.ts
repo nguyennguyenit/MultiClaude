@@ -100,10 +100,19 @@ export async function resetAppState(window: Page): Promise<void> {
 /**
  * Helper to inject mock project data into the Zustand store and set active project.
  * This injects projects directly into the React state store.
+ * Creates actual folders on disk so handleSelectProject validation passes.
  */
 export async function injectMockProject(window: Page, projects: MockProject[]): Promise<void> {
   // Wait for React to be ready
   await window.waitForTimeout(200)
+
+  // Create actual folders for mock projects (validation requires real paths)
+  // Skip folders with "invalid" or "nonexistent" in path - those test error handling
+  for (const project of projects) {
+    if (!project.path.includes('invalid') && !project.path.includes('nonexistent')) {
+      fs.mkdirSync(project.path, { recursive: true })
+    }
+  }
 
   // Inject projects directly into the Zustand store via __APP_STORE__
   const injectionResult = await window.evaluate((projectData) => {
