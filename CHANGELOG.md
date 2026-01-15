@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.1.7-beta.7 (2026-01-16)
+
+### Bug Fixes
+
+- **Build:** Configure GitHub publish provider for auto-update manifest generation (`latest*.yml`)
+
 ## v1.1.7-beta.6 (2026-01-16)
 
 ### Bug Fixes
