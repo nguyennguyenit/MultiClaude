@@ -150,6 +150,17 @@ export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo'
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 
+// UI Style types for Terminal/TUI mode
+export type UiStyle = 'modern' | 'terminal'
+export type TerminalColorPreset = 'green' | 'blue' | 'white'
+export type TerminalFontId = 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
+
+export interface TerminalStyleOptions {
+  colorPreset: TerminalColorPreset
+  fontFamily: TerminalFontId
+  useBorderChars: boolean
+}
+
 // WSL detection types (Windows only)
 export interface WslDistro {
   name: string
@@ -194,6 +205,9 @@ export interface AppSettings {
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   glassmorphismEnabled: boolean
+  // UI style: modern (default) or terminal/TUI mode
+  uiStyle: UiStyle
+  terminalStyleOptions: TerminalStyleOptions
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
 }
