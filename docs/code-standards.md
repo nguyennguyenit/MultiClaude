@@ -384,14 +384,44 @@ describe('GitManager', () => {
 
 ### Theme Variables
 
-Use CSS variables for theme colors (defined in themes.ts):
+Use CSS variables for theme colors (defined in globals.css):
 
 ```css
 .terminal-pane {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  border-color: var(--border-color);
+  background: var(--mc-bg-primary);
+  color: var(--mc-text-primary);
+  border-color: var(--mc-border);
 }
+```
+
+### Terminal UI Style System
+
+Apply `.ui-terminal` class for terminal-themed UI with monospace fonts and ASCII aesthetics:
+
+```tsx
+<div className="ui-terminal terminal-preset-green">
+  {/* All elements inherit terminal styling */}
+</div>
+```
+
+**CSS Variables:**
+- `--mc-terminal-font`: Default monospace font (JetBrains Mono)
+
+**Preset Classes:**
+- `.terminal-preset-green`: Classic green terminal colors
+- `.terminal-preset-blue`: Blue terminal theme
+- `.terminal-preset-white`: Light terminal theme
+
+**ASCII Border Utilities (requires `.ui-terminal.use-border-chars`):**
+- `.ascii-border`: Adds ┌─┐ borders with ::before/::after
+- `.ascii-line-h`: Horizontal line (─)
+- `.ascii-line-v`: Vertical line (│)
+
+Example:
+```tsx
+<div className="ui-terminal use-border-chars">
+  <div className="ascii-border p-4">Terminal UI</div>
+</div>
 ```
 
 ## Git Workflow

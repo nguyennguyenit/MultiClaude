@@ -68,6 +68,7 @@ multiclaude/
 - `react-resizable-panels`: Auto-split terminal grid layout
 - `zustand`: State management
 - `tailwindcss`: Styling
+- `@fontsource/*`: Monospace fonts (JetBrains Mono, Source Code Pro, Fira Code, IBM Plex Mono, Space Mono)
 
 ### Testing
 - `vitest`: Test runner with Vite integration
