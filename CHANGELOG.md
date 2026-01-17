@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.1.7-beta.11 (2026-01-18)
+
+### Improvements
+
+- **Terminal:** Enhance buffer, scrollback, and view state persistence for improved session stability
+
+## v1.1.7-beta.10 (2026-01-17)
+
+### Improvements
+
+- **Terminal:** Enhance buffer handling and scrollback management
+
 ## v1.1.7-beta.9 (2026-01-17)
 
 ### New Features
