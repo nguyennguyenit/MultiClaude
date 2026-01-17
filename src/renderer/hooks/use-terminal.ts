@@ -124,7 +124,10 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       fontSize: 14,
       fontFamily: TERMINAL_FONT_FAMILY,
       theme: getCurrentTerminalTheme(),
-      allowProposedApi: true
+      allowProposedApi: true,
+      windowsMode: false,     // Don't auto-convert \r to \r\n - fixes in-place status line updates
+      convertEol: false,      // Don't auto-convert line endings - preserves cursor positioning
+      scrollback: 10000       // Increase scrollback buffer from default 1000
     })
 
     const fitAddon = new FitAddon()
@@ -360,13 +363,9 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     })
   }, [terminalId, initialOutput, onResize, attachContextLostListener])
 
-  // Write data to terminal with smart scroll and auto cursor restore
+  // Write data to terminal with auto cursor restore
   const write = useCallback((data: string) => {
     terminalRef.current?.write(data)
-    // Smart scroll: only scroll to bottom if user was at bottom
-    if (isAtBottomRef.current) {
-      terminalRef.current?.scrollToBottom()
-    }
 
     // Auto cursor restore: after output settles, send show cursor sequence
     // This fixes cursor disappearing after long CLI output
