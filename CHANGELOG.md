@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.1.7-beta.9 (2026-01-17)
+
+### New Features
+
+- **Workflow:** Add IPA Japan Standard documentation workflow for structured project documentation
+
+### Improvements
+
+- **Terminal:** Improve output handling and scrollback buffer for better CLI status line rendering
+
+### Documentation
+
+- Add IPA documentation suite (SRD, API, DB, UI specs)
+
 ## v1.1.7-beta.8 (2026-01-16)
 
 ### Documentation
