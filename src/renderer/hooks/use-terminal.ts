@@ -127,7 +127,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       allowProposedApi: true,
       windowsMode: false,     // Don't auto-convert \r to \r\n - fixes in-place status line updates
       convertEol: false,      // Don't auto-convert line endings - preserves cursor positioning
-      scrollback: 10000       // Increase scrollback buffer from default 1000
+      scrollback: 50000       // Large scrollback buffer for extensive CLI output
     })
 
     const fitAddon = new FitAddon()

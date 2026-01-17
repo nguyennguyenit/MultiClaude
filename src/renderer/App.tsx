@@ -339,34 +339,58 @@ function App() {
         {activeProjectId ? (
           <>
             <Sidebar />
-            <div className="flex-1 min-w-0 flex flex-col">
-              {activeView === 'terminals' && (
-                <>
-                  <TerminalActionBar
-                    terminalCount={visibleTerminals.length}
-                    terminalLimit={getTerminalLimitValue()}
-                    yoloEnabled={yoloEnabled}
+            <div className="flex-1 min-w-0 flex flex-col relative">
+              {/* Terminal View - always rendered, hidden via visibility to preserve xterm state */}
+              <div
+                className="flex flex-col"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  visibility: activeView === 'terminals' ? 'visible' : 'hidden',
+                  pointerEvents: activeView === 'terminals' ? 'auto' : 'none',
+                  zIndex: activeView === 'terminals' ? 1 : 0
+                }}
+              >
+                <TerminalActionBar
+                  terminalCount={visibleTerminals.length}
+                  terminalLimit={getTerminalLimitValue()}
+                  yoloEnabled={yoloEnabled}
+                  onAddTerminal={handleAddTerminal}
+                  onToggleYolo={handleYoloToggle}
+                  onKillAll={handleKillAll}
+                />
+                <div data-testid="terminal-area" className="flex-1 min-h-0">
+                  <TerminalGrid
+                    terminals={terminals}
+                    activeProjectId={activeProjectId}
+                    activeTerminalId={activeTerminalId}
+                    onTerminalClick={setActiveTerminal}
                     onAddTerminal={handleAddTerminal}
-                    onToggleYolo={handleYoloToggle}
-                    onKillAll={handleKillAll}
+                    onCloseTerminal={handleCloseTerminal}
+                    onInsertFilePath={handleInsertFilePath}
+                    onTitleChange={updateTerminalTitle}
                   />
-                  <div data-testid="terminal-area" className="flex-1 min-h-0">
-                    <TerminalGrid
-                      terminals={terminals}
-                      activeProjectId={activeProjectId}
-                      activeTerminalId={activeTerminalId}
-                      onTerminalClick={setActiveTerminal}
-                      onAddTerminal={handleAddTerminal}
-                      onCloseTerminal={handleCloseTerminal}
-                      onInsertFilePath={handleInsertFilePath}
-                      onTitleChange={updateTerminalTitle}
-                    />
-                  </div>
-                </>
-              )}
-              {activeView === 'github' && (
+                </div>
+              </div>
+              {/* GitHub View - always rendered, hidden via visibility to preserve state */}
+              <div
+                className="flex flex-col flex-1"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  visibility: activeView === 'github' ? 'visible' : 'hidden',
+                  pointerEvents: activeView === 'github' ? 'auto' : 'none',
+                  zIndex: activeView === 'github' ? 1 : 0
+                }}
+              >
                 <GitHubView projectPath={activeProject?.path} />
-              )}
+              </div>
             </div>
           </>
         ) : (

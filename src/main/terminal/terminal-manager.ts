@@ -159,9 +159,9 @@ export class TerminalManager extends EventEmitter {
     // Handle terminal output
     ptyProcess.onData((data) => {
       termProcess.outputBuffer += data
-      // Keep buffer at max 100KB
-      if (termProcess.outputBuffer.length > 100000) {
-        termProcess.outputBuffer = termProcess.outputBuffer.slice(-50000)
+      // Keep buffer at max 500KB
+      if (termProcess.outputBuffer.length > 500000) {
+        termProcess.outputBuffer = termProcess.outputBuffer.slice(-250000)
       }
       this.emit('output', { terminalId: id, data })
 
@@ -316,7 +316,7 @@ export class TerminalManager extends EventEmitter {
       cwd: t.metadata.cwd,
       projectId: t.metadata.projectId,
       claudeSessionId: t.metadata.claudeSessionId,
-      outputBuffer: t.outputBuffer.slice(-10000) // Last 10KB
+      outputBuffer: t.outputBuffer.slice(-100000) // Last 100KB for session restore
     }))
   }
 }
