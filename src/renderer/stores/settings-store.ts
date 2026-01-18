@@ -190,12 +190,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   // Save: persist pending to disk, update saved state
   saveSettings: async () => {
     const pending = get().pendingSettings
+    console.log('[settings] Saving settings:', pending)
     try {
-      await window.electron.settings.set(pending)
+      const result = await window.electron.settings.set(pending)
+      console.log('[settings] Save result from main:', result)
       set({
         savedSettings: pending,
         hasUnsavedChanges: false
       })
+      console.log('[settings] savedSettings updated to:', get().savedSettings)
     } catch (err) {
       console.error('Failed to save settings:', err)
       throw err
@@ -214,6 +217,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     try {
       const settings = await window.electron.settings.get()
+      console.log('[settings] Loaded from disk:', settings)
       set({
         savedSettings: settings,
         pendingSettings: settings,

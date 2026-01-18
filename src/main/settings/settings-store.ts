@@ -93,17 +93,22 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
   // Validate terminalStyleOptions
   if (settings.terminalStyleOptions !== undefined) {
     const opts = settings.terminalStyleOptions
+    const defaultOpts = defaults.terminalStyleOptions ?? {
+      colorPreset: 'green' as TerminalColorPreset,
+      fontFamily: 'jetbrains-mono' as TerminalFontId,
+      useBorderChars: false
+    }
     if (opts && typeof opts === 'object') {
       validated.terminalStyleOptions = {
         colorPreset: VALID_TERMINAL_COLOR_PRESETS.includes(opts.colorPreset)
           ? opts.colorPreset
-          : defaults.terminalStyleOptions.colorPreset,
+          : defaultOpts.colorPreset,
         fontFamily: VALID_TERMINAL_FONT_IDS.includes(opts.fontFamily)
           ? opts.fontFamily
-          : defaults.terminalStyleOptions.fontFamily,
+          : defaultOpts.fontFamily,
         useBorderChars: typeof opts.useBorderChars === 'boolean'
           ? opts.useBorderChars
-          : defaults.terminalStyleOptions.useBorderChars
+          : defaultOpts.useBorderChars
       }
     }
   }
