@@ -9,7 +9,11 @@ import { SettingsSubheading } from './settings-typography'
  */
 export function TerminalStyleOptions() {
   const { pendingSettings, setTerminalStyleOptions } = useSettingsStore()
-  const options = pendingSettings.terminalStyleOptions
+  const options = pendingSettings.terminalStyleOptions ?? {
+    colorPreset: 'green',
+    fontFamily: 'jetbrains-mono',
+    useBorderChars: false
+  }
 
   return (
     <div className="space-y-4">
