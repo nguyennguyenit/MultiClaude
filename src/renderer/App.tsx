@@ -256,9 +256,20 @@ function App() {
       root.style.removeProperty('--mc-terminal-font')
     }
 
-    // Update title bar overlay to match theme (--mc-bg-tertiary)
-    const bgColor = isDark ? '#2d2d2d' : '#ebebeb'
-    const symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
+    // Update title bar overlay to match theme
+    let bgColor: string
+    let symbolColor: string
+
+    if (pendingSettings.uiStyle === 'terminal') {
+      // Use terminal preset colors for title bar
+      const preset = TERMINAL_COLOR_PRESETS[terminalOpts.colorPreset] ?? TERMINAL_COLOR_PRESETS.green
+      bgColor = preset.bg
+      symbolColor = preset.text
+    } else {
+      // Default theme colors
+      bgColor = isDark ? '#2d2d2d' : '#ebebeb'
+      symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
+    }
     window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
   }, [
     pendingSettings.themeMode,
