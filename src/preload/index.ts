@@ -120,6 +120,11 @@ export interface ElectronAPI {
   clipboard: {
     saveImage: (base64Data: string) => Promise<string | null>
   }
+  image: {
+    open: (filePath: string) => Promise<boolean>
+    delete: (filePath: string) => Promise<boolean>
+    readBase64: (filePath: string) => Promise<string | null>
+  }
   filePicker: {
     open: () => Promise<string[] | null>
   }
@@ -266,6 +271,11 @@ const api: ElectronAPI = {
   },
   clipboard: {
     saveImage: (base64Data: string) => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, base64Data)
+  },
+  image: {
+    open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_OPEN, filePath),
+    delete: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_DELETE, filePath),
+    readBase64: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_READ_BASE64, filePath)
   },
   filePicker: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)

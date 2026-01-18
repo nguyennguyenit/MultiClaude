@@ -92,6 +92,11 @@ export const IPC_CHANNELS = {
   // Clipboard channels
   CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image',
 
+  // Image channels
+  IMAGE_OPEN: 'image:open',
+  IMAGE_DELETE: 'image:delete',
+  IMAGE_READ_BASE64: 'image:read-base64',
+
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',
 

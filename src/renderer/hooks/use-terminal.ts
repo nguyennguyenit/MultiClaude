@@ -3,7 +3,7 @@ import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { useSettingsStore, useToastStore } from '../stores'
+import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl } from '@shared/constants'
 
 // Terminal timing constants (ms)
@@ -319,6 +319,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
               const filePath = await window.electron.clipboard.saveImage(base64Data)
               if (filePath) {
+                // Track image in store for hover preview
+                useImageStore.getState().addImage(terminalId, filePath)
                 const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
                   ? `"${filePath.replace(/"/g, '\\"')}"`
                   : filePath
@@ -750,6 +752,6 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     scrollToBottom,
     isAtBottom,
     refresh,
-    terminal: terminalRef.current
+    terminalRef  // Return ref instead of snapshot for live access
   }
 }
