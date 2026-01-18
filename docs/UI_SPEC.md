@@ -29,6 +29,7 @@ App
 │   ├── SettingsSidebar
 │   └── [Settings Panels]
 │       ├── ThemeSelector
+│       │   └── TerminalStyleOptions (when uiStyle='terminal')
 │       ├── NotificationSettings
 │       │   ├── TelegramConfigModal
 │       │   └── DiscordConfigModal
@@ -161,7 +162,7 @@ App
 **Tabs**:
 | Tab | Component | Settings |
 |-----|-----------|----------|
-| Appearance | `ThemeSelector` | Theme mode, color theme, glassmorphism |
+| Appearance | `ThemeSelector` + `TerminalStyleOptions` | Theme mode, UI style, color theme/terminal presets, terminal font, border style, glassmorphism |
 | Terminals | inline | Render mode, terminal limit, default shell |
 | Notifications | `NotificationSettings` | Telegram, Discord config |
 | Updates | `UpdateSettings` | Check, download, install updates |
@@ -169,8 +170,12 @@ App
 **Actions**:
 | Action | Handler | Result |
 |--------|---------|--------|
-| Select theme mode | `setSettings` | Apply light/dark/system |
-| Select color theme | `setSettings` | Apply color scheme |
+| Select theme mode | `setThemeMode` | Apply light/dark/system |
+| Select UI style | `setUiStyle` | Switch modern/terminal mode |
+| Select color theme | `setColorTheme` | Apply color scheme (modern mode) |
+| Select terminal preset | `setTerminalStyleOptions` | Apply terminal color preset |
+| Select terminal font | `setTerminalStyleOptions` | Apply monospace font |
+| Toggle border style | `setTerminalStyleOptions` | Switch 1px/ASCII borders |
 | Configure Telegram | modal | Save bot token + chat ID |
 | Configure Discord | modal | Save webhook URL |
 | Check for updates | `update.check()` | Query GitHub Releases |

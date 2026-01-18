@@ -167,6 +167,54 @@ export function useTerminal(terminalId: string) {
 }
 ```
 
+### Accessibility Standards
+
+All interactive components must follow WCAG 2.1 Level AA guidelines:
+
+**Button Accessibility:**
+```typescript
+<button
+  onClick={handleClick}
+  aria-label="Descriptive action label"
+  aria-pressed={isActive}
+  className="focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+>
+  Button Text
+</button>
+```
+
+**Form Controls:**
+```typescript
+<label htmlFor="control-id" className="sr-only">
+  Screen reader label
+</label>
+<select
+  id="control-id"
+  value={value}
+  onChange={handleChange}
+  className="focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+>
+  <option value="val">Option</option>
+</select>
+```
+
+**Key Requirements:**
+- All buttons must have `aria-label` or visible text
+- Toggle buttons must have `aria-pressed` state
+- Form controls must have associated labels (visible or `.sr-only`)
+- Interactive elements must have visible focus states (`:focus:ring-2`)
+- Color contrast must meet WCAG AA standards (4.5:1 for text)
+
+**Example (TerminalStyleOptions):**
+```typescript
+<button
+  onClick={() => setColorPreset(preset.id)}
+  aria-label={`Select ${preset.name} color preset`}
+  aria-pressed={selected}
+  className="focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+/>
+```
+
 ### Shared Component Patterns
 
 Extract repeated UI patterns into shared components to maintain DRY principle:
@@ -396,33 +444,49 @@ Use CSS variables for theme colors (defined in globals.css):
 
 ### Terminal UI Style System
 
-Apply `.ui-terminal` class for terminal-themed UI with monospace fonts and ASCII aesthetics:
-
-```tsx
-<div className="ui-terminal terminal-preset-green">
-  {/* All elements inherit terminal styling */}
-</div>
-```
+Apply `.ui-terminal` class for terminal-themed UI with monospace fonts and ASCII aesthetics.
 
 **CSS Variables:**
-- `--mc-terminal-font`: Default monospace font (JetBrains Mono)
+- `--mc-terminal-font`: Monospace font family (customizable via settings)
+- Color presets applied via data attributes or classes
 
-**Preset Classes:**
-- `.terminal-preset-green`: Classic green terminal colors
-- `.terminal-preset-blue`: Blue terminal theme
-- `.terminal-preset-white`: Light terminal theme
+**Terminal Color Presets:**
+Configured in `src/shared/constants/terminal-constants.ts`:
+- `green`: Classic green terminal (CRT green)
+- `blue`: Blue terminal theme
+- `white`: Light terminal theme
+- `amber`: Amber CRT terminal
+- `purple`: Purple hacker theme
+
+**Terminal Font Options:**
+- `jetbrains-mono`: JetBrains Mono (default)
+- `fira-code`: Fira Code with ligatures
+- `source-code-pro`: Source Code Pro
+- `cascadia-code`: Cascadia Code
+- `consolas`: Consolas (Windows classic)
+
+**Border Styles:**
+- `useBorderChars: false`: 1px solid borders (clean minimal)
+- `useBorderChars: true`: ASCII box drawing characters (┌─┐)
 
 **ASCII Border Utilities (requires `.ui-terminal.use-border-chars`):**
 - `.ascii-border`: Adds ┌─┐ borders with ::before/::after
 - `.ascii-line-h`: Horizontal line (─)
 - `.ascii-line-v`: Vertical line (│)
 
-Example:
+Example usage:
 ```tsx
 <div className="ui-terminal use-border-chars">
   <div className="ascii-border p-4">Terminal UI</div>
 </div>
 ```
+
+**Settings Integration:**
+Terminal style managed via `useSettingsStore`:
+- `uiStyle`: 'modern' | 'terminal'
+- `terminalStyleOptions`: { colorPreset, fontFamily, useBorderChars }
+
+Component: `src/renderer/components/settings/terminal-style-options.tsx`
 
 ## Git Workflow
 
