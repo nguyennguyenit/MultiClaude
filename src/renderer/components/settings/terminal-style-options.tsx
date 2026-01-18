@@ -1,6 +1,6 @@
 import { useSettingsStore } from '../../stores'
-import { TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, type TerminalColorPresetConfig, type TerminalFontConfig } from '@shared/constants'
-import type { TerminalColorPreset, TerminalFontId } from '@shared/types'
+import { TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, type TerminalColorPresetConfig } from '@shared/constants'
+import type { TerminalFontId } from '@shared/types'
 import { SettingsSubheading } from './settings-typography'
 
 /**
