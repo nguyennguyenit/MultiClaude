@@ -103,7 +103,7 @@ export function TerminalSettings() {
                   key={option.value}
                   onClick={() => handlePresetChange(option.value)}
                   className={`
-                    flex items-center justify-center px-4 py-2 rounded text-sm min-w-[3rem]
+                    flex items-center justify-center gap-1.5 px-4 py-2 rounded text-sm min-w-[3rem]
                     transition-colors duration-150
                     ${terminalLimit.preset === option.value
                       ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)]'
@@ -111,6 +111,7 @@ export function TerminalSettings() {
                   `}
                 >
                   {option.label}
+                  {terminalLimit.preset === option.value && <span>✓</span>}
                 </button>
               ))}
             </div>
