@@ -63,6 +63,7 @@ interface SettingsState {
 /**
  * Optimized deep equality check for AppSettings.
  * Compares individual fields instead of full JSON.stringify.
+ * Handles undefined fields from old settings migration.
  */
 function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   // Compare primitive fields
@@ -72,10 +73,12 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
   if (a.uiStyle !== b.uiStyle) return false
 
-  // Compare terminalLimit
-  if (a.terminalLimit.preset !== b.terminalLimit.preset) return false
-  if (a.terminalLimit.preset === 'custom' && b.terminalLimit.preset === 'custom') {
-    if (a.terminalLimit.customValue !== b.terminalLimit.customValue) return false
+  // Compare terminalLimit (with null safety for migration)
+  const aLimit = a.terminalLimit
+  const bLimit = b.terminalLimit
+  if (aLimit?.preset !== bLimit?.preset) return false
+  if (aLimit?.preset === 'custom' && bLimit?.preset === 'custom') {
+    if (aLimit.customValue !== bLimit.customValue) return false
   }
 
   // Compare terminalStyleOptions
