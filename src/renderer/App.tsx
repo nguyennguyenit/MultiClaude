@@ -235,16 +235,22 @@ function App() {
     const presetClasses = Object.keys(TERMINAL_COLOR_PRESETS).map(k => `terminal-preset-${k}`)
     root.classList.remove('ui-terminal', ...presetClasses, 'use-border-chars')
 
+    const terminalOpts = pendingSettings.terminalStyleOptions ?? {
+      colorPreset: 'green',
+      fontFamily: 'jetbrains-mono',
+      useBorderChars: false
+    }
+
     if (pendingSettings.uiStyle === 'terminal') {
       root.classList.add('ui-terminal')
-      root.classList.add(`terminal-preset-${pendingSettings.terminalStyleOptions.colorPreset}`)
+      root.classList.add(`terminal-preset-${terminalOpts.colorPreset}`)
 
-      if (pendingSettings.terminalStyleOptions.useBorderChars) {
+      if (terminalOpts.useBorderChars) {
         root.classList.add('use-border-chars')
       }
 
       // Set font variable
-      const font = TERMINAL_FONTS.find(f => f.id === pendingSettings.terminalStyleOptions.fontFamily)
+      const font = TERMINAL_FONTS.find(f => f.id === terminalOpts.fontFamily)
       root.style.setProperty('--mc-terminal-font', font?.family || "'JetBrains Mono', monospace")
     } else {
       root.style.removeProperty('--mc-terminal-font')
@@ -258,9 +264,9 @@ function App() {
     pendingSettings.themeMode,
     pendingSettings.colorTheme,
     pendingSettings.uiStyle,
-    pendingSettings.terminalStyleOptions.colorPreset,
-    pendingSettings.terminalStyleOptions.fontFamily,
-    pendingSettings.terminalStyleOptions.useBorderChars
+    pendingSettings.terminalStyleOptions?.colorPreset,
+    pendingSettings.terminalStyleOptions?.fontFamily,
+    pendingSettings.terminalStyleOptions?.useBorderChars
   ])
 
   // Load saved projects on mount and validate folder existence
