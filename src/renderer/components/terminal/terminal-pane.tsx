@@ -1,6 +1,10 @@
 import { useEffect, useRef, useCallback, memo, useState } from 'react'
 import { TerminalView } from './terminal-view'
 
+// Streaming detection constants
+const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
+const STREAMING_FIT_DELAY = 500       // ms - delay fit during streaming to avoid reflow duplicates
+
 interface TerminalPaneProps {
   terminalId: string
   title: string
@@ -31,6 +35,7 @@ export const TerminalPane = memo(function TerminalPane({
   const resizeTimeoutRef = useRef<number | undefined>(undefined)
   const terminalFitRef = useRef<(() => void) | null>(null)
   const terminalRefreshRef = useRef<(() => void) | null>(null)
+  const lastOutputTimeRef = useRef<number>(0)  // Track last output time for streaming detection
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
 
@@ -49,6 +54,11 @@ export const TerminalPane = memo(function TerminalPane({
   // Store refresh callback from TerminalView
   const handleTerminalRefresh = useCallback((refreshFn: () => void) => {
     terminalRefreshRef.current = refreshFn
+  }, [])
+
+  // Track output for streaming detection
+  const handleTerminalOutput = useCallback(() => {
+    lastOutputTimeRef.current = Date.now()
   }, [])
 
   // Handle refresh button click
@@ -79,19 +89,36 @@ export const TerminalPane = memo(function TerminalPane({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isActive, handleInsertFilePath])
 
-  // Debounced fit on container resize
+  // Debounced fit on container resize - defers during streaming to avoid reflow duplicates
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     const resizeObserver = new ResizeObserver(() => {
-      // Debounce fit calls during resize drag
+      // Clear any pending fit
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current)
       }
+
+      // Check if terminal is actively streaming output
+      const timeSinceLastOutput = Date.now() - lastOutputTimeRef.current
+      const isStreaming = timeSinceLastOutput < STREAMING_IDLE_THRESHOLD
+
+      // Use longer delay during streaming to avoid reflow duplicates
+      const delay = isStreaming ? STREAMING_FIT_DELAY : 100
+
       resizeTimeoutRef.current = window.setTimeout(() => {
+        // Re-check streaming state before fit
+        const currentTimeSinceOutput = Date.now() - lastOutputTimeRef.current
+        if (currentTimeSinceOutput < STREAMING_IDLE_THRESHOLD) {
+          // Still streaming, defer again
+          resizeTimeoutRef.current = window.setTimeout(() => {
+            terminalFitRef.current?.()
+          }, STREAMING_FIT_DELAY)
+          return
+        }
         terminalFitRef.current?.()
-      }, 100)
+      }, delay)
     })
 
     resizeObserver.observe(container)
@@ -230,6 +257,7 @@ export const TerminalPane = memo(function TerminalPane({
           initialOutput={initialOutput}
           onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}
+          onOutput={handleTerminalOutput}
         />
       </div>
     </div>

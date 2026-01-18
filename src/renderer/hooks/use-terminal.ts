@@ -365,9 +365,18 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     })
   }, [terminalId, initialOutput, onResize, attachContextLostListener])
 
-  // Write data to terminal with auto cursor restore
+  // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
+    // Save scroll state BEFORE write (xterm auto-scrolls on write)
+    const wasAtBottom = isAtBottomRef.current
+    const savedY = terminalRef.current?.buffer.active.viewportY ?? 0
+
     terminalRef.current?.write(data)
+
+    // If user was reading history (not at bottom), restore their scroll position
+    if (!wasAtBottom && terminalRef.current && savedY >= 0) {
+      terminalRef.current.scrollToLine(savedY)
+    }
 
     // Auto cursor restore: after output settles, send show cursor sequence
     // This fixes cursor disappearing after long CLI output
@@ -679,23 +688,20 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       const restoreScrollAndCursor = () => {
         if (cancelled || disposedRef.current || !terminalRef.current) return
 
-        // 1. Force re-render all rows FIRST (may affect scroll)
-        terminalRef.current.refresh(0, terminalRef.current.rows - 1)
-
-        // 2. Restore scroll position AFTER refresh using xterm.js API
+        // 1. Restore scroll position (no refresh needed - prevents screen jumping)
         if (savedViewportY !== null && savedViewportY > 0) {
           terminalRef.current.scrollToLine(savedViewportY)
         }
 
-        // 3. Force cursor re-render by toggling cursorBlink option
+        // 2. Force cursor re-render by toggling cursorBlink option
         // This is more reliable than ANSI sequence for WebGL addon scenarios
         terminalRef.current.options.cursorBlink = false
         terminalRef.current.options.cursorBlink = true
 
-        // 4. Also send ANSI sequence as backup
+        // 3. Also send ANSI sequence as backup
         terminalRef.current.write('\x1b[?25h')
 
-        // 5. Focus terminal
+        // 4. Focus terminal
         terminalRef.current.focus()
       }
 
