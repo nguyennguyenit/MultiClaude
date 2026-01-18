@@ -8,7 +8,7 @@ import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { COLOR_THEMES } from '@shared/constants'
+import { COLOR_THEMES, TERMINAL_FONTS, TERMINAL_COLOR_PRESETS } from '@shared/constants'
 import type { WindowsShell } from '@shared/types'
 
 // Detect macOS for title bar layout (traffic lights on left)
@@ -230,11 +230,38 @@ function App() {
     root.classList.add(isDark ? 'dark' : 'light')
     root.classList.add(`theme-${pendingSettings.colorTheme}`)
 
+    // ===== TERMINAL STYLE LOGIC =====
+    // Remove all terminal classes (derived from TERMINAL_COLOR_PRESETS for DRY)
+    const presetClasses = Object.keys(TERMINAL_COLOR_PRESETS).map(k => `terminal-preset-${k}`)
+    root.classList.remove('ui-terminal', ...presetClasses, 'use-border-chars')
+
+    if (pendingSettings.uiStyle === 'terminal') {
+      root.classList.add('ui-terminal')
+      root.classList.add(`terminal-preset-${pendingSettings.terminalStyleOptions.colorPreset}`)
+
+      if (pendingSettings.terminalStyleOptions.useBorderChars) {
+        root.classList.add('use-border-chars')
+      }
+
+      // Set font variable
+      const font = TERMINAL_FONTS.find(f => f.id === pendingSettings.terminalStyleOptions.fontFamily)
+      root.style.setProperty('--mc-terminal-font', font?.family || "'JetBrains Mono', monospace")
+    } else {
+      root.style.removeProperty('--mc-terminal-font')
+    }
+
     // Update title bar overlay to match theme (--mc-bg-tertiary)
     const bgColor = isDark ? '#2d2d2d' : '#ebebeb'
     const symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
     window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
-  }, [pendingSettings.themeMode, pendingSettings.colorTheme])
+  }, [
+    pendingSettings.themeMode,
+    pendingSettings.colorTheme,
+    pendingSettings.uiStyle,
+    pendingSettings.terminalStyleOptions.colorPreset,
+    pendingSettings.terminalStyleOptions.fontFamily,
+    pendingSettings.terminalStyleOptions.useBorderChars
+  ])
 
   // Load saved projects on mount and validate folder existence
   useEffect(() => {

@@ -63,7 +63,7 @@ src/main/
 
 ```
 src/renderer/
-├── App.tsx                   # Root component, layout, handlers
+├── App.tsx                   # Root component, layout, theme system, handlers
 ├── main.tsx                  # React entry point
 ├── components/
 │   ├── terminal/
@@ -188,6 +188,14 @@ Architecture: Save/Cancel Flow
 - Validation: Main process validates all settings before persist
   - uiStyle: 'modern' | 'terminal'
   - terminalStyleOptions: colorPreset, fontFamily, useBorderChars
+
+Terminal UI Style Integration (App.tsx):
+- Imports TERMINAL_FONTS and TERMINAL_COLOR_PRESETS from @shared/constants
+- Theme useEffect applies classes dynamically based on pendingSettings.uiStyle
+- Granular reactivity: Flattened dependency array for terminalStyleOptions
+- DRY principle: Derives preset classes from TERMINAL_COLOR_PRESETS object
+- CSS class management: .ui-terminal, .terminal-preset-{id}, .use-border-chars
+- CSS variable: --mc-terminal-font set dynamically from selected font
 
 +----------+    IPC       +-----------+    persist    +---------------+
 | Component| ----------->| Main      | ------------->| electron-store|
