@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
@@ -45,6 +45,8 @@ interface SettingsState {
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setWindowsShell: (shell: WindowsShell) => void
+  setUiStyle: (style: UiStyle) => void
+  setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
 
   // Actions
   saveSettings: () => Promise<void>      // Persist pending → saved
@@ -68,12 +70,20 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.colorTheme !== b.colorTheme) return false
   if (a.terminalRenderMode !== b.terminalRenderMode) return false
   if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
+  if (a.uiStyle !== b.uiStyle) return false
 
   // Compare terminalLimit
   if (a.terminalLimit.preset !== b.terminalLimit.preset) return false
   if (a.terminalLimit.preset === 'custom' && b.terminalLimit.preset === 'custom') {
     if (a.terminalLimit.customValue !== b.terminalLimit.customValue) return false
   }
+
+  // Compare terminalStyleOptions
+  const aStyle = a.terminalStyleOptions
+  const bStyle = b.terminalStyleOptions
+  if (aStyle?.colorPreset !== bStyle?.colorPreset) return false
+  if (aStyle?.fontFamily !== bStyle?.fontFamily) return false
+  if (aStyle?.useBorderChars !== bStyle?.useBorderChars) return false
 
   // Compare windowsShell
   const aShell = a.windowsShell
@@ -93,7 +103,10 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   savedSettings: DEFAULT_SETTINGS,
   pendingSettings: DEFAULT_SETTINGS,
-  // Backward-compatible alias - always points to pendingSettings for live preview
+  /**
+   * @deprecated Use pendingSettings for preview state or savedSettings for persisted state.
+   * This alias always returns pendingSettings for backward compatibility with legacy code.
+   */
   get settings() { return get().pendingSettings },
   hasUnsavedChanges: false,
   wslInfo: null,
@@ -143,6 +156,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setWindowsShell: (shell) => {
     const pending = { ...get().pendingSettings, windowsShell: shell }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setUiStyle: (style) => {
+    const pending = { ...get().pendingSettings, uiStyle: style }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setTerminalStyleOptions: (options) => {
+    const pending = {
+      ...get().pendingSettings,
+      terminalStyleOptions: {
+        ...get().pendingSettings.terminalStyleOptions,
+        ...options
+      }
+    }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

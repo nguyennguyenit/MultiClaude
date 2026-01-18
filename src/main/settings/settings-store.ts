@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode, UiStyle, TerminalColorPreset, TerminalFontId } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 
 interface StoreSchema {
@@ -11,6 +11,9 @@ const VALID_THEME_MODES: ThemeMode[] = ['light', 'dark', 'system']
 const VALID_COLOR_THEMES: ColorTheme[] = ['default', 'dusk', 'lime', 'ocean', 'retro', 'neo', 'forest', 'neon-cyber', 'pro-dark', 'vibrant']
 const VALID_RENDER_MODES: TerminalRenderMode[] = ['performance', 'balanced', 'quality']
 const VALID_TERMINAL_PRESETS = [2, 4, 9, 'custom'] as const
+const VALID_UI_STYLES: UiStyle[] = ['modern', 'terminal']
+const VALID_TERMINAL_COLOR_PRESETS: TerminalColorPreset[] = ['green', 'blue', 'white']
+const VALID_TERMINAL_FONT_IDS: TerminalFontId[] = ['jetbrains-mono', 'source-code-pro', 'fira-code', 'vt323', 'ibm-plex-mono', 'space-mono']
 
 /**
  * Validate and sanitize incoming settings to prevent data corruption.
@@ -80,6 +83,31 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
     }
   }
 
+  // Validate uiStyle
+  if (settings.uiStyle !== undefined) {
+    validated.uiStyle = VALID_UI_STYLES.includes(settings.uiStyle)
+      ? settings.uiStyle
+      : defaults.uiStyle
+  }
+
+  // Validate terminalStyleOptions
+  if (settings.terminalStyleOptions !== undefined) {
+    const opts = settings.terminalStyleOptions
+    if (opts && typeof opts === 'object') {
+      validated.terminalStyleOptions = {
+        colorPreset: VALID_TERMINAL_COLOR_PRESETS.includes(opts.colorPreset)
+          ? opts.colorPreset
+          : defaults.terminalStyleOptions.colorPreset,
+        fontFamily: VALID_TERMINAL_FONT_IDS.includes(opts.fontFamily)
+          ? opts.fontFamily
+          : defaults.terminalStyleOptions.fontFamily,
+        useBorderChars: typeof opts.useBorderChars === 'boolean'
+          ? opts.useBorderChars
+          : defaults.terminalStyleOptions.useBorderChars
+      }
+    }
+  }
+
   return validated
 }
 
@@ -122,6 +150,9 @@ export class SettingsStore {
       terminalLimit: validated.terminalLimit
         ? { ...current.terminalLimit, ...validated.terminalLimit }
         : current.terminalLimit,
+      terminalStyleOptions: validated.terminalStyleOptions
+        ? { ...current.terminalStyleOptions, ...validated.terminalStyleOptions }
+        : current.terminalStyleOptions,
       windowsShell: validated.windowsShell ?? current.windowsShell
     }
     this.store.set('settings', updated)

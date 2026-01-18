@@ -120,10 +120,11 @@ src/renderer/
 │   └── index.ts
 ├── stores/
 │   ├── app-store.ts               # Projects, terminals, UI state
-│   ├── settings-store.ts          # Theme, terminal settings
+│   ├── settings-store.ts          # Theme, UI style, terminal settings
 │   ├── notification-store.ts      # Notification preferences
 │   ├── update-store.ts            # Update state
 │   ├── toast-store.ts             # Toast queue
+│   ├── image-store.ts             # Image handling and upload state
 │   └── index.ts
 └── utils/
     ├── shell-utils.ts             # WindowsShell key helper
@@ -184,6 +185,9 @@ Architecture: Save/Cancel Flow
 - pendingSettings: Live preview (edited but not saved)
 - Changes preview immediately, persist only on Save
 - localStorage migration: One-time automatic on first load
+- Validation: Main process validates all settings before persist
+  - uiStyle: 'modern' | 'terminal'
+  - terminalStyleOptions: colorPreset, fontFamily, useBorderChars
 
 +----------+    IPC       +-----------+    persist    +---------------+
 | Component| ----------->| Main      | ------------->| electron-store|
@@ -231,6 +235,11 @@ interface ElectronAPI {
     get: () => Promise<AppSettings>           // Get from electron-store with validation
     set: (settings: Partial<AppSettings>) => Promise<AppSettings>  // Save to disk with validation
     reset: () => Promise<AppSettings>         // Reset to defaults
+  }
+  image: {
+    open: (filePath: string) => Promise<boolean>      // Open image in system viewer
+    delete: (filePath: string) => Promise<boolean>    // Delete image file
+    readBase64: (filePath: string) => Promise<string | null>  // Read as base64
   }
   // ... other namespaces
 }

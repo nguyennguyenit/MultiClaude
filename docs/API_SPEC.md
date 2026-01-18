@@ -142,6 +142,9 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | invoke | `yolo:get` | `projectPath: string` | `boolean` | 🔄 |
 | invoke | `yolo:set` | `{ projectPath, enabled }` | `{ success, error? }` | 🔄 |
 | invoke | `clipboard:save-image` | `base64Data: string` | `string \| null` | 🔄 |
+| invoke | `image:open` | `filePath: string` | `boolean` | 🔄 |
+| invoke | `image:delete` | `filePath: string` | `boolean` | 🔄 |
+| invoke | `image:read-base64` | `filePath: string` | `string \| null` | 🔄 |
 | invoke | `file-picker:open` | - | `string[] \| null` | 🔄 |
 
 ## 4. Type Definitions
@@ -193,6 +196,12 @@ interface AppSettings {
   terminalRenderMode: 'performance' | 'balanced' | 'quality'
   glassmorphismEnabled: boolean
   windowsShell?: WindowsShell
+  uiStyle: 'modern' | 'terminal'
+  terminalStyleOptions: {
+    colorPreset: 'green' | 'blue' | 'white'
+    fontFamily: 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
+    useBorderChars: boolean
+  }
 }
 ```
 
