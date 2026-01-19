@@ -96,6 +96,7 @@ export const IPC_CHANNELS = {
   IMAGE_OPEN: 'image:open',
   IMAGE_DELETE: 'image:delete',
   IMAGE_READ_BASE64: 'image:read-base64',
+  IMAGE_LIST_SCREENSHOTS: 'image:list-screenshots',
 
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',

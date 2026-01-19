@@ -124,6 +124,7 @@ export interface ElectronAPI {
     open: (filePath: string) => Promise<boolean>
     delete: (filePath: string) => Promise<boolean>
     readBase64: (filePath: string) => Promise<string | null>
+    listScreenshots: () => Promise<string[]>
   }
   filePicker: {
     open: () => Promise<string[] | null>
@@ -275,7 +276,8 @@ const api: ElectronAPI = {
   image: {
     open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_OPEN, filePath),
     delete: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_DELETE, filePath),
-    readBase64: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_READ_BASE64, filePath)
+    readBase64: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_READ_BASE64, filePath),
+    listScreenshots: () => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS)
   },
   filePicker: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)

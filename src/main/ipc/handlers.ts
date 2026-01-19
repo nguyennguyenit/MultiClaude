@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
-import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
+import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
+import { tmpdir } from 'os'
 import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
@@ -500,6 +501,28 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       }
     }
     return null
+  })
+
+  // List screenshot files sorted by modification time (newest first)
+  ipcMain.handle(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, () => {
+    const screenshotDir = join(tmpdir(), 'multiClaude-screenshots')
+    if (!existsSync(screenshotDir)) {
+      return []
+    }
+    try {
+      const files = readdirSync(screenshotDir)
+        .filter(f => f.endsWith('.png'))
+        .map(f => {
+          const fullPath = join(screenshotDir, f)
+          const stat = statSync(fullPath)
+          return { path: fullPath, mtime: stat.mtimeMs }
+        })
+        .sort((a, b) => a.mtime - b.mtime) // oldest first (index 0 = Image #1)
+        .map(f => f.path)
+      return files
+    } catch {
+      return []
+    }
   })
 
   // File picker handler

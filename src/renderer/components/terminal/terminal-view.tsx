@@ -1,7 +1,49 @@
-import { useEffect, useRef, memo, CSSProperties, useState, useCallback } from 'react'
+import { useEffect, useRef, memo, CSSProperties, useCallback, useState } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
 import { useAppStore, useSettingsStore, useImageStore } from '../../stores'
-import { ImagePreviewPopup } from './image-preview-popup'
+
+// Helper to find all image paths in line and return the one at given column
+function findImagePathAtColumn(lineText: string, col: number, terminalId: string): { start: number; end: number } | null {
+  const matches: { start: number; end: number }[] = []
+
+  // Check [Image #X] patterns (all occurrences)
+  const imageRefRegex = /\[Image #\d+\]/g
+  let match
+  while ((match = imageRefRegex.exec(lineText)) !== null) {
+    matches.push({ start: match.index, end: match.index + match[0].length })
+  }
+
+  // Check tracked images
+  const trackedImages = useImageStore.getState().getImages(terminalId)
+  for (const img of trackedImages) {
+    let idx = 0
+    while ((idx = lineText.indexOf(img.filePath, idx)) !== -1) {
+      matches.push({ start: idx, end: idx + img.filePath.length })
+      idx += img.filePath.length
+    }
+  }
+
+  // Check multiClaude-screenshots paths (all occurrences)
+  const screenshotRegex = /[^\s"]*multiClaude-screenshots\/screenshot-\d+\.png/g
+  while ((match = screenshotRegex.exec(lineText)) !== null) {
+    matches.push({ start: match.index, end: match.index + match[0].length })
+  }
+
+  // Check any absolute path to image formats (all occurrences)
+  const imageExtRegex = /[/~][^\s"]*\.(?:png|jpg|jpeg|gif|webp|bmp|svg)/gi
+  while ((match = imageExtRegex.exec(lineText)) !== null) {
+    matches.push({ start: match.index, end: match.index + match[0].length })
+  }
+
+  // Find match that contains the column position
+  for (const m of matches) {
+    if (col >= m.start && col < m.end) {
+      return m
+    }
+  }
+
+  return null
+}
 
 // Responsive scroll button styles using CSS Container Queries
 // Button scales 3-4% of terminal width, bounded 20-32px
@@ -48,16 +90,17 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
   // Skip appending output right after restore to prevent duplicates from shell prompt redraws
   const skipAppendRef = useRef(!!initialOutput)
 
-  // Image preview popup state
-  const [hoveredImage, setHoveredImage] = useState<string | null>(null)
-  const [popupPosition, setPopupPosition] = useState<{ x: number; y: number } | null>(null)
+  // Hover highlight state for image path (position within row)
+  const [highlightArea, setHighlightArea] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const removeImage = useImageStore((state) => state.removeImage)
 
-  // Handle mouse move on terminal to detect hover on image paths
+  // Handle mouse move to highlight image path text only
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const terminal = terminalRef.current
-    if (!terminal) return
+    if (!terminal || !terminal.element) {
+      setHighlightArea(null)
+      return
+    }
 
     // Clear existing timeout
     if (hoverTimeoutRef.current) {
@@ -69,83 +112,150 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
       const term = terminalRef.current
       if (!term || !term.element) return
 
-      // Get mouse position relative to terminal
-      const rect = term.element.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
+      // Get xterm-screen element for accurate positioning (accounts for padding)
+      const screenEl = term.element.querySelector('.xterm-screen') as HTMLElement | null
+      if (!screenEl) return
 
-      // Get terminal cell dimensions
-      const cellWidth = rect.width / term.cols
-      const cellHeight = rect.height / term.rows
-
-      // Calculate row/col
+      const screenRect = screenEl.getBoundingClientRect()
+      const wrapperRect = term.element.getBoundingClientRect()
+      const x = e.clientX - screenRect.left
+      const y = e.clientY - screenRect.top
+      const cellWidth = screenRect.width / term.cols
+      const cellHeight = screenRect.height / term.rows
       const col = Math.floor(x / cellWidth)
       const row = Math.floor(y / cellHeight)
 
-      // Get current viewport offset
+      // Calculate offset of screen element within wrapper
+      const screenOffsetLeft = screenRect.left - wrapperRect.left
+      const screenOffsetTop = screenRect.top - wrapperRect.top
+
       const buffer = term.buffer.active
       const absoluteRow = buffer.viewportY + row
-
-      // Get line at this row
       const line = buffer.getLine(absoluteRow)
+
       if (!line) {
-        setHoveredImage(null)
+        setHighlightArea(null)
         return
       }
 
       // Extract text from line
       let lineText = ''
       for (let i = 0; i < line.length; i++) {
-        lineText += line.getCell(i)?.getChars() || ' '
+        lineText += line.getCell(i)?.getChars() || ''
       }
+      lineText = lineText.trimEnd()
 
-      // Find image path pattern at cursor position
-      // Pattern: /tmp/multiClaude-screenshots/screenshot-*.png (with or without quotes)
-      const imagePathRegex = /"?(\/tmp\/multiClaude-screenshots\/screenshot-\d+\.png)"?/g
-      let match
-      let foundPath: string | null = null
+      const pathPos = findImagePathAtColumn(lineText, col, terminalId)
 
-      while ((match = imagePathRegex.exec(lineText)) !== null) {
-        const start = match.index
-        const end = start + match[0].length
-        if (col >= start && col <= end) {
-          foundPath = match[1] // Get the captured group without quotes
+      // Highlight if mouse is within an image path
+      if (pathPos) {
+        setHighlightArea({
+          top: screenOffsetTop + row * cellHeight,
+          left: screenOffsetLeft + pathPos.start * cellWidth,
+          width: (pathPos.end - pathPos.start) * cellWidth,
+          height: cellHeight
+        })
+      } else {
+        setHighlightArea(null)
+      }
+    }, 50)
+  }, [terminalRef, terminalId])
+
+  // Clear highlight on mouse leave
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+    }
+    setHighlightArea(null)
+  }, [])
+
+  // Image preview popup state
+  const handleImageClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
+    const terminal = terminalRef.current
+    if (!terminal || !terminal.element) return
+
+    // Get mouse position relative to terminal
+    const rect = terminal.element.getBoundingClientRect()
+    const y = e.clientY - rect.top
+
+    // Get terminal cell dimensions
+    const cellHeight = rect.height / terminal.rows
+
+    // Calculate row
+    const row = Math.floor(y / cellHeight)
+
+    // Get current viewport offset
+    const buffer = terminal.buffer.active
+    const absoluteRow = buffer.viewportY + row
+
+    // Get line at this row
+    const line = buffer.getLine(absoluteRow)
+    if (!line) return
+
+    // Extract text from line
+    let lineText = ''
+    for (let i = 0; i < line.length; i++) {
+      lineText += line.getCell(i)?.getChars() || ''
+    }
+    lineText = lineText.trimEnd()
+
+    let foundPath: string | null = null
+
+    // Priority 1: Check for [Image #X] pattern (Claude Code format)
+    const imageRefRegex = /\[Image #(\d+)\]/g
+    const imageRefMatch = imageRefRegex.exec(lineText)
+    if (imageRefMatch) {
+      const imageIndex = parseInt(imageRefMatch[1], 10)
+      const screenshots = await window.electron.image.listScreenshots()
+      if (screenshots.length >= imageIndex) {
+        foundPath = screenshots[imageIndex - 1]
+      }
+    }
+
+    // Priority 2: Check tracked images
+    if (!foundPath) {
+      const imageStore = useImageStore.getState()
+      const trackedImages = imageStore.getImages(terminalId)
+      for (const img of trackedImages) {
+        if (lineText.includes(img.filePath)) {
+          foundPath = img.filePath
           break
         }
       }
-
-      if (foundPath) {
-        setHoveredImage(foundPath)
-        setPopupPosition({ x: e.clientX, y: e.clientY })
-      } else {
-        setHoveredImage(null)
-        setPopupPosition(null)
-      }
-    }, 150)
-  }, [terminalRef])
-
-  // Handle image deletion
-  const handleDeleteImage = useCallback(async (filePath: string) => {
-    const success = await window.electron.image.delete(filePath)
-    if (success) {
-      removeImage(terminalId, filePath)
     }
-    setHoveredImage(null)
-    setPopupPosition(null)
-  }, [terminalId, removeImage])
 
-  // Close popup
-  const handleClosePopup = useCallback(() => {
-    setHoveredImage(null)
-    setPopupPosition(null)
-  }, [])
+    // Fallback 1: multiClaude-screenshots paths
+    if (!foundPath) {
+      const screenshotRegex = /"?([^\s"]*multiClaude-screenshots\/screenshot-\d+\.png)"?/g
+      const screenshotMatch = screenshotRegex.exec(lineText)
+      if (screenshotMatch) {
+        foundPath = screenshotMatch[1]
+      }
+    }
+
+    // Fallback 2: Any absolute path to common image formats
+    if (!foundPath) {
+      const imageExtRegex = /"?([/~][^\s"]*\.(?:png|jpg|jpeg|gif|webp|bmp|svg))"?/gi
+      const extMatch = imageExtRegex.exec(lineText)
+      if (extMatch) {
+        foundPath = extMatch[1]
+      }
+    }
+
+    // Open image in external viewer if found
+    if (foundPath) {
+      window.electron.image.open(foundPath)
+    }
+  }, [terminalRef, terminalId])
 
   // Handle click on terminal - force show cursor in case it was hidden by CLI
-  const handleTerminalClick = () => {
+  const handleTerminalClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isActive) {
       focus()
       showCursor()
     }
+    // Check if clicked on image path
+    handleImageClick(e)
   }
 
   // Initialize terminal on mount
@@ -220,12 +330,26 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
       style={scrollButtonWrapperStyle}
       onClick={handleTerminalClick}
       onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       <div
         ref={containerRef}
-        className="terminal-container"
+        className={`terminal-container${highlightArea ? ' image-hover' : ''}`}
         style={{ height: '100%', width: '100%' }}
       />
+
+      {/* Hover underline for image path text */}
+      {highlightArea && (
+        <div
+          className="pointer-events-none absolute bg-white/70 transition-opacity duration-100"
+          style={{
+            top: highlightArea.top + highlightArea.height - 2,
+            left: highlightArea.left,
+            width: highlightArea.width,
+            height: 1
+          }}
+        />
+      )}
 
       {/* Floating scroll-to-bottom button with fade animation */}
       {/* Only show when terminal is active, not at bottom, and no modal is open */}
@@ -244,14 +368,6 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
         </svg>
       </button>
-
-      {/* Image preview popup */}
-      <ImagePreviewPopup
-        imagePath={hoveredImage}
-        position={popupPosition}
-        onClose={handleClosePopup}
-        onDelete={handleDeleteImage}
-      />
     </div>
   )
 })
