@@ -69,6 +69,7 @@ export const IPC_CHANNELS = {
   // App channels
   APP_GET_PATH: 'app:get-path',
   APP_CHECK_FOR_UPDATES: 'app:check-for-updates',
+  APP_OPEN_EXTERNAL: 'app:open-external',
 
   // Notification channels
   NOTIFICATION_GET_SETTINGS: 'notification:get-settings',
@@ -91,6 +92,12 @@ export const IPC_CHANNELS = {
   // Clipboard channels
   CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image',
 
+  // Image channels
+  IMAGE_OPEN: 'image:open',
+  IMAGE_DELETE: 'image:delete',
+  IMAGE_READ_BASE64: 'image:read-base64',
+  IMAGE_LIST_SCREENSHOTS: 'image:list-screenshots',
+
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',
 
@@ -99,7 +106,12 @@ export const IPC_CHANNELS = {
   UPDATE_CHECK: 'update:check',
   UPDATE_DOWNLOAD: 'update:download',
   UPDATE_INSTALL: 'update:install',
-  UPDATE_STATUS_CHANGED: 'update:status-changed'
+  UPDATE_STATUS_CHANGED: 'update:status-changed',
+
+  // Settings channels
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_SET: 'settings:set',
+  SETTINGS_RESET: 'settings:reset'
 } as const
 
 export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS]

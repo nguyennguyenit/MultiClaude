@@ -51,8 +51,9 @@ export function ProjectTabs({
           <div
             key={project.id}
             data-testid={`project-tab-${project.id}`}
+            onClick={() => onSelectProject(project.id)}
             className={`
-              group flex items-center gap-2 px-3 py-1.5 text-sm
+              group flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer
               border-r border-[var(--mc-border)] min-w-[100px] max-w-[200px]
               transition-colors duration-150
               ${activeProjectId === project.id
@@ -61,8 +62,7 @@ export function ProjectTabs({
               }
             `}
           >
-            <button
-              onClick={() => onSelectProject(project.id)}
+            <div
               className="flex items-center gap-2 flex-1 min-w-0"
               title={`${project.name} (Alt+${index + 1})`}
             >
@@ -71,7 +71,7 @@ export function ProjectTabs({
                 {index + 1}
               </span>
               <span className="truncate">{project.name}</span>
-            </button>
+            </div>
             {/* Delete button */}
             <button
               onClick={(e) => {

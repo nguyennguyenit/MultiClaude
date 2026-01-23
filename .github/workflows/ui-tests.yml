@@ -3,8 +3,20 @@ name: UI Tests
 on:
   push:
     branches: [main, beta]
+    paths:
+      - 'src/renderer/**'
+      - 'src/**/*.tsx'
+      - 'src/**/*.css'
+      - 'src/__tests__/e2e/**'
+      - 'index.html'
   pull_request:
     branches: [main, beta]
+    paths:
+      - 'src/renderer/**'
+      - 'src/**/*.tsx'
+      - 'src/**/*.css'
+      - 'src/__tests__/e2e/**'
+      - 'index.html'
 
 jobs:
   ui-tests:

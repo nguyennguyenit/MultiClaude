@@ -1,4 +1,63 @@
-import type { ColorThemeDefinition, AppSettings } from '../types'
+import type { ColorThemeDefinition, AppSettings, TerminalColorPreset, TerminalFontId } from '../types'
+
+// Terminal UI color preset configuration
+export interface TerminalColorPresetConfig {
+  id: TerminalColorPreset
+  name: string
+  bg: string
+  text: string
+  textSecondary: string
+  accent: string
+  border: string
+}
+
+// Terminal UI color presets
+export const TERMINAL_COLOR_PRESETS = {
+  green: {
+    id: 'green',
+    name: 'Matrix',
+    bg: '#001C00',
+    text: '#00FF00',
+    textSecondary: '#00A300',
+    accent: '#00FF00',
+    border: '#00FF00'
+  },
+  blue: {
+    id: 'blue',
+    name: 'Cyan',
+    bg: '#001020',
+    text: '#00BFFF',
+    textSecondary: '#0088AA',
+    accent: '#00FFFF',
+    border: '#00BFFF'
+  },
+  white: {
+    id: 'white',
+    name: 'Mono',
+    bg: '#000000',
+    text: '#FFFFFF',
+    textSecondary: '#AAAAAA',
+    accent: '#FFFFFF',
+    border: '#FFFFFF'
+  }
+} as const satisfies Record<TerminalColorPreset, TerminalColorPresetConfig>
+
+// Terminal UI font configuration
+export interface TerminalFontConfig {
+  id: TerminalFontId
+  name: string
+  family: string
+}
+
+// Terminal UI font options
+export const TERMINAL_FONTS: readonly TerminalFontConfig[] = [
+  { id: 'jetbrains-mono', name: 'JetBrains Mono', family: "'JetBrains Mono', monospace" },
+  { id: 'source-code-pro', name: 'Source Code Pro', family: "'Source Code Pro', monospace" },
+  { id: 'fira-code', name: 'Fira Code', family: "'Fira Code', monospace" },
+  { id: 'vt323', name: 'VT323 (Retro)', family: "'VT323', monospace" },
+  { id: 'ibm-plex-mono', name: 'IBM Plex Mono', family: "'IBM Plex Mono', monospace" },
+  { id: 'space-mono', name: 'Space Mono', family: "'Space Mono', monospace" }
+] as const
 
 export const COLOR_THEMES: ColorThemeDefinition[] = [
   {
@@ -69,5 +128,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminalLimit: { preset: 9 },
   terminalRenderMode: 'balanced',
   glassmorphismEnabled: false,
+  uiStyle: 'modern',
+  terminalStyleOptions: {
+    colorPreset: 'green',
+    fontFamily: 'jetbrains-mono',
+    useBorderChars: false
+  },
   windowsShell: { type: 'cmd' }
 }

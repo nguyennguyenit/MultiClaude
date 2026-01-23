@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CORRECT Implementation - Single Parent Pattern</title>
+  <script crossorigin src="https://unpkg.com/react@19/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@19/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .project-grid {
+      margin: 20px 0;
+      padding: 20px;
+      border: 2px solid #569cd6;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .project-grid.active {
+      border-color: #51cf66;
+      background: rgba(81, 207, 102, 0.05);
+    }
+    .terminal {
+      padding: 15px;
+      margin: 10px 0;
+      background: #2d2d30;
+      border: 1px solid #3e3e42;
+      border-radius: 4px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #569cd6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #4a8cc1;
+    }
+    .log {
+      margin-top: 20px;
+      padding: 15px;
+      background: #252526;
+      border-left: 4px solid #4ec9b0;
+      font-size: 14px;
+      line-height: 1.6;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .mount { color: #4ec9b0; }
+    .unmount { color: #f48771; }
+    .update { color: #dcdcaa; }
+    h1 { color: #569cd6; }
+    h2 { color: #4ec9b0; }
+    .success { color: #51cf66; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, memo } = React;
+
+    // Simulated terminal component
+    const Terminal = memo(function Terminal({ id, projectId, name, onLog }) {
+      const mountCountRef = useRef(0);
+      const renderCountRef = useRef(0);
+
+      useEffect(() => {
+        mountCountRef.current++;
+        onLog(`🟢 MOUNT: ${name} (mount #${mountCountRef.current})`, 'mount');
+
+        return () => {
+          onLog(`🔴 UNMOUNT: ${name} - XTerm destroyed, cursor position lost!`, 'unmount');
+        };
+      }, []);
+
+      renderCountRef.current++;
+
+      return (
+        <div className="terminal">
+          <strong>{name}</strong> (Project {projectId})
+          <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.7 }}>
+            Renders: {renderCountRef.current} | Mounts: {mountCountRef.current}
+          </div>
+        </div>
+      );
+    });
+
+    function App() {
+      const [activeProjectId, setActiveProjectId] = useState('project-a');
+      const [logs, setLogs] = useState([]);
+
+      // Simulated terminal data
+      const terminals = [
+        { id: 'term-a1', projectId: 'project-a', name: 'Terminal A1' },
+        { id: 'term-a2', projectId: 'project-a', name: 'Terminal A2' },
+        { id: 'term-b1', projectId: 'project-b', name: 'Terminal B1' },
+        { id: 'term-b2', projectId: 'project-b', name: 'Terminal B2' },
+      ];
+
+      const addLog = (message, type) => {
+        setLogs(prev => [...prev, { message, type, timestamp: Date.now() }]);
+      };
+
+      const switchProject = (projectId) => {
+        setActiveProjectId(projectId);
+      };
+
+      const clearLogs = () => {
+        setLogs([]);
+      };
+
+      // Group terminals by project
+      const projectGroups = ['project-a', 'project-b'].map(projId => ({
+        projectId: projId,
+        isActive: projId === activeProjectId,
+        terminals: terminals.filter(t => t.projectId === projId)
+      }));
+
+      return (
+        <div>
+          <h1>✅ CORRECT Implementation - Single Parent Pattern</h1>
+          <h2>All terminals in ONE parent container, visibility controlled by CSS</h2>
+
+          <div>
+            <button onClick={() => switchProject('project-a')}>
+              Switch to Project A
+            </button>
+            <button onClick={() => switchProject('project-b')}>
+              Switch to Project B
+            </button>
+            <button onClick={clearLogs}>Clear Logs</button>
+          </div>
+
+          <div style={{ marginTop: '20px', fontSize: '14px' }}>
+            <strong>Active Project:</strong> <span style={{ color: '#4ec9b0' }}>{activeProjectId}</span>
+          </div>
+
+          {/* SINGLE PARENT CONTAINER - All terminals here */}
+          <div style={{ marginTop: '20px' }}>
+            {projectGroups.map(group => (
+              <div
+                key={group.projectId}
+                className={`project-grid ${group.isActive ? 'active' : ''}`}
+                style={{
+                  // Control visibility with CSS, not conditional rendering
+                  display: group.isActive ? 'block' : 'none'
+                }}
+              >
+                <h3>Project {group.projectId.toUpperCase()}</h3>
+                {group.terminals.map(terminal => (
+                  <Terminal
+                    key={terminal.id}
+                    id={terminal.id}
+                    projectId={terminal.projectId}
+                    name={terminal.name}
+                    onLog={addLog}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Logs */}
+          <div className="log">
+            <h3>Lifecycle Logs:</h3>
+            {logs.length === 0 ? (
+              <div style={{ opacity: 0.5 }}>Switch projects to see lifecycle events...</div>
+            ) : (
+              <>
+                <div className="success">
+                  ✅ Notice: NO UNMOUNT events on project switch!
+                </div>
+                {logs.map((log, i) => (
+                  <div key={i} className={`log-entry ${log.type}`}>
+                    {log.message}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          <div style={{ marginTop: '20px', padding: '15px', background: '#264f78', borderRadius: '4px' }}>
+            <strong>Why this works:</strong>
+            <ul style={{ marginTop: '10px' }}>
+              <li>✅ All project grids are children of the SAME parent container</li>
+              <li>✅ Each terminal has a stable position in React tree</li>
+              <li>✅ Switching projects only changes CSS display property</li>
+              <li>✅ React keeps component instances mounted (no unmount/remount)</li>
+              <li>✅ XTerm.js instances preserved → cursor position preserved</li>
+              <li>✅ No 150ms disposal delay needed</li>
+            </ul>
+          </div>
+
+          <div style={{ marginTop: '20px', padding: '15px', background: '#3f3f3f', borderRadius: '4px' }}>
+            <strong>Implementation in MultiClaude:</strong>
+            <pre style={{ marginTop: '10px', fontSize: '12px', lineHeight: '1.5' }}>{`
+// terminal-grid.tsx - CORRECT PATTERN
+<Group orientation="vertical">
+  {projectGroups.map(group => (
+    <div
+      key={group.projectId}
+      style={{ display: group.isActive ? 'flex' : 'none' }}
+    >
+      <Panel>
+        {group.terminals.map(terminal => (
+          <TerminalPane
+            key={terminal.id}
+            hidden={!group.isActive}
+            {...props}
+          />
+        ))}
+      </Panel>
+    </div>
+  ))}
+</Group>
+            `.trim()}</pre>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

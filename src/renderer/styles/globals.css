@@ -70,6 +70,11 @@ body {
   overflow-y: auto !important;
 }
 
+/* Clickable image path cursor */
+.terminal-container.image-hover .xterm-screen {
+  cursor: pointer !important;
+}
+
 /* ============================================
    Theme System - CSS Variables
    ============================================ */
@@ -255,4 +260,211 @@ body {
 /* Navigation item text fade during transition */
 .nav-item-text {
   transition: opacity 150ms ease-in-out;
+}
+
+/* ============================================
+   Terminal UI Style System
+   ============================================ */
+
+/* Terminal font custom property */
+:root {
+  --mc-terminal-font: 'JetBrains Mono', monospace;
+}
+
+/* Terminal Color Presets */
+.terminal-preset-green {
+  --mc-terminal-bg: #001C00;
+  --mc-terminal-bg-secondary: #002200;
+  --mc-terminal-text: #00FF00;
+  --mc-terminal-text-secondary: #00A300;
+  --mc-terminal-text-muted: #006600;
+  --mc-terminal-accent: #00FF00;
+  --mc-terminal-border: #00FF00;
+}
+
+.terminal-preset-blue {
+  --mc-terminal-bg: #001020;
+  --mc-terminal-bg-secondary: #001830;
+  --mc-terminal-text: #00BFFF;
+  --mc-terminal-text-secondary: #0088AA;
+  --mc-terminal-text-muted: #005577;
+  --mc-terminal-accent: #00FFFF;
+  --mc-terminal-border: #00BFFF;
+}
+
+.terminal-preset-white {
+  --mc-terminal-bg: #000000;
+  --mc-terminal-bg-secondary: #111111;
+  --mc-terminal-text: #FFFFFF;
+  --mc-terminal-text-secondary: #AAAAAA;
+  --mc-terminal-text-muted: #666666;
+  --mc-terminal-accent: #FFFFFF;
+  --mc-terminal-border: #FFFFFF;
+}
+
+/* Terminal UI Style - Override CSS Variables */
+.ui-terminal {
+  /* Override core variables with terminal values */
+  --mc-bg-primary: var(--mc-terminal-bg);
+  --mc-bg-secondary: var(--mc-terminal-bg-secondary);
+  --mc-bg-tertiary: var(--mc-terminal-bg-secondary);
+  --mc-bg-hover: color-mix(in srgb, var(--mc-terminal-text) 10%, var(--mc-terminal-bg));
+  --mc-bg-active: color-mix(in srgb, var(--mc-terminal-text) 15%, var(--mc-terminal-bg));
+  --mc-text-primary: var(--mc-terminal-text);
+  --mc-text-secondary: var(--mc-terminal-text-secondary);
+  --mc-text-muted: var(--mc-terminal-text-muted);
+  --mc-border: var(--mc-terminal-border);
+  --mc-accent: var(--mc-terminal-accent);
+  --mc-accent-hover: var(--mc-terminal-accent);
+  --mc-backdrop: rgba(0, 0, 0, 0.95);
+
+  /* Font */
+  font-family: var(--mc-terminal-font);
+}
+
+/* Remove border-radius from common elements in terminal mode */
+.ui-terminal button,
+.ui-terminal input,
+.ui-terminal select,
+.ui-terminal textarea,
+.ui-terminal [class*="rounded"],
+.ui-terminal [class*="modal"],
+.ui-terminal [class*="dialog"],
+.ui-terminal [class*="panel"],
+.ui-terminal [class*="card"] {
+  border-radius: 0 !important;
+}
+
+/* Terminal scrollbar */
+.ui-terminal ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.ui-terminal ::-webkit-scrollbar-track {
+  background: var(--mc-terminal-bg);
+}
+
+.ui-terminal ::-webkit-scrollbar-thumb {
+  background: var(--mc-terminal-border);
+  border: 1px solid var(--mc-terminal-bg);
+}
+
+.ui-terminal ::-webkit-scrollbar-thumb:hover {
+  background: var(--mc-terminal-accent);
+}
+
+/* Button styles in terminal mode */
+.ui-terminal button {
+  border: 1px solid var(--mc-terminal-border);
+  background: transparent;
+  color: var(--mc-terminal-text);
+  font-family: var(--mc-terminal-font);
+}
+
+.ui-terminal button:hover {
+  background: var(--mc-bg-hover);
+}
+
+.ui-terminal button:focus {
+  outline: 1px solid var(--mc-terminal-accent);
+  outline-offset: -1px;
+}
+
+/* Input styles in terminal mode */
+.ui-terminal input,
+.ui-terminal select,
+.ui-terminal textarea {
+  border: 1px solid var(--mc-terminal-border);
+  background: var(--mc-terminal-bg);
+  color: var(--mc-terminal-text);
+  font-family: var(--mc-terminal-font);
+}
+
+.ui-terminal input:focus,
+.ui-terminal select:focus,
+.ui-terminal textarea:focus {
+  outline: 1px solid var(--mc-terminal-accent);
+  outline-offset: -1px;
+}
+
+.ui-terminal input::placeholder,
+.ui-terminal textarea::placeholder {
+  color: var(--mc-terminal-text-muted);
+}
+
+/* Modal backdrop in terminal mode - uses --mc-backdrop from .ui-terminal */
+.ui-terminal .modal-backdrop {
+  background: var(--mc-backdrop);
+}
+
+/* ASCII Border Mode
+ * Usage: Add .ascii-border class to element in .ui-terminal.use-border-chars
+ * Attributes:
+ *   - data-ascii-title: optional title text displayed in top border (e.g., "────Settings────")
+ *   - data-ascii-width: optional filler for bottom border (e.g., "────────────────")
+ * Note: Components in Phase 04 will generate these attributes dynamically
+ */
+.ui-terminal.use-border-chars .ascii-border {
+  position: relative;
+  border: none !important;
+}
+
+/* ASCII border corners using box-drawing characters */
+.ui-terminal.use-border-chars .ascii-border::before,
+.ui-terminal.use-border-chars .ascii-border::after {
+  font-family: var(--mc-terminal-font);
+  color: var(--mc-terminal-border);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Top border with corners - displays: ┌{data-ascii-title}┐ */
+.ui-terminal.use-border-chars .ascii-border::before {
+  content: '┌' attr(data-ascii-title) '┐';
+  position: absolute;
+  top: -1em;
+  left: 0;
+  right: 0;
+}
+
+/* Bottom border with corners - displays: └{data-ascii-width}┘ */
+.ui-terminal.use-border-chars .ascii-border::after {
+  content: '└' attr(data-ascii-width) '┘';
+  position: absolute;
+  bottom: -1em;
+  left: 0;
+  right: 0;
+}
+
+/* Utility class for horizontal ASCII line */
+.ui-terminal .ascii-line-h {
+  border-top: none;
+  background: linear-gradient(to right,
+    var(--mc-terminal-border) 2px,
+    transparent 2px
+  );
+  background-size: 4px 1px;
+  height: 1px;
+}
+
+/* Utility class for vertical ASCII line */
+.ui-terminal .ascii-line-v {
+  border-left: none;
+  background: linear-gradient(to bottom,
+    var(--mc-terminal-border) 2px,
+    transparent 2px
+  );
+  background-size: 1px 4px;
+  width: 1px;
+}
+
+/* Terminal cursor blink animation */
+.ui-terminal .terminal-cursor {
+  animation: terminal-blink 1s step-end infinite;
+}
+
+@keyframes terminal-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }

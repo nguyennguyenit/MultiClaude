@@ -1,7 +1,10 @@
 import * as pty from '@lydell/node-pty'
 import os from 'os'
+import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
+
+const DESTROY_TIMEOUT_MS = 3000
 
 interface PTYProcess {
   id: string
@@ -9,6 +12,7 @@ interface PTYProcess {
   metadata: Terminal
   outputBuffer: string
   oscBuffer: string // Buffer for incomplete OSC sequences
+  destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
 }
 
 export class TerminalManager extends EventEmitter {
@@ -155,9 +159,9 @@ export class TerminalManager extends EventEmitter {
     // Handle terminal output
     ptyProcess.onData((data) => {
       termProcess.outputBuffer += data
-      // Keep buffer at max 100KB
-      if (termProcess.outputBuffer.length > 100000) {
-        termProcess.outputBuffer = termProcess.outputBuffer.slice(-50000)
+      // Keep buffer at max 500KB
+      if (termProcess.outputBuffer.length > 500000) {
+        termProcess.outputBuffer = termProcess.outputBuffer.slice(-250000)
       }
       this.emit('output', { terminalId: id, data })
 
@@ -202,6 +206,84 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
+  /**
+   * Force kill process - platform specific
+   * Windows: taskkill for process tree (using array args to prevent injection)
+   * Unix: SIGKILL
+   */
+  private forceKill(term: PTYProcess): void {
+    try {
+      if (process.platform === 'win32') {
+        // Use spawnSync with array args to prevent command injection
+        console.debug(`[terminal-manager] Force killing Windows process tree: PID ${term.pty.pid}`)
+        spawnSync('taskkill', ['/PID', String(term.pty.pid), '/T', '/F'], { stdio: 'ignore' })
+      } else {
+        console.debug(`[terminal-manager] Force killing Unix process: PID ${term.pty.pid}`)
+        process.kill(term.pty.pid, 'SIGKILL')
+      }
+    } catch (error) {
+      // Process already dead or permission denied - safe to ignore
+      console.debug(`[terminal-manager] Force kill failed (likely already dead): ${(error as Error).message}`)
+    }
+  }
+
+  /**
+   * Async destroy with graceful exit + force kill fallback
+   * Tries graceful exit first, force kills after timeout
+   */
+  async destroyAsync(id: string): Promise<boolean> {
+    const term = this.terminals.get(id)
+    if (!term) return false
+
+    // Guard against duplicate calls
+    if (term.destroying) return true
+    term.destroying = true
+
+    return new Promise((resolve) => {
+      let resolved = false
+
+      const cleanup = () => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(timeout)
+        this.terminals.delete(id)
+      }
+
+      // Attach exit listener BEFORE initiating kill to avoid race condition
+      term.pty.onExit(() => {
+        cleanup()
+        resolve(true)
+      })
+
+      // Timeout handler - force kill if graceful fails
+      const timeout = setTimeout(() => {
+        if (resolved) return
+        this.forceKill(term)
+        cleanup()
+        resolve(true)
+      }, DESTROY_TIMEOUT_MS)
+
+      // Initiate graceful kill after listener attached
+      term.pty.kill()
+    })
+  }
+
+  /**
+   * Async destroy all terminals in parallel
+   * Uses allSettled to ensure all destroy attempts complete even if some fail
+   */
+  async destroyAllAsync(): Promise<void> {
+    const ids = Array.from(this.terminals.keys())
+    await Promise.allSettled(ids.map(id => this.destroyAsync(id)))
+  }
+
+  /**
+   * Check if any terminals exist
+   */
+  hasTerminals(): boolean {
+    return this.terminals.size > 0
+  }
+
   list(): Terminal[] {
     return Array.from(this.terminals.values()).map(t => t.metadata)
   }
@@ -234,7 +316,7 @@ export class TerminalManager extends EventEmitter {
       cwd: t.metadata.cwd,
       projectId: t.metadata.projectId,
       claudeSessionId: t.metadata.claudeSessionId,
-      outputBuffer: t.outputBuffer.slice(-10000) // Last 10KB
+      outputBuffer: t.outputBuffer.slice(-100000) // Last 100KB for session restore
     }))
   }
 }

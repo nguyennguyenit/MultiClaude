@@ -1,21 +1,30 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { useSettingsStore, useToastStore } from '../stores'
-import { getTerminalTheme } from '@shared/constants'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { useSettingsStore, useToastStore, useImageStore } from '../stores'
+import { getTerminalTheme, isAllowedExternalUrl } from '@shared/constants'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
+const WEBGL_FOCUS_BUFFER = 10  // Extra buffer after WebGL toggle to ensure focus works
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
+const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
+const CURSOR_RESTORE_DELAY = 300  // Delay after output settles to restore cursor
+
+// Terminal font family - used for font loading detection
+const TERMINAL_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
+const PRIMARY_FONT = 'JetBrains Mono'
 
 interface UseTerminalOptions {
   terminalId: string
   initialOutput?: string
   isActive?: boolean  // Required for balanced render mode WebGL toggle
+  isHidden?: boolean  // Hidden terminals have WebGL disabled to save GPU resources
   onResize?: (cols: number, rows: number) => void
 }
 
@@ -31,9 +40,13 @@ function getCurrentTerminalTheme() {
 }
 
 /**
- * Determine if WebGL should be used based on render mode and active state
+ * Determine if WebGL should be used based on render mode, active state, and hidden state
+ * Hidden terminals never use WebGL to save GPU resources
  */
-function shouldUseWebGL(isActive: boolean): boolean {
+function shouldUseWebGL(isActive: boolean, isHidden: boolean): boolean {
+  // Never use WebGL for hidden terminals (saves GPU resources)
+  if (isHidden) return false
+
   const mode = useSettingsStore.getState().settings.terminalRenderMode ?? 'balanced'
   switch (mode) {
     case 'performance':
@@ -45,15 +58,18 @@ function shouldUseWebGL(isActive: boolean): boolean {
   }
 }
 
-export function useTerminal({ terminalId, initialOutput, isActive = true, onResize }: UseTerminalOptions) {
+export function useTerminal({ terminalId, initialOutput, isActive = true, isHidden = false, onResize }: UseTerminalOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
   const webglAddonRef = useRef<WebglAddon | null>(null)
   const isActiveRef = useRef(isActive)
+  const isHiddenRef = useRef(isHidden)
+  const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
+  const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
   const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -61,6 +77,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
   const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
+  const cursorRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // Timer for auto cursor restore
 
   // Helper to attach WebGL context lost listener (defined early to avoid hoisting issues)
   // NOTE: Accesses @xterm/addon-webgl internal API. Tested with v0.18.0.
@@ -103,10 +120,14 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     const terminal = new XTerm({
       cursorBlink: true,
       cursorStyle: 'block',
+      cursorInactiveStyle: 'block',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
       fontSize: 14,
-      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+      fontFamily: TERMINAL_FONT_FAMILY,
       theme: getCurrentTerminalTheme(),
-      allowProposedApi: true
+      allowProposedApi: true,
+      windowsMode: false,     // Don't auto-convert \r to \r\n - fixes in-place status line updates
+      convertEol: false,      // Don't auto-convert line endings - preserves cursor positioning
+      scrollback: 50000       // Large scrollback buffer for extensive CLI output
     })
 
     const fitAddon = new FitAddon()
@@ -114,7 +135,22 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
 
     terminal.open(container)
 
-    // Helper function to check and update scroll position
+    // Load web links addon for Ctrl+Click URL opening
+    const webLinksAddon = new WebLinksAddon(
+      (event, uri) => {
+        // Only open on Ctrl+Click (Windows/Linux) or Cmd+Click (macOS)
+        if (event.ctrlKey || event.metaKey) {
+          if (isAllowedExternalUrl(uri)) {
+            window.electron.app.openExternal(uri)
+          } else {
+            useToastStore.getState().addToast('Only http/https URLs can be opened', 'info')
+          }
+        }
+      }
+    )
+    terminal.loadAddon(webLinksAddon)
+
+    // Helper function to check and update scroll position for smart scroll behavior
     const updateScrollPosition = () => {
       const buffer = terminal.buffer.active
       const linesFromBottom = buffer.baseY - buffer.viewportY
@@ -122,6 +158,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       const atBottom = linesFromBottom <= SCROLL_THRESHOLD
       isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
       setIsAtBottom(atBottom)  // With threshold for UI button visibility
+      // Note: Scroll position is saved in visibility effect when terminal becomes hidden
     }
 
     // Track scroll position for smart scroll behavior
@@ -146,7 +183,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (disposedRef.current || !terminalRef.current) return
 
       // Conditionally load WebGL based on render mode setting
-      if (shouldUseWebGL(isActiveRef.current)) {
+      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -166,9 +203,38 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       // Restore output AFTER WebGL init to prevent race condition
       if (initialOutput) {
         terminal.write(initialOutput)
+        // Save initial viewport line position after output restore
+        requestAnimationFrame(() => {
+          if (!disposedRef.current && terminalRef.current) {
+            savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
+          }
+        })
       } else {
         // Initial resize only for fresh terminals
         window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+      }
+
+      // Font loading detection: refit terminal after primary font loads
+      // This fixes character width calculation issues when font loads after terminal init
+      if (document.fonts && typeof document.fonts.load === 'function') {
+        document.fonts.load(`14px "${PRIMARY_FONT}"`).then(() => {
+          if (disposedRef.current || !terminalRef.current || !fitAddonRef.current) return
+          // Delay refit slightly to ensure font metrics are fully updated
+          setTimeout(() => {
+            if (disposedRef.current || !fitAddonRef.current) return
+            try {
+              fitAddonRef.current.fit()
+              // Notify PTY of new dimensions
+              if (terminalRef.current) {
+                window.electron.terminal.resize(terminalId, terminalRef.current.cols, terminalRef.current.rows)
+              }
+            } catch {
+              // Ignore fit errors
+            }
+          }, FONT_LOAD_REFIT_DELAY)
+        }).catch(() => {
+          // Font load failed, fallback font will be used - no action needed
+        })
       }
     }, TERMINAL_INIT_DELAY)
 
@@ -207,25 +273,21 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
 
-      // Alt+1~9: Switch project by index (dispatch event for validation in App.tsx)
+      // Alt+1~9: Switch project by index (handled by global shortcut)
       if (e.altKey && e.key >= '1' && e.key <= '9') {
-        e.preventDefault()
-        const index = parseInt(e.key) - 1
-        window.dispatchEvent(new CustomEvent('mc:select-project', { detail: { index } }))
+        // Allow bubbling to global handler
         return false
       }
 
       // Ctrl+N or Ctrl+T: New terminal
       if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 't')) {
-        e.preventDefault()
-        window.dispatchEvent(new CustomEvent('mc:add-terminal'))
+        // Allow bubbling to global handler
         return false
       }
 
       // Ctrl+W: Close active terminal
       if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-        e.preventDefault()
-        window.dispatchEvent(new CustomEvent('mc:close-terminal'))
+        // Allow bubbling to global handler
         return false
       }
 
@@ -257,6 +319,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
 
               const filePath = await window.electron.clipboard.saveImage(base64Data)
               if (filePath) {
+                // Track image in store for hover preview
+                useImageStore.getState().addImage(terminalId, filePath)
                 const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
                   ? `"${filePath.replace(/"/g, '\\"')}"`
                   : filePath
@@ -283,7 +347,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       }).catch(() => {
         navigator.clipboard.readText().then(text => {
           if (text) window.electron.terminal.write(terminalId, text)
-        }).catch(() => {})
+        }).catch(() => { })
       })
 
       return false
@@ -301,12 +365,32 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     })
   }, [terminalId, initialOutput, onResize, attachContextLostListener])
 
-  // Write data to terminal with smart scroll
+  // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
+    // Save scroll state BEFORE write (xterm auto-scrolls on write)
+    const wasAtBottom = isAtBottomRef.current
+    const savedY = terminalRef.current?.buffer.active.viewportY ?? 0
+
     terminalRef.current?.write(data)
-    // Smart scroll: only scroll to bottom if user was at bottom
-    if (isAtBottomRef.current) {
-      terminalRef.current?.scrollToBottom()
+
+    // If user was reading history (not at bottom), restore their scroll position
+    if (!wasAtBottom && terminalRef.current && savedY >= 0) {
+      terminalRef.current.scrollToLine(savedY)
+    }
+
+    // Auto cursor restore: after output settles, send show cursor sequence
+    // This fixes cursor disappearing after long CLI output
+    if (isActiveRef.current && !isHiddenRef.current) {
+      // Clear previous timer
+      if (cursorRestoreTimerRef.current) {
+        clearTimeout(cursorRestoreTimerRef.current)
+      }
+      // Set new timer - when no more output for CURSOR_RESTORE_DELAY ms, restore cursor
+      cursorRestoreTimerRef.current = setTimeout(() => {
+        if (!disposedRef.current && terminalRef.current && isActiveRef.current) {
+          terminalRef.current.write('\x1b[?25h')
+        }
+      }, CURSOR_RESTORE_DELAY)
     }
   }, [])
 
@@ -322,9 +406,22 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     }
   }, [])
 
-  // Focus terminal
+  // Focus terminal (let CLI manage cursor visibility)
   const focus = useCallback(() => {
     terminalRef.current?.focus()
+  }, [])
+
+  // Blur terminal (let CSS handle visibility)
+  const blur = useCallback(() => {
+    terminalRef.current?.blur()
+  }, [])
+
+  // Force show cursor - use when cursor is lost after long output or project switch
+  // Uses ANSI sequence + focus (NOT refresh() which can affect scroll position)
+  const showCursor = useCallback(() => {
+    if (!terminalRef.current || disposedRef.current) return
+    terminalRef.current.write('\x1b[?25h')
+    terminalRef.current.focus()
   }, [])
 
   // Clear terminal
@@ -338,6 +435,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
   }, [])
 
   // Refresh terminal display (dispose WebGL, redraw, reinit WebGL)
+  // Preserves scroll position during refresh
   const refresh = useCallback((showNotification = false) => {
     if (disposedRef.current || !terminalRef.current) return
 
@@ -350,6 +448,9 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     refreshDebounceRef.current = setTimeout(() => {
       if (disposedRef.current || !terminalRef.current) return
 
+      // Save viewport line position before refresh (more reliable than DOM scrollTop)
+      const savedViewportY = terminalRef.current.buffer.active.viewportY
+
       // 1. Dispose current WebGL addon
       try {
         webglAddonRef.current?.dispose()
@@ -360,7 +461,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       terminalRef.current.refresh(0, terminalRef.current.rows - 1)
 
       // 3. Re-init WebGL if needed
-      if (shouldUseWebGL(isActiveRef.current)) {
+      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -376,7 +477,12 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
         fitAddonRef.current?.fit()
       } catch { /* ignore */ }
 
-      // 5. Show notification if auto-triggered
+      // 5. Restore scroll position after refresh using xterm.js API
+      if (savedViewportY >= 0) {
+        terminalRef.current.scrollToLine(savedViewportY)
+      }
+
+      // 6. Show notification if auto-triggered
       if (showNotification) {
         try {
           useToastStore.getState().addToast('Terminal display refreshed', 'info')
@@ -403,6 +509,12 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (refreshDebounceRef.current) {
         clearTimeout(refreshDebounceRef.current)
         refreshDebounceRef.current = null
+      }
+
+      // Clear cursor restore timer
+      if (cursorRestoreTimerRef.current) {
+        clearTimeout(cursorRestoreTimerRef.current)
+        cursorRestoreTimerRef.current = null
       }
 
       // Capture refs before nullifying
@@ -457,9 +569,10 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     return unsubscribe
   }, [])
 
-  // Toggle WebGL addon based on active state and render mode (debounced)
+  // Toggle WebGL addon based on active state, hidden state, and render mode (debounced)
   useEffect(() => {
     isActiveRef.current = isActive
+    isHiddenRef.current = isHidden
     if (!terminalRef.current || disposedRef.current) return
 
     // Clear pending toggle
@@ -471,7 +584,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     const toggleWebGL = () => {
       if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
 
-      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
       const hasWebGL = webglAddonRef.current !== null
 
       if (needsWebGL && !hasWebGL) {
@@ -512,7 +625,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive, attachContextLostListener])
+  }, [isActive, isHidden, attachContextLostListener])
 
   // React to render mode setting changes
   useEffect(() => {
@@ -520,7 +633,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
       if (!terminalRef.current || disposedRef.current) return
       if (state.settings.terminalRenderMode === prevState.settings.terminalRenderMode) return
 
-      const needsWebGL = shouldUseWebGL(isActiveRef.current)
+      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
       const hasWebGL = webglAddonRef.current !== null
 
       if (needsWebGL && !hasWebGL && !webglLoadingRef.current) {
@@ -552,16 +665,99 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, onResi
     return unsubscribe
   }, [attachContextLostListener])
 
+  // Visibility transition: save scroll when hiding, restore scroll and cursor when showing
+  // Uses useLayoutEffect to capture scroll position BEFORE browser paints display:none
+  useLayoutEffect(() => {
+    const wasHidden = prevHiddenRef.current
+    prevHiddenRef.current = isHidden
+
+    // SAVE scroll position when becoming hidden (synchronously before display:none takes effect)
+    if (!wasHidden && isHidden && terminalRef.current) {
+      savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
+    }
+
+    // RESTORE scroll position and cursor when becoming visible
+    if (wasHidden && !isHidden && isActive && terminalRef.current) {
+      // Capture saved viewport line position at the moment of transition
+      const savedViewportY = savedViewportYRef.current
+
+      // Cancellation flag - set to true when effect cleanup runs
+      // This prevents orphaned recursive timers from executing
+      let cancelled = false
+
+      const restoreScrollAndCursor = () => {
+        if (cancelled || disposedRef.current || !terminalRef.current) return
+
+        // 1. Restore scroll position (no refresh needed - prevents screen jumping)
+        if (savedViewportY !== null && savedViewportY > 0) {
+          terminalRef.current.scrollToLine(savedViewportY)
+        }
+
+        // 2. Force cursor re-render by toggling cursorBlink option
+        // This is more reliable than ANSI sequence for WebGL addon scenarios
+        terminalRef.current.options.cursorBlink = false
+        terminalRef.current.options.cursorBlink = true
+
+        // 3. Also send ANSI sequence as backup
+        terminalRef.current.write('\x1b[?25h')
+
+        // 4. Focus terminal
+        terminalRef.current.focus()
+      }
+
+      // Robust cursor restore with cancellation support
+      // Uses polling instead of recursive setTimeout for better cleanup
+      const restoreWithWebGLCheck = () => {
+        if (cancelled || disposedRef.current || !terminalRef.current || !isActiveRef.current) return
+
+        // If WebGL is still loading, retry after a short delay
+        if (webglLoadingRef.current) {
+          setTimeout(restoreWithWebGLCheck, 30)
+          return
+        }
+
+        restoreScrollAndCursor()
+      }
+
+      // Multiple stages to handle different timing scenarios:
+      // Stage 1: After WebGL toggle completes (80ms)
+      const timer1 = setTimeout(restoreWithWebGLCheck, 80)
+      // Stage 2: After terminal settles (200ms)
+      const timer2 = setTimeout(restoreWithWebGLCheck, 200)
+      // Stage 3: Fallback (500ms)
+      const timer3 = setTimeout(restoreWithWebGLCheck, 500)
+      // Stage 4: Ultimate fallback (1000ms) - for n+ project switching
+      const timer4 = setTimeout(restoreWithWebGLCheck, 1000)
+      // Stage 5: Final safety net (1500ms) - ensures cursor even on slow systems
+      const timer5 = setTimeout(() => {
+        if (cancelled || disposedRef.current || !terminalRef.current || !isActiveRef.current) return
+        restoreScrollAndCursor()
+      }, 1500)
+
+      return () => {
+        // Set cancellation flag to stop any pending recursive timers
+        cancelled = true
+        clearTimeout(timer1)
+        clearTimeout(timer2)
+        clearTimeout(timer3)
+        clearTimeout(timer4)
+        clearTimeout(timer5)
+      }
+    }
+  }, [isHidden, isActive])
+
   return {
     containerRef,
     initTerminal,
     write,
     fit,
     focus,
+    blur,
+    showCursor,
     clear,
     scrollToBottom,
     isAtBottom,
     refresh,
-    terminal: terminalRef.current
+    terminalRef  // Return ref instead of snapshot for live access
   }
 }

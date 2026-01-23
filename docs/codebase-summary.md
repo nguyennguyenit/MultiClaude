@@ -17,16 +17,35 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 
 #### Terminal Management
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
+  - **Async Destruction**: `destroyAsync(id)` with graceful exit + 3s timeout + platform-specific force kill fallback
+    - Guard flag (`destroying`) prevents duplicate destroy calls
+    - Waits for process `exit` event or timeout (3000ms via `DESTROY_TIMEOUT_MS`)
+    - Force kill on timeout: Windows uses `taskkill /T /F` for process tree, Unix uses `SIGKILL`
+    - Debug logging for timeout/force kill scenarios
+  - **Batch Destruction**: `destroyAllAsync()` for parallel cleanup via `Promise.allSettled()`
+  - **Integration**: App quit (`src/main/index.ts`) uses `destroyAllAsync()`, IPC terminal destroy uses `destroyAsync()`
+  - **Sync Methods**: Legacy `destroy(id)` and `destroyAll()` retained for compatibility
+  - **Test Coverage**: 6 async tests covering graceful exit, timeout, force kill, invalid IDs, batch destruction
 - **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
 - **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
-- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals, fade transition during project switching
+- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals
+  - **Single-Parent Pattern** (Phase 1 of Terminal Cursor Fix)
+    - All project grids render simultaneously in single parent hierarchy
+    - Inactive projects hidden via CSS `display: none` (not React unmount)
+    - Prevents React reconciliation from destroying terminals on project switch
+    - Preserves xterm.js cursor position, buffer content, and WebGL state
+    - `projectGroups` memo groups terminals by projectId with isActive flag
+    - `getProjectId(terminal)` helper with DEFAULT_PROJECT_ID fallback
+    - Accessibility: role="region", aria-label for each project grid
+    - Memory proportional to total terminals; cleanup for inactive projects TBD
 - **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
   - **Active Terminal Styling** (`globals.css`): Visual distinction via glow + opacity
     - `--terminal-active-glow`: CSS var for active pane outer glow (`color-mix()` animated)
     - `--terminal-transition`: Unified 0.25s ease timing for opacity/glow transitions
     - Active pane: animated glow effect; Inactive: 0.85 opacity
     - `will-change: opacity, box-shadow` for GPU-optimized transitions
+  - **Hidden Prop**: `hidden` prop disables WebGL for GPU optimization when terminal not visible
 - **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
   - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
   - 5-line threshold reduces button flicker on minor scroll changes
@@ -37,11 +56,20 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
     - Accessibility: `aria-label`, `aria-hidden`, `pointer-events-none` when hidden
     - **Responsive Sizing**: CSS Container Queries with `clamp(20px, 4cqw, 32px)` for 3-4% terminal width scaling
   - Proper disposable cleanup on unmount
+- **Viewport Preservation on Terminal Hide/Show**: Maintains scroll position when switching terminals within project
+  - **Save Trigger**: During render phase when `isHidden` transitions from false to true (before DOM update)
+  - **Save Mechanism**: Captures `viewportY`, `baseY`, and `isAtBottom` to `savedViewportRef`
+  - **Restore Trigger**: After fit() is called, ratio-based position restoration
+    - Calculates `savedRatio = viewportY / baseY` from saved state
+    - After fit, applies `newViewportY = Math.round(savedRatio * newBaseY)` to maintain proportional position
+    - Clamps position to valid range: `Math.max(0, Math.min(newViewportY, baseY))`
+  - **isAtBottom Tracking**: Preserved and restored to prevent smart scroll from overriding scroll position
+  - **Thread Safety**: Render-phase save ensures capture before CSS `display:none` hides viewport
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
   - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
   - Deferred `initialOutput` write until terminal fully mounted
-  - `isTransitioning` state in App.tsx with rapid-switch guard to prevent race conditions
+  - Phase 1: Removed `isTransitioning` state - no longer needed with single-parent pattern
 - **Terminal Refresh**: Manual and automatic WebGL context recovery
   - Refresh button in TerminalPane header (100ms debounce)
   - Auto-recovery on WebGL context lost events with toast notification
@@ -56,6 +84,11 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - Tools: New Terminal, Start Claude, Kill All with terminal counting
   - Settings toggle at bottom
 - **ProjectTabs**: Top tab bar for switching between projects with keyboard shortcuts (Alt+1-9)
+- **App.tsx State Cleanup** (Phase 2 of Terminal Cursor Fix)
+  - Removed `projectSwitching` state - no longer needed with single-parent pattern
+  - Removed `sidebarOpen` unused state variable
+  - Removed `handleStartClaude` unused handler
+  - Simplified `handleSelectProject`: instant CSS-only project switch, removed 150ms delay workaround
 
 #### Project Management & Persistence
 - **ProjectStore**: electron-store persistence layer for projects and terminal layouts
@@ -75,8 +108,17 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 - Channels: status, init, add-remote, push
 
 #### Settings
-- **SettingsStore** (Zustand): Theme preferences in-memory + localStorage
-- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates)
+- **SettingsStore** (Main Process): electron-store based persistence for app-wide preferences
+  - Storage path: `%APPDATA%/multiclaude/multiclaude-settings.json` (Windows), `~/.config/multiclaude/multiclaude-settings.json` (Linux), `~/Library/Application Support/multiclaude/multiclaude-settings.json` (macOS)
+  - Validation: Enum validation for themeMode/colorTheme/terminalRenderMode, range checks for terminalLimit, object structure checks for windowsShell
+  - IPC: SETTINGS_GET/SET/RESET with fallback to defaults on errors, Array.isArray check for input validation
+  - Handlers in `src/main/ipc/handlers.ts` with error handling
+- **SettingsStore** (Zustand): Renderer store with explicit Save/Cancel flow
+  - Architecture: savedSettings (disk source of truth) + pendingSettings (live preview)
+  - Save/Cancel: Changes preview immediately, persist only on Save button
+  - localStorage migration: One-time automatic migration of old data on first load
+  - Optimized equality check: Field-by-field comparison instead of JSON.stringify
+- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates) with Save/Cancel buttons
 - **ThemeSelector**: Color theme and dark/light mode selection
 - **Terminal Rendering Mode**: WebGL optimization for xterm.js (Settings > Appearance > Terminal Rendering)
   - **Performance**: No WebGL, best for many terminals (lower GPU usage)
@@ -231,7 +273,7 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (81 total)
+## IPC Channels (84 total)
 
 ### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
@@ -278,6 +320,9 @@ src/
 
 ### YOLO Mode (2 channels)
 - `yolo:get`, `yolo:set`
+
+### Settings (3 channels)
+- `settings:get`, `settings:set`, `settings:reset`
 
 ## Key Data Structures
 

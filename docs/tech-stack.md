@@ -68,6 +68,7 @@ multiclaude/
 - `react-resizable-panels`: Auto-split terminal grid layout
 - `zustand`: State management
 - `tailwindcss`: Styling
+- `@fontsource/*`: Monospace fonts (JetBrains Mono, Source Code Pro, Fira Code, IBM Plex Mono, Space Mono)
 
 ### Testing
 - `vitest`: Test runner with Vite integration
@@ -98,7 +99,7 @@ multiclaude/
 2. **IPC for Terminal Data**: Bidirectional streaming via IPC channels
 3. **JSON Store for Persistence**: Simple file-based storage for sessions/projects
 4. **GitHub CLI for Auth**: Use `gh` CLI for OAuth flow (proven, maintained)
-5. **localStorage for Settings**: Theme preferences persisted in renderer via Zustand + localStorage
+5. **electron-store for Settings**: Theme/sound preferences persisted via SettingsStore in main process
 6. **Auto-Split Terminal Grid**: All terminals visible simultaneously in resizable grid layout
 
 ## Terminal Grid Layout

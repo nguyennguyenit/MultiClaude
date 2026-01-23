@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -30,15 +30,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and Release
+      - name: Build with manifests (no auto-publish)
+        run: npm run build:ci
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: npm run release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -48,7 +43,38 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.dmg
+            release/*.dmg.blockmap
             release/*.zip
+            release/*.zip.blockmap
             release/*.exe
+            release/*.exe.blockmap
             release/latest*.yml
           if-no-files-found: ignore
+
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Upload to existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Uploading artifacts to release $TAG..."
+          for file in artifacts/*; do
+            if [ -f "$file" ]; then
+              echo "Uploading: $file"
+              gh release upload "$TAG" "$file" --repo "$GITHUB_REPOSITORY" --clobber || true
+            fi
+          done
+          echo "Upload complete!"

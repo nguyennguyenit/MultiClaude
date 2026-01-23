@@ -1,55 +1,94 @@
 import { useSettingsStore } from '../../stores'
 import { COLOR_THEMES } from '@shared/constants'
-import type { ThemeMode, ColorThemeDefinition } from '@shared/types'
+import type { ThemeMode, ColorThemeDefinition, UiStyle } from '@shared/types'
 import { SettingsTitle, SettingsSubheading } from './settings-typography'
+import { TerminalStyleOptions } from './terminal-style-options'
 
 export function ThemeSelector() {
-  const { settings, setThemeMode, setColorTheme } = useSettingsStore()
+  const { pendingSettings, setThemeMode, setColorTheme, setUiStyle } = useSettingsStore()
 
-  const isDark = settings.themeMode === 'dark' ||
-    (settings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const isDark = pendingSettings.themeMode === 'dark' ||
+    (pendingSettings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-4 max-w-2xl">
       {/* Section Header */}
       <SettingsTitle description="Customize how MultiClaude looks">
         Appearance
       </SettingsTitle>
 
-      {/* Appearance Mode */}
-      <div>
-        <SettingsSubheading>Appearance Mode</SettingsSubheading>
-        <p className="text-xs text-[var(--mc-text-muted)] mb-3">
-          Choose light, dark, or system preference
-        </p>
-        <div className="flex gap-3">
-          {(['system', 'light', 'dark'] as ThemeMode[]).map((mode) => (
-            <ModeCard
-              key={mode}
-              mode={mode}
-              selected={settings.themeMode === mode}
-              onClick={() => setThemeMode(mode)}
-            />
-          ))}
+      <div className="space-y-6">
+        {/* Appearance Mode */}
+        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+          <SettingsSubheading>Appearance Mode</SettingsSubheading>
+          <div className="mt-3">
+            <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+              Choose light, dark, or system preference
+            </p>
+            <div className="flex gap-3">
+              {(['system', 'light', 'dark'] as ThemeMode[]).map((mode) => (
+                <ModeCard
+                  key={mode}
+                  mode={mode}
+                  selected={pendingSettings.themeMode === mode}
+                  onClick={() => setThemeMode(mode)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Color Theme */}
-      <div>
-        <SettingsSubheading>Color Theme</SettingsSubheading>
-        <p className="text-xs text-[var(--mc-text-muted)] mb-3">
-          Select a color palette for the interface
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {COLOR_THEMES.map((theme) => (
-            <ThemeCard
-              key={theme.id}
-              theme={theme}
-              selected={settings.colorTheme === theme.id}
-              isDark={isDark}
-              onClick={() => setColorTheme(theme.id)}
-            />
-          ))}
+          {/* UI Style */}
+          <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+            <SettingsSubheading>UI Style</SettingsSubheading>
+            <div className="mt-3">
+              <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+                Choose between modern or retro terminal interface
+              </p>
+              <div className="flex gap-3">
+                <UIStyleCard
+                  style="modern"
+                  label="Modern"
+                  selected={pendingSettings.uiStyle === 'modern'}
+                  onClick={() => setUiStyle('modern')}
+                />
+                <UIStyleCard
+                  style="terminal"
+                  label="Terminal"
+                  selected={pendingSettings.uiStyle === 'terminal'}
+                  onClick={() => setUiStyle('terminal')}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Terminal Style Options - conditional */}
+          {pendingSettings.uiStyle === 'terminal' && <TerminalStyleOptions />}
+
+        {/* Color Theme */}
+        <div className={`p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)] ${pendingSettings.uiStyle === 'terminal' ? 'opacity-50 pointer-events-none' : ''}`}>
+          <SettingsSubheading>Color Theme</SettingsSubheading>
+          <div className="mt-3">
+            {pendingSettings.uiStyle === 'terminal' && (
+              <p className="text-xs text-[var(--mc-text-muted)] mb-2 italic">
+                Disabled in Terminal mode
+              </p>
+            )}
+            <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+              Select a color palette for the interface
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {COLOR_THEMES.map((theme) => (
+                <ThemeCard
+                  key={theme.id}
+                  theme={theme}
+                  selected={pendingSettings.colorTheme === theme.id}
+                  isDark={isDark}
+                  onClick={() => setColorTheme(theme.id)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -65,9 +104,11 @@ function ModeCard({ mode, selected, onClick }: {
   return (
     <button
       onClick={onClick}
+      aria-label={`Select ${mode} appearance mode`}
+      aria-pressed={selected}
       className={`
         flex items-center gap-3 px-4 py-3 rounded-lg border-2 w-[140px]
-        transition-all duration-150
+        transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50
         ${selected
           ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
           : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
@@ -79,6 +120,36 @@ function ModeCard({ mode, selected, onClick }: {
         {mode === 'dark' && <MoonIcon />}
       </span>
       <span className="text-sm capitalize flex-1">{mode}</span>
+      {selected && <span className="text-[var(--mc-accent)]">✓</span>}
+    </button>
+  )
+}
+
+// UI Style card component
+function UIStyleCard({ style, label, selected, onClick }: {
+  style: UiStyle
+  label: string
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={`Select ${label} UI style`}
+      aria-pressed={selected}
+      className={`
+        flex items-center gap-3 px-4 py-3 rounded-lg border-2 w-[140px]
+        transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50
+        ${selected
+          ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
+          : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
+      `}
+    >
+      <span className="text-xl">
+        {style === 'modern' && <ModernIcon />}
+        {style === 'terminal' && <TerminalIcon />}
+      </span>
+      <span className="text-sm capitalize flex-1">{label}</span>
       {selected && <span className="text-[var(--mc-accent)]">✓</span>}
     </button>
   )
@@ -147,6 +218,24 @@ function SystemIcon() {
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth="2" />
       <path strokeWidth="2" d="M8 21h8M12 17v4" />
+    </svg>
+  )
+}
+
+function ModernIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="18" height="18" rx="3" strokeWidth="2" />
+      <path strokeWidth="2" d="M3 9h18M9 21V9" />
+    </svg>
+  )
+}
+
+function TerminalIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <rect x="2" y="4" width="20" height="16" rx="2" strokeWidth="2" />
+      <path strokeWidth="2" d="M6 10l4 4-4 4M12 18h6" />
     </svg>
   )
 }

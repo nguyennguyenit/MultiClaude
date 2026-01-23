@@ -63,7 +63,7 @@ src/main/
 
 ```
 src/renderer/
-├── App.tsx                   # Root component, layout, handlers
+├── App.tsx                   # Root component, layout, theme system, handlers
 ├── main.tsx                  # React entry point
 ├── components/
 │   ├── terminal/
@@ -120,10 +120,11 @@ src/renderer/
 │   └── index.ts
 ├── stores/
 │   ├── app-store.ts               # Projects, terminals, UI state
-│   ├── settings-store.ts          # Theme, terminal settings
+│   ├── settings-store.ts          # Theme, UI style, terminal settings
 │   ├── notification-store.ts      # Notification preferences
 │   ├── update-store.ts            # Update state
 │   ├── toast-store.ts             # Toast queue
+│   ├── image-store.ts             # Image handling and upload state
 │   └── index.ts
 └── utils/
     ├── shell-utils.ts             # WindowsShell key helper
@@ -148,18 +149,53 @@ src/renderer/
                      | PatternDetector  |
                      | (notifications)  |
                      +------------------+
+
+Terminal Lifecycle (Phase 1 - Single-Parent Pattern):
+- ALL project grids render in single parent hierarchy
+- Inactive projects: CSS display:none, WebGL disabled via hidden prop
+- NO React unmount on project switch (prevents reconciliation)
+- Preserves xterm.js cursor position, buffer, and WebGL context
+- PTY continues running in background for all terminals
+
+Viewport Scroll Position Preservation:
+- **Save Phase** (Render): When terminal hidden via prop, synchronously captures buffer state
+  - `savedViewportRef` stores: viewportY (current scroll line), baseY (total lines), isAtBottom flag
+- **Hide Phase** (DOM): CSS display:none applied via TerminalPane hidden prop
+- **Show Phase** (Fit): When terminal re-shown and fit() called
+  - Calculates ratio: `savedRatio = savedViewportY / savedBaseY`
+  - Restores proportional position: `newViewportY = round(savedRatio * newBaseY)`
+  - Clamps to valid range to handle buffer growth/shrinkage
+  - Restores isAtBottom to block smart-scroll during restore
+- **Benefit**: Seamless terminal switching without scroll jump within same project
 ```
 
 ### State Management Flow
 
 ```
 +----------+    action    +-----------+    persist    +---------------+
-| Component| ----------->| Zustand   | ------------->| localStorage  |
+| Component| ----------->| Zustand   | ------------->| electron-store|
 | (React)  |             | Store     |               | (settings)    |
 +----------+             +-----------+               +---------------+
      ^                        |
-     |     subscription       |
+     |  subscription/preview  |
      +------------------------+
+
+Architecture: Save/Cancel Flow
+- savedSettings: Disk source of truth (from electron-store)
+- pendingSettings: Live preview (edited but not saved)
+- Changes preview immediately, persist only on Save
+- localStorage migration: One-time automatic on first load
+- Validation: Main process validates all settings before persist
+  - uiStyle: 'modern' | 'terminal'
+  - terminalStyleOptions: colorPreset, fontFamily, useBorderChars
+
+Terminal UI Style Integration (App.tsx):
+- Imports TERMINAL_FONTS and TERMINAL_COLOR_PRESETS from @shared/constants
+- Theme useEffect applies classes dynamically based on pendingSettings.uiStyle
+- Granular reactivity: Flattened dependency array for terminalStyleOptions
+- DRY principle: Derives preset classes from TERMINAL_COLOR_PRESETS object
+- CSS class management: .ui-terminal, .terminal-preset-{id}, .use-border-chars
+- CSS variable: --mc-terminal-font set dynamically from selected font
 
 +----------+    IPC       +-----------+    persist    +---------------+
 | Component| ----------->| Main      | ------------->| electron-store|
@@ -169,7 +205,7 @@ src/renderer/
 
 ## IPC Channel Architecture
 
-### Channel Categories (80 total)
+### Channel Categories (84 total)
 
 | Category | Count | Purpose |
 |----------|-------|---------|
@@ -184,6 +220,7 @@ src/renderer/
 | Clipboard | 1 | Image handling |
 | File Picker | 1 | Folder selection |
 | Update | 5 | Auto-update system |
+| Settings | 3 | App preferences persistence |
 
 ### IPC Type Safety
 
@@ -201,6 +238,16 @@ interface ElectronAPI {
     status: (path: string) => Promise<GitStatus>
     commit: (path: string, message: string) => Promise<void>
     // ... 30+ methods
+  }
+  settings: {
+    get: () => Promise<AppSettings>           // Get from electron-store with validation
+    set: (settings: Partial<AppSettings>) => Promise<AppSettings>  // Save to disk with validation
+    reset: () => Promise<AppSettings>         // Reset to defaults
+  }
+  image: {
+    open: (filePath: string) => Promise<boolean>      // Open image in system viewer
+    delete: (filePath: string) => Promise<boolean>    // Delete image file
+    readBase64: (filePath: string) => Promise<string | null>  // Read as base64
   }
   // ... other namespaces
 }

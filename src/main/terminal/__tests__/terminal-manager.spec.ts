@@ -183,4 +183,65 @@ describe('TerminalManager', () => {
       expect(sessions[0].projectId).toBe('proj-1')
     })
   })
+
+  describe('destroyAsync', () => {
+    it('resolves after terminal exits', async () => {
+      const term = manager.create()
+      const promise = manager.destroyAsync(term.id)
+
+      // Simulate exit
+      mockPty._exitCallback?.({ exitCode: 0 })
+
+      const result = await promise
+      expect(result).toBe(true)
+      expect(manager.get(term.id)).toBeUndefined()
+    })
+
+    it('force kills after timeout', async () => {
+      vi.useFakeTimers()
+      const term = manager.create()
+
+      const promise = manager.destroyAsync(term.id)
+
+      // Advance past timeout without exit (3000ms default)
+      vi.advanceTimersByTime(3001)
+
+      const result = await promise
+      expect(result).toBe(true)
+      vi.useRealTimers()
+    })
+
+    it('returns false for non-existent terminal', async () => {
+      const result = await manager.destroyAsync('invalid')
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('destroyAllAsync', () => {
+    it('destroys all terminals', async () => {
+      manager.create()
+      manager.create()
+      expect(manager.list()).toHaveLength(2)
+
+      // Simulate exits for all terminals
+      setTimeout(() => {
+        mockPty._exitCallback?.({ exitCode: 0 })
+        mockPty._exitCallback?.({ exitCode: 0 })
+      }, 10)
+
+      await manager.destroyAllAsync()
+      expect(manager.list()).toHaveLength(0)
+    })
+  })
+
+  describe('hasTerminals', () => {
+    it('returns false when no terminals', () => {
+      expect(manager.hasTerminals()).toBe(false)
+    })
+
+    it('returns true when terminals exist', () => {
+      manager.create()
+      expect(manager.hasTerminals()).toBe(true)
+    })
+  })
 })

@@ -1,11 +1,14 @@
 import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
-import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
+import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
-import { IPC_CHANNELS } from '@shared/constants'
+import { tmpdir } from 'os'
+import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
+import type { AppSettings } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { GitHeadWatcher } from '../git/git-head-watcher'
 import type { ProjectStore } from '../project/project-store'
+import type { SettingsStore } from '../settings'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
 import { detectWsl } from '../terminal/wsl-detector'
@@ -16,6 +19,7 @@ interface Managers {
   gitManager: GitManager
   gitHeadWatcher: GitHeadWatcher
   projectStore: ProjectStore
+  settingsStore: SettingsStore
   notificationManager: NotificationManager
 }
 
@@ -24,7 +28,7 @@ interface Managers {
 const GIT_BRANCH_CHANGE_PATTERN = /Switched to (?:a new )?branch '|Already on '/
 
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
-  const { terminalManager, gitManager, gitHeadWatcher, projectStore, notificationManager } = managers
+  const { terminalManager, gitManager, gitHeadWatcher, projectStore, settingsStore, notificationManager } = managers
 
   // Register git head watcher callback to emit branch changes from external terminals
   gitHeadWatcher.onBranchChange((projectPath) => {
@@ -65,12 +69,17 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Terminal handlers
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
-    return terminalManager.create(options)
+    const terminal = terminalManager.create(options)
+    // Serialize Date to ISO string for IPC cloning
+    return {
+      ...terminal,
+      createdAt: terminal.createdAt instanceof Date ? terminal.createdAt.toISOString() : terminal.createdAt
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
     notificationManager.clearTerminal(id)
-    return terminalManager.destroy(id)
+    return terminalManager.destroyAsync(id)
   })
 
   ipcMain.on(IPC_CHANNELS.TERMINAL_INPUT, (_, { terminalId, data }) => {
@@ -100,11 +109,23 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Project handlers
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async () => {
-    return projectStore.getProjects()
+    const projects = projectStore.getProjects()
+    // Serialize Date fields for IPC cloning
+    return projects.map(p => ({
+      ...p,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+      updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt
+    }))
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_CREATE, async (_, project) => {
-    return projectStore.addProject(project)
+    const newProject = projectStore.addProject(project)
+    // Serialize Date fields for IPC cloning
+    return {
+      ...newProject,
+      createdAt: newProject.createdAt instanceof Date ? newProject.createdAt.toISOString() : newProject.createdAt,
+      updatedAt: newProject.updatedAt instanceof Date ? newProject.updatedAt.toISOString() : newProject.updatedAt
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, async (_, id: string) => {
@@ -320,6 +341,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  ipcMain.on(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_, url: string) => {
+    if (isAllowedExternalUrl(url)) {
+      shell.openExternal(url)
+    }
+  })
+
   // Notification handlers
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS, () => {
     return notificationManager.getSettings()
@@ -441,6 +468,63 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return saveClipboardImage(base64Data)
   })
 
+  // Image handlers
+  ipcMain.handle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
+    if (existsSync(filePath)) {
+      shell.openPath(filePath)
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle(IPC_CHANNELS.IMAGE_DELETE, (_, filePath: string) => {
+    // Security: only allow deleting files in multiClaude-screenshots directory
+    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
+      try {
+        unlinkSync(filePath)
+        return true
+      } catch {
+        return false
+      }
+    }
+    return false
+  })
+
+  ipcMain.handle(IPC_CHANNELS.IMAGE_READ_BASE64, (_, filePath: string) => {
+    // Security: only allow reading files in multiClaude-screenshots directory
+    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
+      try {
+        const buffer = readFileSync(filePath)
+        return buffer.toString('base64')
+      } catch {
+        return null
+      }
+    }
+    return null
+  })
+
+  // List screenshot files sorted by modification time (newest first)
+  ipcMain.handle(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, () => {
+    const screenshotDir = join(tmpdir(), 'multiClaude-screenshots')
+    if (!existsSync(screenshotDir)) {
+      return []
+    }
+    try {
+      const files = readdirSync(screenshotDir)
+        .filter(f => f.endsWith('.png'))
+        .map(f => {
+          const fullPath = join(screenshotDir, f)
+          const stat = statSync(fullPath)
+          return { path: fullPath, mtime: stat.mtimeMs }
+        })
+        .sort((a, b) => a.mtime - b.mtime) // oldest first (index 0 = Image #1)
+        .map(f => f.path)
+      return files
+    } catch {
+      return []
+    }
+  })
+
   // File picker handler
   ipcMain.handle(IPC_CHANNELS.FILE_PICKER_OPEN, async () => {
     const result = await dialog.showOpenDialog(window, {
@@ -467,5 +551,38 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, () => {
     installUpdate()
+  })
+
+  // Settings handlers
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
+    try {
+      return settingsStore.getSettings()
+    } catch (error) {
+      console.error('[handlers] Failed to get settings:', error)
+      // Fallback to defaults on catastrophic failure
+      return DEFAULT_SETTINGS
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, settings: Partial<AppSettings>) => {
+    try {
+      // Basic validation: ensure settings is a non-null object and not an array
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        throw new Error('Invalid settings: must be a non-array object')
+      }
+      return settingsStore.setSettings(settings)
+    } catch (error) {
+      console.error('[handlers] Failed to set settings:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_RESET, () => {
+    try {
+      return settingsStore.resetSettings()
+    } catch (error) {
+      console.error('[handlers] Failed to reset settings:', error)
+      throw error
+    }
   })
 }

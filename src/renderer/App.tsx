@@ -8,7 +8,7 @@ import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { COLOR_THEMES } from '@shared/constants'
+import { COLOR_THEMES, TERMINAL_FONTS, TERMINAL_COLOR_PRESETS } from '@shared/constants'
 import type { WindowsShell } from '@shared/types'
 
 // Detect macOS for title bar layout (traffic lights on left)
@@ -28,25 +28,24 @@ function App() {
     setProjects,
     setActiveProject,
     setActiveTerminal,
-    sidebarOpen,
+    switchToProject,
     toggleSidebar,
     activeView
   } = useAppStore()
 
-  const { settings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
+  const { pendingSettings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
 
-  // Project switch transition state
-  const [projectSwitching, setProjectSwitching] = useState(false)
   const prevProjectIdRef = useRef<string | null>(null)
 
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
 
-  // Filter terminals for active project
-  const projectTerminals = activeProjectId
+  // Get visible terminals for UI displays (action bar count)
+  // Note: All terminals are passed to TerminalGrid which handles hiding via CSS
+  const visibleTerminals = activeProjectId
     ? terminals.filter(t => t.projectId === activeProjectId)
     : terminals
 
@@ -62,21 +61,26 @@ function App() {
     setActiveProject(project.id)
   }, [addProject, setActiveProject])
 
-  // Handler: Delete project
+  // Handler: Delete project (cleanup terminals first to prevent orphans)
   const handleDeleteProject = useCallback(async (id: string) => {
+    // Close all terminals for this project to prevent orphaned hidden terminals
+    const projectTerminals = terminals.filter(t => t.projectId === id)
+    for (const terminal of projectTerminals) {
+      await window.electron.terminal.destroy(terminal.id)
+      removeTerminal(terminal.id)
+    }
+
     await window.electron.project.delete(id)
     removeProject(id)
-  }, [removeProject])
+  }, [terminals, removeProject, removeTerminal])
 
   // Handler: Switch to project with folder validation
   const handleSelectProject = useCallback(async (id: string | null) => {
     if (!id) {
       setActiveProject(null)
+      setActiveTerminal(null)
       return
     }
-
-    // Guard against rapid switching - ignore if already transitioning
-    if (projectSwitching) return
 
     const project = projects.find(p => p.id === id)
     if (!project) return
@@ -93,20 +97,10 @@ function App() {
       return
     }
 
-    // Start transition if switching between projects (not initial load)
-    if (prevProjectIdRef.current && prevProjectIdRef.current !== id) {
-      setProjectSwitching(true)
-      // Allow old terminals to start unmounting
-      setActiveProject(id)
-      // Wait for disposal + buffer (TERMINAL_DISPOSE_DELAY + 50ms safety margin)
-      await new Promise(resolve => setTimeout(resolve, TERMINAL_DISPOSE_DELAY + 50))
-      setProjectSwitching(false)
-    } else {
-      setActiveProject(id)
-    }
-
+    // Atomic project switch - updates project + terminal in single state update
+    switchToProject(id)
     prevProjectIdRef.current = id
-  }, [projects, projectSwitching, setActiveProject, removeProject])
+  }, [projects, switchToProject, removeProject])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
@@ -126,10 +120,13 @@ function App() {
       return
     }
 
+    // Use default shell from settings if not specified (Windows only)
+    const effectiveShell = shell ?? useSettingsStore.getState().settings.windowsShell
+
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
       projectId: activeProject?.id,
-      shell
+      shell: effectiveShell
     })
     addTerminal(terminal)
   }, [activeProject, activeProjectId, addTerminal])
@@ -141,11 +138,6 @@ function App() {
     await window.electron.terminal.destroy(idToClose)
     removeTerminal(idToClose)
   }, [activeTerminalId, removeTerminal])
-
-  // Handler: Start Claude in terminal
-  const handleStartClaude = useCallback(async (terminalId: string) => {
-    await window.electron.terminal.invokeClaude(terminalId)
-  }, [])
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
@@ -170,7 +162,7 @@ function App() {
 
   // Handler: Kill all terminals in active project (with delay to prevent WebGL warnings)
   const handleKillAll = useCallback(async () => {
-    const terminalsToKill = [...projectTerminals]
+    const terminalsToKill = [...visibleTerminals]
     for (const terminal of terminalsToKill) {
       await window.electron.terminal.destroy(terminal.id)
       removeTerminal(terminal.id)
@@ -179,7 +171,7 @@ function App() {
         await new Promise(resolve => setTimeout(resolve, TERMINAL_DISPOSE_DELAY + 50))
       }
     }
-  }, [projectTerminals, removeTerminal])
+  }, [visibleTerminals, removeTerminal])
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
@@ -188,28 +180,6 @@ function App() {
     onSelectProject: handleSelectProject
   })
 
-  // Listen for custom terminal events from xterm key handler
-  useEffect(() => {
-    const onAddTerminalEvent = () => handleAddTerminal()
-    const onCloseTerminalEvent = () => handleCloseTerminal()
-    const onSelectProjectEvent = (e: Event) => {
-      const { index } = (e as CustomEvent<{ index: number }>).detail
-      const project = projects[index]
-      if (project) {
-        handleSelectProject(project.id)
-      }
-    }
-
-    window.addEventListener('mc:add-terminal', onAddTerminalEvent)
-    window.addEventListener('mc:close-terminal', onCloseTerminalEvent)
-    window.addEventListener('mc:select-project', onSelectProjectEvent)
-
-    return () => {
-      window.removeEventListener('mc:add-terminal', onAddTerminalEvent)
-      window.removeEventListener('mc:close-terminal', onCloseTerminalEvent)
-      window.removeEventListener('mc:select-project', onSelectProjectEvent)
-    }
-  }, [handleAddTerminal, handleCloseTerminal, handleSelectProject, projects])
 
   // Load settings and detect WSL on mount
   useEffect(() => {
@@ -249,8 +219,8 @@ function App() {
 
     // Determine actual mode
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const isDark = settings.themeMode === 'dark' ||
-      (settings.themeMode === 'system' && prefersDark)
+    const isDark = pendingSettings.themeMode === 'dark' ||
+      (pendingSettings.themeMode === 'system' && prefersDark)
 
     // Remove old classes
     root.classList.remove('light', 'dark')
@@ -258,13 +228,57 @@ function App() {
 
     // Apply new classes
     root.classList.add(isDark ? 'dark' : 'light')
-    root.classList.add(`theme-${settings.colorTheme}`)
+    root.classList.add(`theme-${pendingSettings.colorTheme}`)
 
-    // Update title bar overlay to match theme (--mc-bg-tertiary)
-    const bgColor = isDark ? '#2d2d2d' : '#ebebeb'
-    const symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
+    // ===== TERMINAL STYLE LOGIC =====
+    // Remove all terminal classes (derived from TERMINAL_COLOR_PRESETS for DRY)
+    const presetClasses = Object.keys(TERMINAL_COLOR_PRESETS).map(k => `terminal-preset-${k}`)
+    root.classList.remove('ui-terminal', ...presetClasses, 'use-border-chars')
+
+    const terminalOpts = pendingSettings.terminalStyleOptions ?? {
+      colorPreset: 'green',
+      fontFamily: 'jetbrains-mono',
+      useBorderChars: false
+    }
+
+    if (pendingSettings.uiStyle === 'terminal') {
+      root.classList.add('ui-terminal')
+      root.classList.add(`terminal-preset-${terminalOpts.colorPreset}`)
+
+      if (terminalOpts.useBorderChars) {
+        root.classList.add('use-border-chars')
+      }
+
+      // Set font variable
+      const font = TERMINAL_FONTS.find(f => f.id === terminalOpts.fontFamily)
+      root.style.setProperty('--mc-terminal-font', font?.family || "'JetBrains Mono', monospace")
+    } else {
+      root.style.removeProperty('--mc-terminal-font')
+    }
+
+    // Update title bar overlay to match theme
+    let bgColor: string
+    let symbolColor: string
+
+    if (pendingSettings.uiStyle === 'terminal') {
+      // Use terminal preset colors for title bar
+      const preset = TERMINAL_COLOR_PRESETS[terminalOpts.colorPreset] ?? TERMINAL_COLOR_PRESETS.green
+      bgColor = preset.bg
+      symbolColor = preset.text
+    } else {
+      // Default theme colors
+      bgColor = isDark ? '#2d2d2d' : '#ebebeb'
+      symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
+    }
     window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
-  }, [settings.themeMode, settings.colorTheme])
+  }, [
+    pendingSettings.themeMode,
+    pendingSettings.colorTheme,
+    pendingSettings.uiStyle,
+    pendingSettings.terminalStyleOptions?.colorPreset,
+    pendingSettings.terminalStyleOptions?.fontFamily,
+    pendingSettings.terminalStyleOptions?.useBorderChars
+  ])
 
   // Load saved projects on mount and validate folder existence
   useEffect(() => {
@@ -304,12 +318,8 @@ function App() {
     init()
   }, [])
 
-  // Create initial terminal when project is selected and no terminals exist
-  useEffect(() => {
-    if (activeProjectId && projectTerminals.length === 0) {
-      handleAddTerminal()
-    }
-  }, [activeProjectId, projectTerminals.length, handleAddTerminal])
+  // NOTE: Removed auto-create terminal - now shows welcome screen instead
+  // User can create terminal via "+ New Terminal" button or Ctrl+T
 
   // Handle terminal exit
   useEffect(() => {
@@ -373,34 +383,58 @@ function App() {
         {activeProjectId ? (
           <>
             <Sidebar />
-            <div className="flex-1 min-w-0 flex flex-col">
-              {activeView === 'terminals' && (
-                <>
-                  <TerminalActionBar
-                    terminalCount={projectTerminals.length}
-                    terminalLimit={getTerminalLimitValue()}
-                    yoloEnabled={yoloEnabled}
+            <div className="flex-1 min-w-0 flex flex-col relative">
+              {/* Terminal View - always rendered, hidden via visibility to preserve xterm state */}
+              <div
+                className="flex flex-col"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  visibility: activeView === 'terminals' ? 'visible' : 'hidden',
+                  pointerEvents: activeView === 'terminals' ? 'auto' : 'none',
+                  zIndex: activeView === 'terminals' ? 1 : 0
+                }}
+              >
+                <TerminalActionBar
+                  terminalCount={visibleTerminals.length}
+                  terminalLimit={getTerminalLimitValue()}
+                  yoloEnabled={yoloEnabled}
+                  onAddTerminal={handleAddTerminal}
+                  onToggleYolo={handleYoloToggle}
+                  onKillAll={handleKillAll}
+                />
+                <div data-testid="terminal-area" className="flex-1 min-h-0">
+                  <TerminalGrid
+                    terminals={terminals}
+                    activeProjectId={activeProjectId}
+                    activeTerminalId={activeTerminalId}
+                    onTerminalClick={setActiveTerminal}
                     onAddTerminal={handleAddTerminal}
-                    onToggleYolo={handleYoloToggle}
-                    onKillAll={handleKillAll}
+                    onCloseTerminal={handleCloseTerminal}
+                    onInsertFilePath={handleInsertFilePath}
+                    onTitleChange={updateTerminalTitle}
                   />
-                  <div data-testid="terminal-area" className="flex-1 min-h-0">
-                    <TerminalGrid
-                      terminals={projectTerminals}
-                      activeTerminalId={activeTerminalId}
-                      isTransitioning={projectSwitching}
-                      onTerminalClick={setActiveTerminal}
-                      onAddTerminal={handleAddTerminal}
-                      onCloseTerminal={handleCloseTerminal}
-                      onInsertFilePath={handleInsertFilePath}
-                      onTitleChange={updateTerminalTitle}
-                    />
-                  </div>
-                </>
-              )}
-              {activeView === 'github' && (
+                </div>
+              </div>
+              {/* GitHub View - always rendered, hidden via visibility to preserve state */}
+              <div
+                className="flex flex-col flex-1"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  visibility: activeView === 'github' ? 'visible' : 'hidden',
+                  pointerEvents: activeView === 'github' ? 'auto' : 'none',
+                  zIndex: activeView === 'github' ? 1 : 0
+                }}
+              >
                 <GitHubView projectPath={activeProject?.path} />
-              )}
+              </div>
             </div>
           </>
         ) : (

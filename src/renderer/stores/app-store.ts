@@ -24,6 +24,7 @@ interface AppState {
   addProject: (project: Project) => void
   removeProject: (id: string) => void
   setActiveProject: (id: string | null) => void
+  switchToProject: (projectId: string, terminalId?: string) => void
 
   // UI State
   sidebarOpen: boolean
@@ -101,6 +102,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   setActiveProject: (id) => set({ activeProjectId: id }),
+
+  // Atomic project switch: updates project + terminal in single state update (prevents race conditions)
+  // terminalId param allows future use for restoring specific terminal (e.g., from saved layout)
+  switchToProject: (projectId, terminalId) =>
+    set((state) => {
+      const projectTerminals = state.terminals.filter(t => t.projectId === projectId)
+      return {
+        activeProjectId: projectId,
+        activeTerminalId: terminalId ?? projectTerminals[0]?.id ?? null
+      }
+    }),
 
   // UI State
   sidebarOpen: true,

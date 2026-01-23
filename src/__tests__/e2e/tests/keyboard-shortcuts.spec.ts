@@ -15,7 +15,7 @@ test.describe('Keyboard Shortcuts', () => {
   test.describe('Project Switching (Alt+Number)', () => {
     test('Alt+1 switches to first project', async ({ window }) => {
       // First click second project to ensure we're not on first
-      const projectTab2 = window.locator('button:has-text("Project2")').first()
+      const projectTab2 = window.locator('[data-testid="project-tab-test-project-2"]')
       await projectTab2.click()
       await window.waitForTimeout(150)
 
@@ -30,7 +30,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('Alt+2 switches to second project', async ({ window }) => {
       // First select first project
-      const projectTab1 = window.locator('button:has-text("Project1")').first()
+      const projectTab1 = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab1.click()
       await window.waitForTimeout(150)
 
@@ -45,7 +45,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('Alt+3 switches to third project', async ({ window }) => {
       // First select first project
-      const projectTab1 = window.locator('button:has-text("Project1")').first()
+      const projectTab1 = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab1.click()
       await window.waitForTimeout(150)
 
@@ -60,7 +60,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('Alt+9 is ignored when less than 9 projects', async ({ window }) => {
       // Select first project first
-      const projectTab1 = window.locator('button:has-text("Project1")').first()
+      const projectTab1 = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab1.click()
       await window.waitForTimeout(150)
 
@@ -78,7 +78,7 @@ test.describe('Keyboard Shortcuts', () => {
     // Skip: Flaky - Ctrl+N terminal creation timing varies in E2E
     test.skip('Ctrl+N creates new terminal (count increases)', async ({ window }) => {
       // First select a project to enable terminal creation
-      const projectTab = window.locator('button:has-text("Project1")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(200)
 
@@ -96,7 +96,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('Ctrl+W closes active terminal (count decreases)', async ({ window }) => {
       // First select a project
-      const projectTab = window.locator('button:has-text("Project1")').first()
+      const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(200)
 
@@ -128,7 +128,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.waitForTimeout(100)
 
       // Select first project
-      const projectTab1 = window.locator('button:has-text("Project1")').first()
+      const projectTab1 = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab1.click()
       await window.waitForTimeout(150)
 
@@ -142,7 +142,7 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('rapid keyboard shortcuts are handled correctly', async ({ window }) => {
       // Select first project
-      const projectTab1 = window.locator('button:has-text("Project1")').first()
+      const projectTab1 = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab1.click()
       await window.waitForTimeout(100)
 

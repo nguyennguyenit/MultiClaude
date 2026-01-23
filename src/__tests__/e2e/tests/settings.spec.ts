@@ -170,9 +170,24 @@ test.describe('Settings Modal', () => {
     const modal = window.locator('[data-testid="settings-modal"]')
     await expect(modal).toBeVisible()
 
+    // Make a change to enable Save button (toggle theme mode)
+    // Click a theme mode button (light/dark/system) that's not currently selected
+    const darkModeButton = window.locator('button:has-text("dark")').first()
+    const lightModeButton = window.locator('button:has-text("light")').first()
+
+    // Toggle to a different mode to create unsaved changes
+    if (await darkModeButton.isVisible()) {
+      await darkModeButton.click()
+      await window.waitForTimeout(100)
+    } else if (await lightModeButton.isVisible()) {
+      await lightModeButton.click()
+      await window.waitForTimeout(100)
+    }
+
     // Find and click Save Settings button using data-testid
     const saveButton = window.locator('[data-testid="settings-save-button"]')
     await expect(saveButton).toBeVisible()
+    await expect(saveButton).toBeEnabled()
     await saveButton.click()
 
     // Wait for modal to close
@@ -206,5 +221,214 @@ test.describe('Settings Modal', () => {
 
     // Verify modal is no longer visible
     await expect(modal).not.toBeVisible()
+  })
+})
+
+/**
+ * Terminal UI Style E2E tests.
+ * Tests terminal style toggle, color presets, fonts, and border options.
+ */
+test.describe('Terminal UI Style', () => {
+  test.beforeEach(async ({ window }) => {
+    await injectMockProject(window, [mockProject])
+    await window.waitForTimeout(200)
+  })
+
+  test('should toggle to terminal UI style', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section to be visible
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Click Terminal style button (in UI Style section, not tab)
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await expect(terminalButton).toBeVisible({ timeout: 5000 })
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Verify ui-terminal class applied to html
+    const htmlClass = await window.evaluate(() => document.documentElement.className)
+    expect(htmlClass).toContain('ui-terminal')
+  })
+
+  test('should show Terminal Style Options when terminal mode selected', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Click Terminal style button
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Verify Terminal Style Options section is visible
+    const colorPresetSection = window.locator('text=Terminal Color Preset')
+    await expect(colorPresetSection).toBeVisible({ timeout: 5000 })
+
+    const fontSection = window.locator('text=Terminal Font')
+    await expect(fontSection).toBeVisible()
+
+    const borderSection = window.locator('text=Border Style')
+    await expect(borderSection).toBeVisible()
+  })
+
+  test('should disable Color Theme section in terminal mode', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Click Terminal style button
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Verify "Disabled in Terminal mode" text is visible
+    const disabledText = window.locator('text=Disabled in Terminal mode')
+    await expect(disabledText).toBeVisible({ timeout: 5000 })
+  })
+
+  test('should switch back to modern UI style', async ({ window }) => {
+    // Open settings modal and switch to terminal first
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Now switch back to Modern
+    const modernButton = window.locator('button[aria-label="Select Modern UI style"]')
+    await modernButton.click()
+    await window.waitForTimeout(300)
+
+    // Verify ui-terminal class removed
+    const htmlClass = await window.evaluate(() => document.documentElement.className)
+    expect(htmlClass).not.toContain('ui-terminal')
+  })
+
+  test('should change terminal color preset', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Switch to terminal mode
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for color presets to be visible
+    await window.waitForSelector('text=Terminal Color Preset', { timeout: 5000 })
+
+    // Click Blue preset
+    const bluePreset = window.locator('button[aria-label="Select Blue color preset"]')
+    await bluePreset.click()
+    await window.waitForTimeout(300)
+
+    // Verify terminal-preset-blue class applied
+    const htmlClass = await window.evaluate(() => document.documentElement.className)
+    expect(htmlClass).toContain('terminal-preset-blue')
+  })
+
+  test('should change terminal font', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Switch to terminal mode
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for font selector to be visible
+    await window.waitForSelector('text=Terminal Font', { timeout: 5000 })
+
+    // Select VT323 font
+    const fontSelect = window.locator('#terminal-font-select')
+    await fontSelect.selectOption('vt323')
+    await window.waitForTimeout(300)
+
+    // Verify font CSS variable is set
+    const fontVar = await window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--mc-terminal-font')
+    )
+    expect(fontVar).toContain('VT323')
+  })
+
+  test('should toggle ASCII border style', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Switch to terminal mode
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for border style section
+    await window.waitForSelector('text=Border Style', { timeout: 5000 })
+
+    // Click ASCII Box button
+    const asciiBorderButton = window.locator('button[aria-label="Select ASCII Box border style"]')
+    await asciiBorderButton.click()
+    await window.waitForTimeout(300)
+
+    // Verify use-border-chars class applied
+    const htmlClass = await window.evaluate(() => document.documentElement.className)
+    expect(htmlClass).toContain('use-border-chars')
+  })
+
+  test('should save and persist terminal settings', async ({ window }) => {
+    // Open settings modal
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(300)
+
+    // Wait for UI Style section
+    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+
+    // Switch to terminal mode
+    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
+    await terminalButton.click()
+    await window.waitForTimeout(300)
+
+    // Click Save button
+    const saveButton = window.locator('[data-testid="settings-save-button"]')
+    await saveButton.click()
+    await window.waitForTimeout(300)
+
+    // Verify modal closed
+    const modal = window.locator('[data-testid="settings-modal"]')
+    await expect(modal).not.toBeVisible()
+
+    // Verify ui-terminal class still applied after modal closes
+    const htmlClass = await window.evaluate(() => document.documentElement.className)
+    expect(htmlClass).toContain('ui-terminal')
   })
 })
