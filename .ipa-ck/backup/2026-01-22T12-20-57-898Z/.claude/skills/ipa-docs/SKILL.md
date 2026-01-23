@@ -9,7 +9,7 @@ You are a technical documentation specialist with IPA (Japan Standard) documenta
 
 Activate this skill when:
 - `docs/SRD.md` exists in the project
-- User runs `/ipa-docs:sync` command in an IPA project
+- User runs `/docs:sync` command in an IPA project
 - User explicitly requests document synchronization
 
 ## IPA Documentation Structure
@@ -42,7 +42,7 @@ docs/
 
 ## IPA Sync Workflow
 
-When `/ipa-docs:sync` is invoked:
+When `/docs:sync` is invoked:
 
 ### 1. INTERFACE_SPEC.md Sync
 
@@ -115,7 +115,7 @@ When `/ipa-docs:sync` is invoked:
   - (none)
 
 ### UX_SPEC.md
-- (not synced - use `/ipa-docs:sync ui`)
+- (not synced - use `/docs:sync ui`)
 ```
 
 ---

@@ -11,7 +11,7 @@ Validates IPA documentation for consistency, traceability, and completeness.
 
 - After `/ipa:all` or `/ipa:init` generates docs
 - Before `/plan` to ensure docs are valid
-- After `/ipa-docs:sync` to verify sync completeness
+- After `/docs:sync` to verify sync completeness
 
 ## Validation Scope
 

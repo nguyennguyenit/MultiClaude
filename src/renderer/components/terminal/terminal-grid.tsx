@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo } from 'react'
+import { Fragment, memo, useEffect, useMemo, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { TerminalPane } from './terminal-pane'
 import type { Terminal } from '@shared/types'
@@ -26,10 +26,13 @@ function getProjectId(terminal: Pick<Terminal, 'projectId'>): string {
   return terminal.projectId || DEFAULT_PROJECT_ID
 }
 
-/** Calculate grid dimensions based on terminal count */
-function calculateGrid(count: number): { rows: number; cols: number } {
+/** Calculate grid dimensions based on terminal count and screen orientation */
+function calculateGrid(count: number, isPortrait: boolean): { rows: number; cols: number } {
   if (count <= 1) return { rows: 1, cols: 1 }
-  if (count <= 2) return { rows: 1, cols: 2 }
+  if (count <= 2) {
+    // Portrait: stack vertically | Landscape: side-by-side
+    return isPortrait ? { rows: 2, cols: 1 } : { rows: 1, cols: 2 }
+  }
   if (count <= 4) return { rows: 2, cols: 2 }
   if (count <= 6) return { rows: 2, cols: 3 }
   if (count <= 9) return { rows: 3, cols: 3 }
@@ -55,6 +58,17 @@ export const TerminalGrid = memo(function TerminalGrid({
   onInsertFilePath,
   onTitleChange
 }: TerminalGridProps) {
+  // Detect portrait orientation for responsive grid layout
+  const [isPortrait, setIsPortrait] = useState(
+    () => typeof window !== 'undefined' && window.innerHeight > window.innerWidth
+  )
+
+  useEffect(() => {
+    const handleResize = () => setIsPortrait(window.innerHeight > window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   /**
    * Groups terminals by project for stable rendering (single-parent pattern).
    * All project grids are rendered simultaneously in a single parent hierarchy,
@@ -142,7 +156,7 @@ export const TerminalGrid = memo(function TerminalGrid({
       {/* All project grids rendered in single parent - inactive hidden with visibility:hidden */}
       {/* Using visibility:hidden instead of display:none preserves xterm.js scroll/cursor state */}
       {projectGroups.map(group => {
-        const { cols } = calculateGrid(group.terminals.length)
+        const { cols } = calculateGrid(group.terminals.length, isPortrait)
         const rows = splitIntoRows(group.terminals, cols)
 
         return (

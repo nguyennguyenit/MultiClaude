@@ -224,7 +224,7 @@ Add at end of each phase file:
 ---
 ## After Implementation
 
-- [ ] Run `/ipa-docs:sync` to update IPA docs
+- [ ] Run `/docs:sync` to update IPA docs
 - [ ] Verify INTERFACE_SPEC.md status: ⏳ → ✅
 ```
 

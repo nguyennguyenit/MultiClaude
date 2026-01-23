@@ -1,5 +1,10 @@
 {
-  "template-version": "1.0.0",
-  "cli-version": "1.1.0",
-  "initialized-at": "2026-01-16T10:00:36.622Z"
+  "template-version": "1.2.0",
+  "cli-version": "1.2.0",
+  "initialized-at": "2026-01-16T10:00:36.622Z",
+  "last-updated": "2026-01-22T12:20:57.930Z",
+  "paths": {
+    "docs": "docs",
+    "plans": "plans"
+  }
 }

@@ -211,7 +211,7 @@ When planning UI with `@path` design references:
     └── ui.md                         # Tasks reference design report
 ```
 
-**Rule:** Docs are drafts initially. Update via `/ipa-docs:sync` after implementation.
+**Rule:** Docs are drafts initially. Update via `/docs:sync` after implementation.
 
 ---
 
@@ -346,7 +346,7 @@ Phase 01 ──complete──> Phase 02 ──complete──> Phase 03
 - [ ] Matches docs/ contract
 - [ ] Tests pass
 - [ ] Human review completed
-- [ ] /ipa-docs:sync approved by user
+- [ ] /docs:sync approved by user
 ```
 
 ### Examples by Project Type
@@ -619,13 +619,13 @@ For ANY task implementing UI components:
    │   └── Implement core/logic layer
    ├── User verifies implementation ✓
    ├── AskUserQuestion: "Ready to sync docs?"
-   │   └── YES → /ipa-docs:sync
+   │   └── YES → /docs:sync
    │   └── NO → Continue without sync
    ├── /code phase-01/ui.md (if exists)
    │   └── Implement UI layer
    ├── User verifies implementation ✓
    ├── AskUserQuestion: "Ready to sync docs?"
-   │   └── YES → /ipa-docs:sync
+   │   └── YES → /docs:sync
    │   └── NO → Continue without sync
    ├── /code phase-01/infra.md (if exists, run last)
    │   └── Implement infrastructure
@@ -669,7 +669,7 @@ User verifies implementation
        ↓
 AskUserQuestion: "Implementation verified. Ready to sync docs?"
        ↓
-YES → Execute /ipa-docs:sync
+YES → Execute /docs:sync
 NO → Continue to next layer/phase
 ```
 
@@ -698,7 +698,7 @@ NO → Continue to next layer/phase
 - [ ] No files modified outside ownership
 
 ### Docs Sync Required
-- [ ] Run `/ipa-docs:sync` after implementation
+- [ ] Run `/docs:sync` after implementation
 - [ ] Verify docs/API_SPEC.md reflects actual API
 - [ ] Verify docs/DB_DESIGN.md reflects actual schema
 ```
@@ -713,7 +713,7 @@ NO → Continue to next layer/phase
 | `apps/FE/**`, `src/ui/**` | ui.md | core.md must NEVER modify |
 | `src/data/**`, `db/**` | data.md | Others must NEVER modify |
 | `infra/**`, `deploy/**` | infra.md | Others must NEVER modify |
-| `docs/**` | `/ipa-docs:sync` | Tasks only reference, never modify directly |
+| `docs/**` | `/docs:sync` | Tasks only reference, never modify directly |
 | `ui-mockup/**` | Reference only | Neither modifies |
 
 ---
