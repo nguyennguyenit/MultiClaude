@@ -6,10 +6,11 @@ import { WelcomeScreen } from './components/welcome-screen'
 import { GitHubView } from './components/github-view'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
+import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { COLOR_THEMES, TERMINAL_FONTS, TERMINAL_COLOR_PRESETS } from '@shared/constants'
-import type { WindowsShell } from '@shared/types'
+import type { WindowsShell, Project } from '@shared/types'
 
 // Detect macOS for title bar layout (traffic lights on left)
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -38,6 +39,11 @@ function App() {
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
 
+  // Git setup dialog state
+  const [gitInitDialogOpen, setGitInitDialogOpen] = useState(false)
+  const [githubConnectDialogOpen, setGithubConnectDialogOpen] = useState(false)
+  const [pendingSetupProject, setPendingSetupProject] = useState<Project | null>(null)
+
   const prevProjectIdRef = useRef<string | null>(null)
 
   // Get active project for terminal creation
@@ -59,6 +65,19 @@ function App() {
     const project = await window.electron.project.create({ name, path })
     addProject(project)
     setActiveProject(project.id)
+
+    // Check git status for setup flow
+    if (project.skipGitSetup) return
+
+    const gitStatus = await window.electron.git.status(path)
+
+    if (!gitStatus.isRepo) {
+      setPendingSetupProject(project)
+      setGitInitDialogOpen(true)
+    } else if (!gitStatus.hasRemote) {
+      setPendingSetupProject(project)
+      setGithubConnectDialogOpen(true)
+    }
   }, [addProject, setActiveProject])
 
   // Handler: Delete project (cleanup terminals first to prevent orphans)
@@ -172,6 +191,46 @@ function App() {
       }
     }
   }, [visibleTerminals, removeTerminal])
+
+  // Handler: Initialize git for pending project
+  const handleGitInit = useCallback(async () => {
+    if (!pendingSetupProject) return
+
+    const success = await window.electron.git.init(pendingSetupProject.path)
+    if (success) {
+      setGitInitDialogOpen(false)
+      // After init, check if remote exists (it won't after fresh init)
+      setGithubConnectDialogOpen(true)
+    }
+  }, [pendingSetupProject])
+
+  // Handler: Skip git init dialog
+  const handleGitInitSkip = useCallback(async (dontAskAgain: boolean) => {
+    if (pendingSetupProject && dontAskAgain) {
+      await window.electron.project.update(pendingSetupProject.id, { skipGitSetup: true })
+    }
+    setGitInitDialogOpen(false)
+    setPendingSetupProject(null)
+  }, [pendingSetupProject])
+
+  // Handler: GitHub connect complete
+  const handleGitHubConnectComplete = useCallback(async (
+    action: 'created' | 'linked' | 'skipped',
+    dontAskAgain: boolean
+  ) => {
+    if (pendingSetupProject && dontAskAgain) {
+      await window.electron.project.update(pendingSetupProject.id, { skipGitSetup: true })
+    }
+    setGithubConnectDialogOpen(false)
+    setPendingSetupProject(null)
+
+    if (action !== 'skipped') {
+      useToastStore.getState().addToast(
+        action === 'created' ? 'GitHub repository created successfully' : 'Repository linked successfully',
+        'info'
+      )
+    }
+  }, [pendingSetupProject])
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
@@ -354,6 +413,29 @@ function App() {
       {/* Settings Modal */}
       <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
 
+      {/* Git Setup Dialogs */}
+      <GitInitDialog
+        isOpen={gitInitDialogOpen}
+        projectName={pendingSetupProject?.name || ''}
+        projectPath={pendingSetupProject?.path || ''}
+        onInitialize={handleGitInit}
+        onSkip={handleGitInitSkip}
+        onClose={() => {
+          setGitInitDialogOpen(false)
+          setPendingSetupProject(null)
+        }}
+      />
+      <GitHubConnectDialog
+        isOpen={githubConnectDialogOpen}
+        projectName={pendingSetupProject?.name || ''}
+        projectPath={pendingSetupProject?.path || ''}
+        onComplete={handleGitHubConnectComplete}
+        onClose={() => {
+          setGithubConnectDialogOpen(false)
+          setPendingSetupProject(null)
+        }}
+      />
+
       {/* Title Bar */}
       <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag relative">
         <button
@@ -433,7 +515,7 @@ function App() {
                   zIndex: activeView === 'github' ? 1 : 0
                 }}
               >
-                <GitHubView projectPath={activeProject?.path} />
+                <GitHubView projectPath={activeProject?.path} isActive={activeView === 'github'} />
               </div>
             </div>
           </>

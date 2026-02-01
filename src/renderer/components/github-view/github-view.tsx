@@ -15,6 +15,7 @@ type TabId = 'changes' | 'history' | 'stash' | 'branches' | 'issues' | 'prs'
 
 interface GitHubViewProps {
   projectPath: string | undefined
+  isActive: boolean
 }
 
 // Parse remote URL to get owner/repo
@@ -32,11 +33,11 @@ function parseRepoName(remoteUrl: string | undefined): string | undefined {
   return undefined
 }
 
-export function GitHubView({ projectPath }: GitHubViewProps) {
+export function GitHubView({ projectPath, isActive }: GitHubViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('changes')
   const [syncing, setSyncing] = useState(false)
 
-  const gitPanel = useGitPanel({ projectPath, enabled: true })
+  const gitPanel = useGitPanel({ projectPath, enabled: isActive })
   const repoName = parseRepoName(gitPanel.gitStatus?.remoteUrl)
   const changesCount = gitPanel.files.length
   const stagedCount = gitPanel.files.filter(f => f.staged).length
