@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   // Project channels
   PROJECT_LIST: 'project:list',
   PROJECT_CREATE: 'project:create',
+  PROJECT_UPDATE: 'project:update',
   PROJECT_DELETE: 'project:delete',
   PROJECT_SET_ACTIVE: 'project:set-active',
   PROJECT_OPEN_FOLDER: 'project:open-folder',

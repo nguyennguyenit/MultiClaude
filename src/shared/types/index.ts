@@ -27,6 +27,7 @@ export interface Project {
   name: string
   path: string
   gitRemote?: string
+  skipGitSetup?: boolean // Don't show git/github setup dialogs for this project
   createdAt: Date | string // Date in main process, ISO string in renderer (after IPC serialization)
   updatedAt: Date | string // Date in main process, ISO string in renderer (after IPC serialization)
 }

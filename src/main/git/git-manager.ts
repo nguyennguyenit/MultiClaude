@@ -86,7 +86,41 @@ export class GitManager {
   async init(cwd: string): Promise<boolean> {
     const git = this.getGit(cwd)
     try {
+      // Initialize with main branch (GitHub default)
+      await git.init(['--initial-branch=main'])
+    } catch {
+      // Fallback for older git versions that don't support --initial-branch
       await git.init()
+      try {
+        // Rename master to main if needed (after first commit)
+        await git.branch(['-M', 'main'])
+      } catch {
+        // Ignore if branch doesn't exist yet
+      }
+    }
+
+    try {
+      // Stage all files
+      await git.add('.')
+
+      // Check if there's anything to commit
+      const status = await git.status()
+      if (status.staged.length === 0 && status.created.length === 0) {
+        // Empty folder - create a .gitkeep file
+        const { writeFileSync } = await import('fs')
+        const { join } = await import('path')
+        writeFileSync(join(cwd, '.gitkeep'), '')
+        await git.add('.gitkeep')
+      }
+
+      await git.commit('Initial commit')
+
+      // Ensure branch is named 'main' (GitHub default)
+      const currentStatus = await git.status()
+      if (currentStatus.current && currentStatus.current !== 'main') {
+        await git.branch(['-M', 'main'])
+      }
+
       return true
     } catch {
       return false
@@ -103,7 +137,7 @@ export class GitManager {
     }
   }
 
-  async push(cwd: string, branch?: string, setUpstream = true): Promise<boolean> {
+  async push(cwd: string, branch?: string, setUpstream = true): Promise<GitOperationResult> {
     const git = this.getGit(cwd)
     try {
       const status = await git.status()
@@ -114,9 +148,10 @@ export class GitManager {
       } else {
         await git.push('origin', currentBranch)
       }
-      return true
-    } catch {
-      return false
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Push failed'
+      return { success: false, error: message }
     }
   }
 

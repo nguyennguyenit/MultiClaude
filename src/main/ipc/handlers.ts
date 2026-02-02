@@ -128,6 +128,17 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.PROJECT_UPDATE, async (_, { id, updates }: { id: string; updates: Partial<import('@shared/types').Project> }) => {
+    const updated = projectStore.updateProject(id, updates)
+    if (!updated) return null
+    // Serialize Date fields for IPC cloning
+    return {
+      ...updated,
+      createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt,
+      updatedAt: updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : updated.updatedAt
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, async (_, id: string) => {
     return projectStore.deleteProject(id)
   })

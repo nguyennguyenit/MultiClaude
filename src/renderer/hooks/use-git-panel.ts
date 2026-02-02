@@ -165,7 +165,7 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
     if (!projectPath) return false
     const result = await window.electron.git.push(projectPath)
     await refresh()
-    return result
+    return result.success
   }, [projectPath, refresh])
 
   // Branch operations
@@ -222,12 +222,14 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
     await refreshAll()
   }, [projectPath, refreshAll])
 
-  // Initial load and polling
+  // Initial load and polling - only when enabled
   useEffect(() => {
+    if (!enabled || !projectPath) return
+
     refreshAll()
     const interval = setInterval(refresh, 5000)
     return () => clearInterval(interval)
-  }, [refresh, refreshAll])
+  }, [refresh, refreshAll, enabled, projectPath])
 
   return {
     gitStatus,

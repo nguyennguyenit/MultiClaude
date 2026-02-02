@@ -42,6 +42,7 @@ export interface ElectronAPI {
   project: {
     list: () => Promise<Project[]>
     create: (project: { name: string; path: string }) => Promise<Project>
+    update: (id: string, updates: Partial<Project>) => Promise<Project | null>
     delete: (id: string) => Promise<boolean>
     setActive: (id: string | null) => Promise<boolean>
     openFolder: () => Promise<string | null>
@@ -51,7 +52,7 @@ export interface ElectronAPI {
     status: (cwd: string) => Promise<GitStatus>
     init: (cwd: string) => Promise<boolean>
     addRemote: (cwd: string, url: string, name?: string) => Promise<boolean>
-    push: (cwd: string, branch?: string, setUpstream?: boolean) => Promise<boolean>
+    push: (cwd: string, branch?: string, setUpstream?: boolean) => Promise<GitOperationResult>
     // Commit workflow methods
     fileStatus: (cwd: string) => Promise<GitFileStatus[]>
     stageFile: (cwd: string, file: string) => Promise<boolean>
@@ -185,6 +186,7 @@ const api: ElectronAPI = {
   project: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_LIST),
     create: (project) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_CREATE, project),
+    update: (id, updates) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_UPDATE, { id, updates }),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_DELETE, id),
     setActive: (id) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_SET_ACTIVE, id),
     openFolder: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_OPEN_FOLDER),
