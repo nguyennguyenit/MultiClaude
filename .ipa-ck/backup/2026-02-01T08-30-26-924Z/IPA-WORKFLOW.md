@@ -17,7 +17,7 @@ Claude Code template with IPA (Information-technology Promotion Agency, Japan) d
 
 **IPA commands unchanged:** `/ipa:*`, `/lean:*`, `/ipa-docs:sync` always work without prefix.
 
-**Detection:** Check `.ipa-ck.json` for CK installation settings, or look for prefixed skills in `.claude/skills/`.
+**Detection:** Check `.claude/commands/` - if files have `ck:` prefix, use prefixed commands.
 
 ---
 
@@ -44,52 +44,42 @@ IPA commands will respect your custom paths. Replace `docs/` and `plans/` refere
 # Install template via ipa-ck CLI
 ipa-ck init
 
-# First time? Use interactive wizard
-/ipa:start                  # Guided setup based on project type
+# Start with Lean analysis
+/lean [your idea]           # MVP definition + phase breakdown
 
-# Or use fast mode (power users - skips all gates)
-/ipa:fast [your idea]       # Full workflow in one command
-
-# Or step-by-step (recommended for new projects)
-/lean [your idea]           # MVP definition + phase breakdown (GATE 1)
+# Generate IPA docs (Staged with Gates)
 /ipa:spec                   # Requirements + UI spec (GATE 2)
 /ipa:design                 # Mockups (GATE 3)
 /ipa:detail                 # API + DB specs
 
-# Import external SRS (from Gemini Deep Research, etc.)
+# OR import external SRS (from Gemini Deep Research, etc.)
 /ipa:import @external-srs.md
 
-# Create implementation plan (IMPORTANT: include context!)
-/plan @docs/ @prototypes/html-mockups/
+# Create implementation plan
+/plan
 
 # After implementation
 /ipa-docs:sync              # Sync docs with code
-
-# Quick reference
-/ipa:help                   # Cheatsheet with warnings
 ```
 
 ## Features
 
 - **IPA Documentation Workflow** - Standardized docs (SRD, UI_SPEC, API_SPEC, DB_DESIGN)
-- **Fast Mode** - `/ipa:fast` for power users (full workflow in one command)
-- **User Guidance** - `/ipa:start` wizard + `/ipa:help` cheatsheet
 - **Lean Analysis** - MVP definition with problem/features/assumptions + Phase Breakdown
-- **Validation Gates** - Checkpoints (GATE 1/2/3) with soft enforcement + `--skip-gate` option
-- **Traceability Matrix** - FR-xx → S-xx → E-xx → T-xx tracking in `/ipa:validate`
+- **Validation Gates** - Checkpoints (GATE 1/2/3) to prevent building the wrong thing
 - **Mockup Analysis** - AI-powered design spec extraction from HTML mockups
 - **Multi-Model Task Distribution** - Phase-first structure with layer files
-- **Context-Aware Planning** - `@path` syntax for accurate UI code generation
+- **Validation** - IPA docs consistency & traceability checks
 
 ---
 
 ## Process Overview
 
-### Complete Flow Diagram
+### Complete Flow Diagram (v3.0)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     IPA + LEAN WORKFLOW (v1.3.0)                            │
+│                     IPA + LEAN WORKFLOW (v3.0)                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────┐                                                           │
@@ -348,19 +338,28 @@ your-project/
 ├── .claude/
 │   ├── CLAUDE.md                    # Project config (copy this!)
 │   ├── skills/
-│   │   ├── ipa/                      # IPA documentation skills
-│   │   │   ├── ipa-spec/             # /ipa:spec (Stage 1)
-│   │   │   ├── ipa-design/           # /ipa:design (Stage 2)
-│   │   │   ├── ipa-detail/           # /ipa:detail (Stage 3)
-│   │   │   ├── ipa-import/           # /ipa:import (External SRS)
-│   │   │   ├── ipa-init/             # /ipa:init
-│   │   │   ├── ipa-validate/         # /ipa:validate
-│   │   │   └── ...                   # Other IPA skills
-│   │   ├── ipa-docs/                 # IPA-aware docs sync
-│   │   ├── ipa-planner/              # IPA-aware planning
-│   │   ├── ipa-validator/            # IPA validation workflow
-│   │   ├── lean-analyst/             # MVP analysis workflow
-│   │   └── ipa-context-aware-planning/  # @path design context parsing
+│   │   ├── ipa-planner/             # IPA-aware planning (converted from agent)
+│   │   ├── ipa-docs/                # IPA-aware docs sync (converted from agent)
+│   │   ├── ipa-validator/           # IPA validation workflow
+│   │   ├── lean-analyst/            # MVP analysis workflow
+│   │   └── context-aware-planning/  # @path design context parsing
+│   ├── commands/
+│   │   ├── ipa-docs/
+│   │   │   ├── sync.md              # /ipa-docs:sync
+│   │   │   └── split.md             # /ipa-docs:split
+│   │   ├── lean.md                  # /lean
+│   │   └── ipa/
+│   │       ├── spec.md              # /ipa:spec (Stage 1)
+│   │       ├── design.md            # /ipa:design (Stage 2)
+│   │       ├── detail.md            # /ipa:detail (Stage 3)
+│   │       ├── import.md            # /ipa:import (External SRS)
+│   │       ├── init.md              # /ipa:init
+│   │       ├── mockup-analyze.md    # /ipa:mockup-analyze
+│   │       ├── validate.md          # /ipa:validate
+│   │       ├── srd.md               # /ipa:srd (Legacy)
+│   │       ├── bd.md                # /ipa:bd (Legacy)
+│   │       ├── dd.md                # /ipa:dd (Legacy)
+│   │       └── all.md               # /ipa:all (Legacy)
 │   └── workflows/
 │       └── multi-model-task-distribution.md
 ├── docs/                            # IPA docs (generated)
@@ -413,10 +412,13 @@ docs/
 
 ## Template Version
 
-**Version:** 1.3.0
-**Last Updated:** 2026-01-25
+**Version:** 3.2
+**Last Updated:** 2026-01-18
 **Changes:**
-- Skills-based architecture (all IPA commands as skills)
-- Removed `.claude/commands/` - skills auto-invoke
-- Updated detection method for CK prefix
-- Added YAML frontmatter to all skills
+- Added Custom Paths Support for `.ck.json` configuration
+- Renamed README.md to IPA-WORKFLOW.md to avoid conflicts
+- Added Command Prefix Note for CK `--prefix` users
+- Optimized CLAUDE.md for better token efficiency
+- Introduced `/ipa:spec` and `/ipa:detail` for clearer stages
+- Added `/ipa:import` for external SRS import
+- Added `/ipa-docs:split` for modular docs structure

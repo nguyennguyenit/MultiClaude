@@ -1,8 +1,3 @@
----
-name: ipa-context-aware-planning
-description: Context-aware planning with @path syntax for design mockup integration and tech-stack-aware code generation
----
-
 # Context-Aware Planning
 
 Extends planning workflow with @path context reference parsing, design mockup analysis, and tech-stack-aware code generation.
