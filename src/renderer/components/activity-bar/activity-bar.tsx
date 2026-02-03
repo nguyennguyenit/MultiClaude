@@ -6,7 +6,7 @@ import { ActivityBarAccountSection } from './activity-bar-account-section'
 export function ActivityBar() {
   const {
     activityBarState,
-    cycleActivityBarState,
+    setActivityBarState,
     activeProjectId,
     projects,
     terminals,
@@ -63,9 +63,9 @@ export function ActivityBar() {
             hideTimeoutRef.current = window.setTimeout(() => setIsHovering(false), 300)
           }}
         >
-          {/* Reveal button - positioned at top like old collapse button */}
+          {/* Reveal button - expand to default */}
           <button
-            onClick={cycleActivityBarState}
+            onClick={() => setActivityBarState('collapsed')}
             className="absolute left-2 top-2 p-1.5 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--mc-bg-hover)] transition-all shadow-md"
             title="Show Activity Bar (Ctrl+B)"
           >
@@ -97,6 +97,8 @@ export function ActivityBar() {
               hasUpdate={hasUpdate}
               onSettingsClick={() => setSettingsModalOpen(true)}
               projectPath={activeProject?.path}
+              activityBarState={activityBarState}
+              setActivityBarState={setActivityBarState}
             />
           </div>
         )}
@@ -119,6 +121,8 @@ export function ActivityBar() {
         hasUpdate={hasUpdate}
         onSettingsClick={() => setSettingsModalOpen(true)}
         projectPath={activeProject?.path}
+        activityBarState={activityBarState}
+        setActivityBarState={setActivityBarState}
       />
     </div>
   )
@@ -132,6 +136,8 @@ interface ActivityBarContentProps {
   hasUpdate: boolean
   onSettingsClick: () => void
   projectPath?: string
+  activityBarState: 'collapsed' | 'expanded' | 'hidden'
+  setActivityBarState: (state: 'collapsed' | 'expanded' | 'hidden') => void
 }
 
 function ActivityBarContent({
@@ -141,15 +147,50 @@ function ActivityBarContent({
   setActiveView,
   hasUpdate,
   onSettingsClick,
-  projectPath
+  projectPath,
+  activityBarState,
+  setActivityBarState
 }: ActivityBarContentProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Navigation Section */}
       <div className="px-1 py-2">
-        {!collapsed && (
-          <div className="px-2 py-1 text-xs text-[var(--mc-text-muted)] uppercase whitespace-nowrap">
-            Views
+        {/* Toggle buttons based on state */}
+        {activityBarState === 'expanded' ? (
+          // Expanded: Single collapse arrow next to Views
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-xs text-[var(--mc-text-muted)] uppercase">Views</span>
+            <button
+              onClick={() => setActivityBarState('collapsed')}
+              className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              title="Collapse (Ctrl+B)"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          // Collapsed (default): Double arrows
+          <div className="flex items-center justify-center gap-1 py-1 mb-1">
+            <button
+              onClick={() => setActivityBarState('hidden')}
+              className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              title="Hide (Ctrl+B)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setActivityBarState('expanded')}
+              className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              title="Expand (Ctrl+B)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         )}
 
