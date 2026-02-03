@@ -13,15 +13,37 @@ interface PTYProcess {
   outputBuffer: string
   oscBuffer: string // Buffer for incomplete OSC sequences
   destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
+  suspended?: boolean // True when system is suspended, prevents PTY operations
 }
 
 export class TerminalManager extends EventEmitter {
   private terminals: Map<string, PTYProcess> = new Map()
   private shell: string
+  private systemSuspended = false // Track system suspend state
 
   constructor() {
     super()
     this.shell = this.getDefaultShell()
+
+    // Listen for system power events to prevent SIGTRAP on suspend/resume
+    this.on('system-suspend', () => {
+      console.log('[terminal-manager] System suspending - pausing PTY operations')
+      this.systemSuspended = true
+      for (const term of this.terminals.values()) {
+        term.suspended = true
+      }
+    })
+
+    this.on('system-resume', () => {
+      console.log('[terminal-manager] System resumed - resuming PTY operations')
+      this.systemSuspended = false
+      // Check each terminal's health and mark as resumed
+      for (const term of this.terminals.values()) {
+        term.suspended = false
+        // Emit event so renderer can refresh if needed
+        this.emit('terminal-resumed', { terminalId: term.id })
+      }
+    })
   }
 
   private getDefaultShell(): string {
@@ -133,7 +155,11 @@ export class TerminalManager extends EventEmitter {
     const ptyProcess = pty.spawn(command, args, {
       name: 'xterm-256color',
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color' },
+      env: {
+        ...process.env,
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor'
+      },
       cols: 80,
       rows: 24
     })
@@ -158,6 +184,9 @@ export class TerminalManager extends EventEmitter {
 
     // Handle terminal output
     ptyProcess.onData((data) => {
+      // Skip processing during system suspend to prevent issues with invalid FDs
+      if (termProcess.suspended || this.systemSuspended) return
+
       termProcess.outputBuffer += data
       // Keep buffer at max 500KB
       if (termProcess.outputBuffer.length > 500000) {
@@ -181,15 +210,37 @@ export class TerminalManager extends EventEmitter {
   write(id: string, data: string): boolean {
     const term = this.terminals.get(id)
     if (!term) return false
-    term.pty.write(data)
-    return true
+    // Skip PTY operations during system suspend to prevent SIGTRAP
+    if (term.suspended || this.systemSuspended) {
+      console.debug(`[terminal-manager] Skipping write during suspend: ${id}`)
+      return false
+    }
+    try {
+      term.pty.write(data)
+      return true
+    } catch (error) {
+      // PTY may be invalid after system resume - log but don't crash
+      console.error(`[terminal-manager] Write failed for ${id}:`, (error as Error).message)
+      return false
+    }
   }
 
   resize(id: string, cols: number, rows: number): boolean {
     const term = this.terminals.get(id)
     if (!term) return false
-    term.pty.resize(cols, rows)
-    return true
+    // Skip PTY operations during system suspend to prevent SIGTRAP
+    if (term.suspended || this.systemSuspended) {
+      console.debug(`[terminal-manager] Skipping resize during suspend: ${id}`)
+      return false
+    }
+    try {
+      term.pty.resize(cols, rows)
+      return true
+    } catch (error) {
+      // PTY may be invalid after system resume - log but don't crash
+      console.error(`[terminal-manager] Resize failed for ${id}:`, (error as Error).message)
+      return false
+    }
   }
 
   destroy(id: string): boolean {

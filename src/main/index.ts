@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { TerminalManager } from './terminal/terminal-manager'
@@ -116,6 +116,30 @@ app.whenReady().then(() => {
       createWindow()
     }
   })
+
+  // Handle system power events to prevent SIGTRAP on suspend/resume
+  // When system suspends, PTY file descriptors may become invalid
+  powerMonitor.on('suspend', () => {
+    console.log('[main] System suspending - preparing terminals for sleep')
+    // Mark terminals as suspended to prevent operations during sleep
+    if (terminalManager) {
+      terminalManager.emit('system-suspend')
+    }
+  })
+
+  powerMonitor.on('resume', () => {
+    console.log('[main] System resumed - checking terminal health')
+    // Give system time to stabilize after wake, then notify terminals
+    setTimeout(() => {
+      if (terminalManager) {
+        terminalManager.emit('system-resume')
+      }
+      // Notify renderer to refresh terminal connections if needed
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('system-resumed')
+      }
+    }, 1000)
+  })
 })
 
 app.on('window-all-closed', async () => {
@@ -135,5 +159,16 @@ app.on('window-all-closed', async () => {
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error)
+  // Don't show dialog for PTY-related errors during suspend/resume
+  // These are expected when system wakes and FDs become invalid
+  if (error.message?.includes('pty') || error.message?.includes('EIO')) {
+    console.warn('[main] PTY error ignored (likely from suspend/resume):', error.message)
+    return
+  }
   dialog.showErrorBox('Error', error.message)
+})
+
+// Handle unhandled promise rejections (often from native modules)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
 })

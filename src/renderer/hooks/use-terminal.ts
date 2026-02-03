@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
-import { getTerminalTheme, isAllowedExternalUrl } from '@shared/constants'
+import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS } from '@shared/constants'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -14,7 +14,7 @@ const WEBGL_FOCUS_BUFFER = 10  // Extra buffer after WebGL toggle to ensure focu
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
-const CURSOR_RESTORE_DELAY = 300  // Delay after output settles to restore cursor
+// NOTE: Cursor restore delay removed - CLI manages its own cursor
 
 // Terminal font family - used for font loading detection
 const TERMINAL_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
@@ -30,13 +30,23 @@ interface UseTerminalOptions {
 
 /**
  * Get current terminal theme based on settings
+ * Uses terminal preset cursor color when in Terminal UI mode
  */
 function getCurrentTerminalTheme() {
   const { settings } = useSettingsStore.getState()
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   const isDark = settings.themeMode === 'dark' ||
     (settings.themeMode === 'system' && prefersDark)
-  return getTerminalTheme(settings.colorTheme, isDark)
+  const baseTheme = getTerminalTheme(settings.colorTheme, isDark)
+
+  // Override cursor with terminal preset color when in Terminal UI mode
+  if (settings.uiStyle === 'terminal' && settings.terminalStyleOptions?.colorPreset) {
+    const preset = TERMINAL_COLOR_PRESETS[settings.terminalStyleOptions.colorPreset as keyof typeof TERMINAL_COLOR_PRESETS]
+    if (preset) {
+      return { ...baseTheme, cursor: preset.accent, cursorAccent: preset.bg }
+    }
+  }
+  return baseTheme
 }
 
 /**
@@ -77,7 +87,6 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
   const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
-  const cursorRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // Timer for auto cursor restore
 
   // Helper to attach WebGL context lost listener (defined early to avoid hoisting issues)
   // NOTE: Accesses @xterm/addon-webgl internal API. Tested with v0.18.0.
@@ -378,20 +387,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       terminalRef.current.scrollToLine(savedY)
     }
 
-    // Auto cursor restore: after output settles, send show cursor sequence
-    // This fixes cursor disappearing after long CLI output
-    if (isActiveRef.current && !isHiddenRef.current) {
-      // Clear previous timer
-      if (cursorRestoreTimerRef.current) {
-        clearTimeout(cursorRestoreTimerRef.current)
-      }
-      // Set new timer - when no more output for CURSOR_RESTORE_DELAY ms, restore cursor
-      cursorRestoreTimerRef.current = setTimeout(() => {
-        if (!disposedRef.current && terminalRef.current && isActiveRef.current) {
-          terminalRef.current.write('\x1b[?25h')
-        }
-      }, CURSOR_RESTORE_DELAY)
-    }
+    // NOTE: Removed auto cursor restore - it interferes with Claude Code CLI's cursor positioning
+    // Claude Code manages its own cursor via escape sequences for status line rendering
   }, [])
 
   // Fit terminal to container (with safety check for initialization)
@@ -416,11 +413,10 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     terminalRef.current?.blur()
   }, [])
 
-  // Force show cursor - use when cursor is lost after long output or project switch
-  // Uses ANSI sequence + focus (NOT refresh() which can affect scroll position)
+  // Focus terminal and let CLI manage cursor visibility
+  // NOTE: Removed ANSI cursor show sequence - it interferes with Claude Code's cursor positioning
   const showCursor = useCallback(() => {
     if (!terminalRef.current || disposedRef.current) return
-    terminalRef.current.write('\x1b[?25h')
     terminalRef.current.focus()
   }, [])
 
@@ -511,11 +507,6 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         refreshDebounceRef.current = null
       }
 
-      // Clear cursor restore timer
-      if (cursorRestoreTimerRef.current) {
-        clearTimeout(cursorRestoreTimerRef.current)
-        cursorRestoreTimerRef.current = null
-      }
 
       // Capture refs before nullifying
       const terminal = terminalRef.current
@@ -557,14 +548,13 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     return () => window.removeEventListener('resize', handleResize)
   }, [fit])
 
-  // Sync terminal theme with app settings
+  // Sync terminal theme with app settings (includes terminal preset cursor)
   useEffect(() => {
-    const unsubscribe = useSettingsStore.subscribe((state) => {
+    const unsubscribe = useSettingsStore.subscribe(() => {
       if (!terminalRef.current) return
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      const isDark = state.settings.themeMode === 'dark' ||
-        (state.settings.themeMode === 'system' && prefersDark)
-      terminalRef.current.options.theme = getTerminalTheme(state.settings.colorTheme, isDark)
+      terminalRef.current.options.theme = getCurrentTerminalTheme()
+      // Force redraw to apply cursor color change
+      terminalRef.current.refresh(0, terminalRef.current.rows - 1)
     })
     return unsubscribe
   }, [])
@@ -693,15 +683,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
           terminalRef.current.scrollToLine(savedViewportY)
         }
 
-        // 2. Force cursor re-render by toggling cursorBlink option
-        // This is more reliable than ANSI sequence for WebGL addon scenarios
-        terminalRef.current.options.cursorBlink = false
-        terminalRef.current.options.cursorBlink = true
-
-        // 3. Also send ANSI sequence as backup
-        terminalRef.current.write('\x1b[?25h')
-
-        // 4. Focus terminal
+        // 2. Focus terminal - let CLI manage its own cursor
         terminalRef.current.focus()
       }
 
