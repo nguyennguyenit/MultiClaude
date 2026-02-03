@@ -63,12 +63,16 @@ export function ActivityBar() {
             hideTimeoutRef.current = window.setTimeout(() => setIsHovering(false), 300)
           }}
         >
-          {/* Reveal button - small vertical bar at center */}
+          {/* Reveal button - positioned at top like old collapse button */}
           <button
             onClick={cycleActivityBarState}
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-10 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] border-l-0 rounded-r opacity-0 group-hover:opacity-100 hover:bg-[var(--mc-accent)] transition-all"
+            className="absolute left-2 top-2 p-1.5 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--mc-bg-hover)] transition-all shadow-md"
             title="Show Activity Bar (Ctrl+B)"
-          />
+          >
+            <svg className="w-4 h-4 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
 
         {/* Revealed Activity Bar on hover */}
