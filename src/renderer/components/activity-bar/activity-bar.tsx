@@ -184,19 +184,20 @@ function ActivityBarContent({
 
         {/* Spacer */}
         <div className="flex-1" />
+      </div>
 
+      {/* Bottom Section: Account & Settings */}
+      <div className="border-t border-[var(--mc-border)]">
         {/* Account Section */}
         <ActivityBarAccountSection
           collapsed={collapsed}
           projectPath={projectPath}
         />
-      </div>
 
-      {/* Bottom Section: Settings */}
-      <div className="border-t border-[var(--mc-border)] px-1 py-2">
         {/* Settings Button */}
-        <div className="relative group">
-          <button
+        <div className="px-1 py-2">
+          <div className="relative group">
+            <button
             data-testid="settings-button"
             onClick={onSettingsClick}
             className={`
@@ -225,6 +226,7 @@ function ActivityBarContent({
               {hasUpdate && <span className="ml-1 text-[var(--mc-accent)]">(Update available)</span>}
             </div>
           )}
+        </div>
         </div>
       </div>
     </>
