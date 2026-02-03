@@ -228,7 +228,7 @@ function ActivityBarContent({
       <div className="flex-1" />
 
       {/* Bottom Section: Account & Settings */}
-      <div className="border-t border-[var(--mc-border)]">
+      <div className="border-t border-[var(--mc-border)] pt-1.5">
         {/* Account Section */}
         <ActivityBarAccountSection
           collapsed={collapsed}
