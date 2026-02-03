@@ -133,13 +133,13 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
       <div className="relative group border-t border-[var(--mc-border)]">
         <div className="flex justify-center px-3 py-2 cursor-pointer hover:bg-[var(--mc-bg-hover)] transition-colors">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={username} className="w-8 h-8 flex-shrink-0 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" />
+            <img src={avatarUrl} alt={username} className="w-8 h-8 flex-shrink-0 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
           ) : (
-            <div className="w-8 h-8 flex-shrink-0 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-sm">
+            <div className="w-8 h-8 flex-shrink-0 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-sm" style={{ borderRadius: '50%' }}>
               {username.slice(0, 1).toUpperCase()}
             </div>
           )}
-          <div className={`absolute bottom-1 right-2 w-2 h-2 rounded-full border border-[var(--mc-bg-secondary)] ${isAuthenticated ? 'bg-green-400' : 'bg-gray-400'}`} />
+          <div className={`absolute bottom-1 right-2 w-2 h-2 rounded-full border border-[var(--mc-bg-secondary)] ${isAuthenticated ? 'bg-green-400' : 'bg-gray-400'}`} style={{ borderRadius: '50%' }} />
         </div>
         <div className="absolute left-full ml-2 px-3 py-2 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
           <div className="font-medium">{isAuthenticated ? username : 'Not signed in'}</div>
@@ -177,9 +177,9 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
       {/* User info */}
       <div className="flex items-center gap-2 mb-2">
         {avatarUrl ? (
-          <img src={avatarUrl} alt={username} className="w-7 h-7 flex-shrink-0 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" />
+          <img src={avatarUrl} alt={username} className="w-7 h-7 flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
         ) : (
-          <div className="w-7 h-7 flex-shrink-0 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs">
+          <div className="w-7 h-7 flex-shrink-0 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs" style={{ borderRadius: '50%' }}>
             {username.slice(0, 1).toUpperCase()}
           </div>
         )}
