@@ -170,7 +170,7 @@ function ActivityBarContent({
               </svg>
             </button>
           </div>
-        ) : (
+        ) : activityBarState === 'collapsed' ? (
           // Collapsed (default): Double arrows
           <div className="flex items-center justify-center gap-1 py-1 mb-1">
             <button
@@ -192,7 +192,7 @@ function ActivityBarContent({
               </svg>
             </button>
           </div>
-        )}
+        ) : null}
 
         <ActivityBarNavigationItem
           icon={
