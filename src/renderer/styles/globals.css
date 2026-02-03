@@ -376,6 +376,11 @@ html:not(.ui-terminal) body {
   border-radius: 0 !important;
 }
 
+/* Preserve rounded-full in terminal mode */
+.ui-terminal .rounded-full {
+  border-radius: 9999px !important;
+}
+
 /* Terminal scrollbar */
 .ui-terminal ::-webkit-scrollbar {
   width: 8px;
