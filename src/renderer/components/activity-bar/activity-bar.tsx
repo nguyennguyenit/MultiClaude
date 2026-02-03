@@ -50,7 +50,7 @@ export function ActivityBar() {
   if (hidden) {
     return (
       <>
-        {/* Hover detection zone - wider for easier discovery */}
+        {/* Hover detection zone */}
         <div
           className="activity-bar-hover-zone group"
           onMouseEnter={() => {
@@ -62,18 +62,7 @@ export function ActivityBar() {
           onMouseLeave={() => {
             hideTimeoutRef.current = window.setTimeout(() => setIsHovering(false), 300)
           }}
-        >
-          {/* Reveal button - expand to default */}
-          <button
-            onClick={() => setActivityBarState('collapsed')}
-            className="absolute left-2 top-2 p-1.5 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--mc-bg-hover)] transition-all shadow-md"
-            title="Show Activity Bar (Ctrl+B)"
-          >
-            <svg className="w-4 h-4 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
+        />
 
         {/* Revealed Activity Bar on hover */}
         {isHovering && (
@@ -192,7 +181,20 @@ function ActivityBarContent({
               </svg>
             </button>
           </div>
-        ) : null}
+        ) : (
+          // Hidden: Single expand arrow
+          <div className="flex items-center justify-center py-1 mb-1">
+            <button
+              onClick={() => setActivityBarState('collapsed')}
+              className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              title="Show Activity Bar (Ctrl+B)"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         <ActivityBarNavigationItem
           icon={
