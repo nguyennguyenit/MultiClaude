@@ -1,115 +1,178 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import type { GitHubAuth, GitStatus } from '@shared/types'
+import { useState, useEffect, useCallback } from 'react'
+import type { GitHubAuth, GitStatus, GitConfig } from '@shared/types'
 
 interface ActivityBarAccountSectionProps {
   collapsed: boolean
   projectPath?: string
 }
 
+type ConnectionState = 'connected' | 'disconnected' | 'syncing' | 'error'
+
 export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBarAccountSectionProps) {
   const [githubAuth, setGithubAuth] = useState<GitHubAuth | null>(null)
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [gitConfig, setGitConfig] = useState<GitConfig>({})
+  const [isEditingConfig, setIsEditingConfig] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [isSavingConfig, setIsSavingConfig] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const loadAuth = useCallback(async () => {
+  const reloadAuth = useCallback(async () => {
     try {
+      setConnectionState('syncing')
       const auth = await window.electron.github.authStatus()
       setGithubAuth(auth)
+      setConnectionState(auth.isAuthenticated ? 'connected' : 'disconnected')
     } catch {
-      // Ignore
-    } finally {
-      setIsLoading(false)
+      setConnectionState('error')
     }
   }, [])
 
-  const loadGitStatus = useCallback(async () => {
-    if (!projectPath) {
-      setGitStatus(null)
-      return
+  const handleLogout = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+    try {
+      await window.electron.github.logout()
+      await reloadAuth()
+    } catch {
+      setConnectionState('error')
+    } finally {
+      setIsLoggingOut(false)
     }
+  }, [isLoggingOut, reloadAuth])
+
+  const loadGitConfig = useCallback(async () => {
+    try {
+      const config = await window.electron.git.configGet()
+      setGitConfig(config)
+    } catch { /* ignore */ }
+  }, [])
+
+  const handleStartEdit = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditName(gitConfig.userName || '')
+    setEditEmail(gitConfig.userEmail || '')
+    setIsEditingConfig(true)
+  }, [gitConfig])
+
+  const handleSaveConfig = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isSavingConfig) return
+    setIsSavingConfig(true)
+    try {
+      await window.electron.git.configSet({
+        userName: editName.trim() || undefined,
+        userEmail: editEmail.trim() || undefined
+      })
+      await loadGitConfig()
+      setIsEditingConfig(false)
+    } catch { /* ignore */ }
+    finally { setIsSavingConfig(false) }
+  }, [editName, editEmail, isSavingConfig, loadGitConfig])
+
+  const handleCancelEdit = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsEditingConfig(false)
+  }, [])
+
+  const loadGitStatus = useCallback(async () => {
+    if (!projectPath) { setGitStatus(null); return }
     try {
       const status = await window.electron.git.status(projectPath)
       setGitStatus(status)
-    } catch {
-      setGitStatus(null)
-    }
+    } catch { setGitStatus(null) }
   }, [projectPath])
 
-  useEffect(() => {
-    loadAuth()
-  }, [loadAuth])
+  const handleRefresh = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    try {
+      await Promise.all([reloadAuth(), loadGitConfig(), loadGitStatus()])
+    } finally { setIsRefreshing(false) }
+  }, [isRefreshing, reloadAuth, loadGitConfig, loadGitStatus])
+
+  useEffect(() => { reloadAuth() }, [reloadAuth])
+  useEffect(() => { loadGitConfig() }, [loadGitConfig])
+  useEffect(() => { loadGitStatus() }, [loadGitStatus])
 
   useEffect(() => {
-    loadGitStatus()
-  }, [loadGitStatus])
-
-  // Listen for git status changes
-  useEffect(() => {
-    const handleGitStatusChanged = (e: CustomEvent<{ projectPath: string }>) => {
-      if (e.detail.projectPath === projectPath) {
-        loadGitStatus()
-      }
+    const handler = (e: CustomEvent<{ projectPath: string }>) => {
+      if (e.detail.projectPath === projectPath) loadGitStatus()
     }
-    window.addEventListener('git-status-changed', handleGitStatusChanged as EventListener)
-    return () => window.removeEventListener('git-status-changed', handleGitStatusChanged as EventListener)
+    window.addEventListener('git-status-changed', handler as EventListener)
+    return () => window.removeEventListener('git-status-changed', handler as EventListener)
   }, [projectPath, loadGitStatus])
 
-  // Listen for git branch changes
   useEffect(() => {
     if (!projectPath) return
     const unsubscribe = window.electron.git.onBranchChanged((data) => {
-      if (data.projectPath === projectPath) {
-        loadGitStatus()
-      }
+      if (data.projectPath === projectPath) loadGitStatus()
     })
     return unsubscribe
   }, [projectPath, loadGitStatus])
 
-  const username = githubAuth?.username || 'GitHub'
+  useEffect(() => {
+    if (!projectPath) return
+    window.electron.git.watchProject(projectPath)
+    return () => { window.electron.git.unwatchProject(projectPath) }
+  }, [projectPath])
+
+  const username = githubAuth?.username || 'GitHub CLI'
   const avatarUrl = githubAuth?.username ? `https://github.com/${githubAuth.username}.png` : undefined
   const isAuthenticated = githubAuth?.isAuthenticated || false
+  const statusColor = connectionState === 'connected' ? 'text-green-400' : connectionState === 'error' ? 'text-red-400' : connectionState === 'syncing' ? 'text-amber-400' : 'text-gray-400'
 
-  if (isLoading) {
-    return (
-      <div className={`px-3 py-2 ${collapsed ? 'flex justify-center' : ''}`}>
-        <div className={`${collapsed ? 'w-8 h-8' : 'w-6 h-6'} rounded-full bg-[var(--mc-bg-tertiary)] animate-pulse`} />
-      </div>
-    )
-  }
-
-  const avatarSize = collapsed ? 'w-8 h-8' : 'w-9 h-9'
-
-  // Collapsed view - icon only with tooltip
+  // Collapsed view
   if (collapsed) {
     return (
       <div className="relative group border-t border-[var(--mc-border)]">
         <div className="flex justify-center px-3 py-2 cursor-pointer hover:bg-[var(--mc-bg-hover)] transition-colors">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={username} className={`${avatarSize} rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]`} />
+            <img src={avatarUrl} alt={username} className="w-8 h-8 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" />
           ) : (
-            <div className={`${avatarSize} rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-sm`}>
+            <div className="w-8 h-8 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-sm">
               {username.slice(0, 1).toUpperCase()}
             </div>
           )}
           <div className={`absolute bottom-1 right-2 w-2 h-2 rounded-full border border-[var(--mc-bg-secondary)] ${isAuthenticated ? 'bg-green-400' : 'bg-gray-400'}`} />
         </div>
-        {/* Tooltip */}
         <div className="absolute left-full ml-2 px-3 py-2 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
           <div className="font-medium">{isAuthenticated ? username : 'Not signed in'}</div>
           {gitStatus?.branch && <div className="text-[var(--mc-text-muted)] mt-0.5">{gitStatus.branch}</div>}
-          <div className={`text-[10px] mt-1 ${isAuthenticated ? 'text-green-400' : 'text-gray-400'}`}>
-            {isAuthenticated ? 'Connected' : 'Not connected'}
+          <div className={`text-[10px] mt-1 ${statusColor}`}>
+            {connectionState === 'connected' ? 'Connected' : connectionState === 'syncing' ? 'Syncing...' : 'Not connected'}
           </div>
         </div>
       </div>
     )
   }
 
-  // Expanded view - full info like old sidebar
+  // Expanded view - full info
   return (
     <div className="mx-2 my-2 p-3 rounded-lg bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)]">
-      {/* Header */}
-      <div className="text-[10px] uppercase tracking-wider text-[var(--mc-text-muted)] font-semibold mb-2">GitHub Account</div>
+      {/* Header with actions */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] uppercase tracking-wider text-[var(--mc-text-muted)] font-semibold">GitHub Account</span>
+        <div className="flex items-center gap-1">
+          <button onClick={handleRefresh} disabled={isRefreshing} title="Refresh" className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]">
+            <svg className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          {isAuthenticated && (
+            <button onClick={handleLogout} disabled={isLoggingOut} title="Logout" className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-red-400">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* User info */}
       <div className="flex items-center gap-2.5 mb-3">
@@ -122,15 +185,17 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
         )}
         <div className="flex flex-col min-w-0">
           <span className="text-sm font-medium truncate">{isAuthenticated ? username : 'GitHub CLI'}</span>
-          <span className={`text-xs ${isAuthenticated ? 'text-green-400' : 'text-gray-400'}`}>
-            {isAuthenticated ? 'Connected' : 'Not logged in'}
+          <span className={`text-xs ${statusColor}`}>
+            {connectionState === 'connected' ? 'Connected' : connectionState === 'syncing' ? 'Syncing...' : connectionState === 'error' ? 'Error' : 'Not logged in'}
           </span>
         </div>
       </div>
 
+      <div className="h-px bg-[var(--mc-border)] mb-3" />
+
       {/* Git status */}
-      {gitStatus && (
-        <div className="pt-2 border-t border-[var(--mc-border)] space-y-1.5">
+      {projectPath && gitStatus && (
+        <div className="mb-3 space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 text-[var(--mc-text-muted)]">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -138,12 +203,56 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
               </svg>
               <span className="truncate">{gitStatus.branch || 'No branch'}</span>
             </div>
-            <span className={`${gitStatus.hasRemote ? 'text-green-400' : 'text-gray-400'}`}>
+            <span className={gitStatus.hasRemote ? 'text-green-400' : 'text-gray-400'}>
               {gitStatus.hasRemote ? '● Connected' : '○ No remote'}
             </span>
           </div>
         </div>
       )}
+
+      {/* Git Identity */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--mc-text-muted)]">Git Identity</span>
+          {!isEditingConfig && (
+            <button onClick={handleStartEdit} title="Edit" className="p-1 -mr-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {!isEditingConfig ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs">
+              <svg className="w-3.5 h-3.5 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="truncate">{gitConfig.userName || '(not set)'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[var(--mc-text-secondary)]">
+              <svg className="w-3.5 h-3.5 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span className="truncate">{gitConfig.userEmail || '(not set)'}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2 p-1 rounded bg-[var(--mc-bg-tertiary)] -mx-1">
+            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="User Name" className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]" autoFocus />
+            <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="User Email" className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]" />
+            <div className="flex gap-2">
+              <button onClick={handleSaveConfig} disabled={isSavingConfig} className="flex-1 px-2 py-1 text-xs bg-[var(--mc-accent)] text-white rounded hover:opacity-90 disabled:opacity-50">
+                {isSavingConfig ? '...' : 'Save'}
+              </button>
+              <button onClick={handleCancelEdit} className="flex-1 px-2 py-1 text-xs bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)]">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
