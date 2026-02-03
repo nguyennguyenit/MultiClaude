@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
@@ -46,6 +46,7 @@ interface SettingsState {
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setWindowsShell: (shell: WindowsShell) => void
   setUiStyle: (style: UiStyle) => void
+  setModernFontFamily: (fontId: TerminalFontId) => void
   setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
 
   // Actions
@@ -72,6 +73,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.terminalRenderMode !== b.terminalRenderMode) return false
   if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
   if (a.uiStyle !== b.uiStyle) return false
+  if (a.modernFontFamily !== b.modernFontFamily) return false
 
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
@@ -167,6 +169,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setUiStyle: (style) => {
     const pending = { ...get().pendingSettings, uiStyle: style }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setModernFontFamily: (fontId) => {
+    const pending = { ...get().pendingSettings, modernFontFamily: fontId }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

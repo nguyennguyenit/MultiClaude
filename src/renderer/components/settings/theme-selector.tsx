@@ -1,11 +1,12 @@
 import { useSettingsStore } from '../../stores'
-import { COLOR_THEMES } from '@shared/constants'
-import type { ThemeMode, ColorThemeDefinition, UiStyle } from '@shared/types'
+import { COLOR_THEMES, TERMINAL_FONTS } from '@shared/constants'
+import type { ThemeMode, ColorThemeDefinition, UiStyle, TerminalFontId } from '@shared/types'
 import { SettingsTitle, SettingsSubheading } from './settings-typography'
 import { TerminalStyleOptions } from './terminal-style-options'
+import { getFontFamily } from '../../utils'
 
 export function ThemeSelector() {
-  const { pendingSettings, setThemeMode, setColorTheme, setUiStyle } = useSettingsStore()
+  const { pendingSettings, setThemeMode, setColorTheme, setUiStyle, setModernFontFamily } = useSettingsStore()
 
   const isDark = pendingSettings.themeMode === 'dark' ||
     (pendingSettings.themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -65,31 +66,53 @@ export function ThemeSelector() {
           {/* Terminal Style Options - conditional */}
           {pendingSettings.uiStyle === 'terminal' && <TerminalStyleOptions />}
 
-        {/* Color Theme */}
-        <div className={`p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)] ${pendingSettings.uiStyle === 'terminal' ? 'opacity-50 pointer-events-none' : ''}`}>
-          <SettingsSubheading>Color Theme</SettingsSubheading>
-          <div className="mt-3">
-            {pendingSettings.uiStyle === 'terminal' && (
-              <p className="text-xs text-[var(--mc-text-muted)] mb-2 italic">
-                Disabled in Terminal mode
-              </p>
-            )}
-            <p className="text-xs text-[var(--mc-text-muted)] mb-3">
-              Select a color palette for the interface
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {COLOR_THEMES.map((theme) => (
-                <ThemeCard
-                  key={theme.id}
-                  theme={theme}
-                  selected={pendingSettings.colorTheme === theme.id}
-                  isDark={isDark}
-                  onClick={() => setColorTheme(theme.id)}
-                />
+        {/* Modern Font - shown in Modern mode */}
+        {pendingSettings.uiStyle === 'modern' && (
+          <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+            <SettingsSubheading>Font</SettingsSubheading>
+            <label htmlFor="modern-font-select" className="sr-only">
+              Select font
+            </label>
+            <select
+              id="modern-font-select"
+              value={pendingSettings.modernFontFamily ?? 'jetbrains-mono'}
+              onChange={(e) => setModernFontFamily(e.target.value as TerminalFontId)}
+              className="mt-3 w-full p-2.5 text-sm border border-[var(--mc-border)] bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)] rounded-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+            >
+              {TERMINAL_FONTS.map((font) => (
+                <option key={font.id} value={font.id} style={{ fontFamily: font.family }}>
+                  {font.name}
+                </option>
               ))}
+            </select>
+            <p className="mt-2 text-xs text-[var(--mc-text-muted)]">
+              Preview: <span style={{ fontFamily: getFontFamily(pendingSettings.modernFontFamily) }}>The quick brown fox</span>
+            </p>
+          </div>
+        )}
+
+        {/* Color Theme - hidden in Terminal mode */}
+        {pendingSettings.uiStyle !== 'terminal' && (
+          <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+            <SettingsSubheading>Color Theme</SettingsSubheading>
+            <div className="mt-3">
+              <p className="text-xs text-[var(--mc-text-muted)] mb-3">
+                Select a color palette for the interface
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {COLOR_THEMES.map((theme) => (
+                  <ThemeCard
+                    key={theme.id}
+                    theme={theme}
+                    selected={pendingSettings.colorTheme === theme.id}
+                    isDark={isDark}
+                    onClick={() => setColorTheme(theme.id)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
@@ -138,7 +161,7 @@ function UIStyleCard({ style, label, selected, onClick }: {
       aria-label={`Select ${label} UI style`}
       aria-pressed={selected}
       className={`
-        flex items-center gap-3 px-4 py-3 rounded-lg border-2 w-[140px]
+        flex items-center gap-3 px-4 py-3 rounded-lg border-2 w-[160px]
         transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50
         ${selected
           ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'

@@ -134,5 +134,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     fontFamily: 'jetbrains-mono',
     useBorderChars: false
   },
+  modernFontFamily: 'jetbrains-mono',
   windowsShell: { type: 'cmd' }
 }

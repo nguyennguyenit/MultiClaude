@@ -313,6 +313,11 @@ function App() {
       root.style.setProperty('--mc-terminal-font', font?.family || "'JetBrains Mono', monospace")
     } else {
       root.style.removeProperty('--mc-terminal-font')
+
+      // Set modern font variable
+      const modernFontId = pendingSettings.modernFontFamily ?? 'jetbrains-mono'
+      const modernFont = TERMINAL_FONTS.find(f => f.id === modernFontId)
+      root.style.setProperty('--mc-modern-font', modernFont?.family || "'JetBrains Mono', monospace")
     }
 
     // Update title bar overlay to match theme
@@ -336,7 +341,8 @@ function App() {
     pendingSettings.uiStyle,
     pendingSettings.terminalStyleOptions?.colorPreset,
     pendingSettings.terminalStyleOptions?.fontFamily,
-    pendingSettings.terminalStyleOptions?.useBorderChars
+    pendingSettings.terminalStyleOptions?.useBorderChars,
+    pendingSettings.modernFontFamily
   ])
 
   // Load saved projects on mount and validate folder existence

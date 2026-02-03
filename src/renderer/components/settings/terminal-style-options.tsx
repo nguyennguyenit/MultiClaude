@@ -2,6 +2,7 @@ import { useSettingsStore } from '../../stores'
 import { TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, type TerminalColorPresetConfig } from '@shared/constants'
 import type { TerminalFontId } from '@shared/types'
 import { SettingsSubheading } from './settings-typography'
+import { getFontFamily } from '../../utils'
 
 /**
  * Terminal style customization options component.
@@ -42,7 +43,7 @@ export function TerminalStyleOptions() {
           id="terminal-font-select"
           value={options.fontFamily}
           onChange={(e) => setTerminalStyleOptions({ fontFamily: e.target.value as TerminalFontId })}
-          className="mt-3 w-full p-2.5 border border-[var(--mc-border)] bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)] rounded-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+          className="mt-3 w-full p-2.5 text-sm border border-[var(--mc-border)] bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)] rounded-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
         >
           {TERMINAL_FONTS.map((font) => (
             <option key={font.id} value={font.id} style={{ fontFamily: font.family }}>
@@ -79,12 +80,6 @@ export function TerminalStyleOptions() {
   )
 }
 
-// Helper to get font family string from font id
-function getFontFamily(fontId: TerminalFontId): string {
-  const font = TERMINAL_FONTS.find((f) => f.id === fontId)
-  return font?.family ?? "'JetBrains Mono', monospace"
-}
-
 // Color preset card component
 function ColorPresetCard({
   preset,
@@ -101,7 +96,7 @@ function ColorPresetCard({
       aria-label={`Select ${preset.name} color preset`}
       aria-pressed={selected}
       className={`
-        flex flex-col items-center gap-2 px-4 py-3 rounded-lg border-2 min-w-[100px] transition-all duration-150
+        flex flex-col items-center gap-2 px-5 py-4 rounded-lg border-2 min-w-[100px] transition-all duration-150
         focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50
         ${selected
           ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
@@ -110,7 +105,7 @@ function ColorPresetCard({
     >
       {/* Color preview */}
       <div
-        className="w-full h-8 rounded-md flex items-center justify-center text-xs font-mono"
+        className="w-full h-10 rounded-md flex items-center justify-center text-base font-mono"
         style={{
           backgroundColor: preset.bg,
           color: preset.text,
@@ -119,8 +114,10 @@ function ColorPresetCard({
       >
         {'>_'}
       </div>
-      <span className="text-sm font-medium">{preset.name}</span>
-      {selected && <span className="text-[var(--mc-accent)] text-xs">✓</span>}
+      <span className="text-sm font-medium flex items-center gap-1">
+        {preset.name}
+        {selected && <span style={{ color: preset.text }}>✓</span>}
+      </span>
     </button>
   )
 }
@@ -153,11 +150,13 @@ function BorderStyleCard({
       `}
     >
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-medium flex items-center gap-2">
+          {label}
+          {selected && <span className="text-[var(--mc-accent)]">✓</span>}
+        </span>
         <span className="font-mono text-[var(--mc-text-muted)]">{preview}</span>
       </div>
       <span className="text-xs text-[var(--mc-text-muted)]">{description}</span>
-      {selected && <span className="text-[var(--mc-accent)] text-xs">✓</span>}
     </button>
   )
 }

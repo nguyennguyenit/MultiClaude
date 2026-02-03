@@ -209,6 +209,8 @@ export interface AppSettings {
   // UI style: modern (default) or terminal/TUI mode
   uiStyle: UiStyle
   terminalStyleOptions: TerminalStyleOptions
+  // Modern style font family
+  modernFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
 }

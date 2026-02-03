@@ -75,6 +75,24 @@ body {
   cursor: pointer !important;
 }
 
+/* Style IME composition view for Vietnamese/CJK input - follows theme */
+.terminal-container .composition-view {
+  background: var(--mc-accent) !important;
+  color: var(--mc-bg-primary) !important;
+  padding: 0 2px !important;
+}
+
+/* Terminal UI style - use terminal color preset */
+.ui-terminal .terminal-container .composition-view {
+  background: var(--mc-terminal-accent, var(--mc-accent)) !important;
+  color: var(--mc-terminal-bg, var(--mc-bg-primary)) !important;
+}
+
+/* Terminal UI style - checkmarks in settings use terminal accent */
+.ui-terminal .text-\[var\(--mc-accent\)\] {
+  color: var(--mc-terminal-accent) !important;
+}
+
 /* ============================================
    Theme System - CSS Variables
    ============================================ */
@@ -269,6 +287,12 @@ body {
 /* Terminal font custom property */
 :root {
   --mc-terminal-font: 'JetBrains Mono', monospace;
+  --mc-modern-font: 'JetBrains Mono', monospace;
+}
+
+/* Modern UI Style - Apply custom font when not in terminal mode */
+html:not(.ui-terminal) body {
+  font-family: var(--mc-modern-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif);
 }
 
 /* Terminal Color Presets */
