@@ -109,17 +109,20 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
           }`}
         />
 
-        {/* Username and branch (expanded only) */}
+        {/* Username and details (expanded only) */}
         {!collapsed && (
           <div className="flex flex-col min-w-0 flex-1">
             <span className="text-xs font-medium truncate text-[var(--mc-text-primary)]">
               {isAuthenticated ? username : 'Not signed in'}
             </span>
-            {gitStatus?.branch && (
-              <span className="text-[10px] text-[var(--mc-text-muted)] truncate">
-                {gitStatus.branch}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 text-[10px] text-[var(--mc-text-muted)]">
+              {gitStatus?.branch && (
+                <span className="truncate">{gitStatus.branch}</span>
+              )}
+              {gitStatus?.hasRemote && (
+                <span className="text-green-400">●</span>
+              )}
+            </div>
           </div>
         )}
       </div>
