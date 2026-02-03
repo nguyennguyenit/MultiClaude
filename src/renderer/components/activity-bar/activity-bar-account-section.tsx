@@ -131,17 +131,17 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
   if (collapsed) {
     return (
       <div className="relative group px-1">
-        <div className="flex justify-center px-3 py-2 cursor-pointer hover:bg-[var(--mc-bg-hover)] rounded transition-colors">
+        <div className="flex justify-center px-3 py-1.5 cursor-pointer hover:bg-[var(--mc-bg-hover)] rounded transition-colors">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={username} className="w-6 h-6 flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
+            <img src={avatarUrl} alt={username} className="w-6 h-6 min-w-[24px] min-h-[24px] flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
           ) : (
-            <div className="w-6 h-6 flex-shrink-0 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs" style={{ borderRadius: '50%' }}>
+            <div className="w-6 h-6 min-w-[24px] min-h-[24px] flex-shrink-0 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs" style={{ borderRadius: '50%' }}>
               {username.slice(0, 1).toUpperCase()}
             </div>
           )}
-          <div className={`absolute bottom-1.5 right-2.5 w-1.5 h-1.5 border border-[var(--mc-bg-secondary)] ${isAuthenticated ? 'bg-green-400' : 'bg-gray-400'}`} style={{ borderRadius: '50%' }} />
+          <div className={`absolute bottom-1 right-2 w-1.5 h-1.5 border border-[var(--mc-bg-secondary)] ${isAuthenticated ? 'bg-green-400' : 'bg-gray-400'}`} style={{ borderRadius: '50%' }} />
         </div>
-        {/* Tooltip - positioned above */}
+        {/* Tooltip */}
         <div className="absolute left-full bottom-0 ml-2 px-3 py-2 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
           <div className="font-medium">{isAuthenticated ? username : 'Not signed in'}</div>
           {gitStatus?.branch && <div className="text-[var(--mc-text-muted)] mt-0.5">{gitStatus.branch}</div>}
