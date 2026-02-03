@@ -368,7 +368,7 @@ html:not(.ui-terminal) body {
 .ui-terminal input,
 .ui-terminal select,
 .ui-terminal textarea,
-.ui-terminal [class*="rounded"],
+.ui-terminal [class*="rounded"]:not(.rounded-full),
 .ui-terminal [class*="modal"],
 .ui-terminal [class*="dialog"],
 .ui-terminal [class*="panel"],
