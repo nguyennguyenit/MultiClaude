@@ -98,7 +98,12 @@ body {
    ============================================ */
 
 :root {
-  /* Sidebar dimensions */
+  /* Activity Bar dimensions (VS Code-style) */
+  --mc-activity-bar-width-expanded: 200px;
+  --mc-activity-bar-width-collapsed: 48px;
+  --mc-activity-bar-transition: 200ms ease-in-out;
+
+  /* Legacy sidebar dimensions (deprecated - use activity-bar) */
   --mc-sidebar-width-expanded: 240px;
   --mc-sidebar-width-collapsed: 60px;
   --mc-sidebar-transition: 200ms ease-in-out;
@@ -503,4 +508,69 @@ html:not(.ui-terminal) body {
 @keyframes terminal-blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
+}
+
+/* ============================================
+   Activity Bar - VS Code-style sidebar
+   ============================================ */
+
+/* Activity Bar base transition */
+.activity-bar {
+  transition: width var(--mc-activity-bar-transition);
+  will-change: width;
+}
+
+/* Hover zone for hidden state */
+.activity-bar-hover-zone {
+  position: fixed;
+  left: 0;
+  top: 40px; /* Below titlebar */
+  bottom: 0;
+  width: 8px;
+  z-index: 50;
+  cursor: pointer;
+}
+
+/* Slide-in animation for hover reveal */
+.activity-bar-reveal {
+  animation: activity-bar-slide-in 200ms ease-out forwards;
+  background: var(--mc-bg-secondary);
+  border-right: 1px solid var(--mc-border);
+}
+
+@keyframes activity-bar-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+/* Active indicator animation */
+.activity-bar-indicator-animate {
+  animation: activity-bar-indicator-activate 200ms ease-out;
+}
+
+@keyframes activity-bar-indicator-activate {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+/* Badge pulse animation */
+.activity-bar-badge-pulse {
+  animation: activity-bar-badge-pulse 150ms ease-out;
+}
+
+@keyframes activity-bar-badge-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .activity-bar,
+  .activity-bar-reveal,
+  .activity-bar-indicator-animate,
+  .activity-bar-badge-pulse {
+    animation: none;
+    transition: none;
+  }
 }

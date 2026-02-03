@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
-import { Sidebar } from './components/sidebar'
+import { ActivityBar } from './components/activity-bar'
 import { ProjectTabs } from './components/project-tabs'
+import { TitlebarLogo } from './components/titlebar'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
 import { GitHubView } from './components/github-view'
@@ -30,7 +31,8 @@ function App() {
     setActiveProject,
     setActiveTerminal,
     switchToProject,
-    toggleSidebar,
+    activityBarState,
+    setActivityBarState,
     activeView
   } = useAppStore()
 
@@ -242,9 +244,23 @@ function App() {
 
   // Load settings and detect WSL on mount
   useEffect(() => {
-    loadSettings()
+    loadSettings().then(() => {
+      // Sync activity bar state from settings to app store
+      const settings = useSettingsStore.getState().savedSettings
+      if (settings.activityBarState) {
+        setActivityBarState(settings.activityBarState)
+      }
+    })
     detectWsl()
   }, [])
+
+  // Persist activity bar state changes to settings
+  useEffect(() => {
+    const settingsState = useSettingsStore.getState()
+    if (settingsState.savedSettings.activityBarState !== activityBarState) {
+      window.electron.settings.set({ ...settingsState.savedSettings, activityBarState })
+    }
+  }, [activityBarState])
 
   // Load YOLO status when project changes
   useEffect(() => {
@@ -442,35 +458,28 @@ function App() {
         }}
       />
 
-      {/* Title Bar */}
-      <div className="h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-4 titlebar-drag relative">
-        <button
-          data-testid="titlebar-sidebar-toggle"
-          onClick={toggleSidebar}
-          className={`p-1 hover:bg-[var(--mc-bg-hover)] rounded titlebar-no-drag ${isMac ? 'ml-16' : ''}`}
-          title="Toggle Sidebar"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        <span className="absolute left-1/2 -translate-x-1/2 text-sm font-medium">MultiClaude</span>
-      </div>
+      {/* Unified Titlebar with Logo and Project Tabs */}
+      <div className={`h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-3 titlebar-drag ${isMac ? 'pl-20' : ''}`}>
+        {/* Logo */}
+        <TitlebarLogo showText={activityBarState === 'expanded'} />
 
-      {/* Project Tabs */}
-      <ProjectTabs
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onSelectProject={handleSelectProject}
-        onAddProject={handleAddProject}
-        onDeleteProject={handleDeleteProject}
-      />
+        {/* Project Tabs - inline after logo */}
+        <div className="flex-1 min-w-0 ml-3 titlebar-no-drag">
+          <ProjectTabs
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onSelectProject={handleSelectProject}
+            onAddProject={handleAddProject}
+            onDeleteProject={handleDeleteProject}
+          />
+        </div>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {activeProjectId ? (
           <>
-            <Sidebar />
+            <ActivityBar />
             <div className="flex-1 min-w-0 flex flex-col relative">
               {/* Terminal View - always rendered, hidden via visibility to preserve xterm state */}
               <div

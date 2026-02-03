@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { Terminal, Project, ProjectTerminalLayout } from '@shared/types'
+import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState } from '@shared/types'
+import { DEFAULT_ACTIVITY_BAR_STATE } from '@shared/constants'
 
 export type ActiveView = 'terminals' | 'github'
 
@@ -26,11 +27,10 @@ interface AppState {
   setActiveProject: (id: string | null) => void
   switchToProject: (projectId: string, terminalId?: string) => void
 
-  // UI State
-  sidebarOpen: boolean
-  toggleSidebar: () => void
-  sidebarCollapsed: boolean
-  toggleSidebarCollapse: () => void
+  // UI State - Activity Bar (3 states: collapsed, expanded, hidden)
+  activityBarState: ActivityBarState
+  setActivityBarState: (state: ActivityBarState) => void
+  cycleActivityBarState: () => void // collapsed → expanded → hidden → collapsed
   activeView: ActiveView
   setActiveView: (view: ActiveView) => void
 
@@ -114,11 +114,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }),
 
-  // UI State
-  sidebarOpen: true,
-  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-  sidebarCollapsed: false,
-  toggleSidebarCollapse: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  // UI State - Activity Bar (3 states: collapsed, expanded, hidden)
+  activityBarState: DEFAULT_ACTIVITY_BAR_STATE,
+  setActivityBarState: (state) => set({ activityBarState: state }),
+  cycleActivityBarState: () => set((state) => {
+    const cycle: Record<ActivityBarState, ActivityBarState> = {
+      collapsed: 'expanded',
+      expanded: 'hidden',
+      hidden: 'collapsed'
+    }
+    return { activityBarState: cycle[state.activityBarState] }
+  }),
   activeView: 'terminals' as ActiveView,
   setActiveView: (view) => set({ activeView: view }),
 
