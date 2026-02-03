@@ -41,21 +41,25 @@ interface UseTerminalOptions {
 /**
  * Get current terminal theme based on settings
  * Uses terminal preset cursor color when in Terminal UI mode
+ * Uses color theme cursor color when in Modern UI mode
  */
 function getCurrentTerminalTheme() {
-  const { settings } = useSettingsStore.getState()
+  // Use pendingSettings directly (settings getter may not work with getState())
+  const { pendingSettings } = useSettingsStore.getState()
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-  const isDark = settings.themeMode === 'dark' ||
-    (settings.themeMode === 'system' && prefersDark)
-  const baseTheme = getTerminalTheme(settings.colorTheme, isDark)
+  const isDark = pendingSettings.themeMode === 'dark' ||
+    (pendingSettings.themeMode === 'system' && prefersDark)
+  const baseTheme = getTerminalTheme(pendingSettings.colorTheme, isDark)
 
   // Override cursor with terminal preset color when in Terminal UI mode
-  if (settings.uiStyle === 'terminal' && settings.terminalStyleOptions?.colorPreset) {
-    const preset = TERMINAL_COLOR_PRESETS[settings.terminalStyleOptions.colorPreset as keyof typeof TERMINAL_COLOR_PRESETS]
+  if (pendingSettings.uiStyle === 'terminal') {
+    const presetId = pendingSettings.terminalStyleOptions?.colorPreset ?? 'green'
+    const preset = TERMINAL_COLOR_PRESETS[presetId as keyof typeof TERMINAL_COLOR_PRESETS]
     if (preset) {
       return { ...baseTheme, cursor: preset.accent, cursorAccent: preset.bg }
     }
   }
+  // Modern UI mode: cursor color comes from baseTheme (TERMINAL_THEMES) based on colorTheme
   return baseTheme
 }
 
@@ -559,15 +563,40 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   }, [fit])
 
   // Sync terminal theme with app settings (includes terminal preset cursor)
+  // Must reload WebGL addon to apply cursor color changes
   useEffect(() => {
     const unsubscribe = useSettingsStore.subscribe(() => {
-      if (!terminalRef.current) return
+      if (!terminalRef.current || disposedRef.current) return
       terminalRef.current.options.theme = getCurrentTerminalTheme()
-      // Force redraw to apply cursor color change
-      terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+
+      // WebGL addon caches cursor color - must dispose and reload to apply changes
+      if (webglAddonRef.current) {
+        try {
+          webglAddonRef.current.dispose()
+        } catch { /* ignore */ }
+        webglAddonRef.current = null
+
+        // Redraw with canvas fallback first
+        terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+
+        // Reload WebGL addon with new theme
+        if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+          try {
+            const webglAddon = new WebglAddon()
+            webglAddonRef.current = webglAddon
+            terminalRef.current.loadAddon(webglAddon)
+            attachContextLostListener(webglAddon)
+          } catch (e) {
+            console.warn('WebGL addon failed to load:', e)
+          }
+        }
+      } else {
+        // No WebGL - simple refresh is enough
+        terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+      }
     })
     return unsubscribe
-  }, [])
+  }, [attachContextLostListener])
 
   // Toggle WebGL addon based on active state, hidden state, and render mode (debounced)
   useEffect(() => {

@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useAppStore, useSettingsStore, useUpdateStore } from '../../stores'
 import { ActivityBarNavigationItem } from './activity-bar-navigation-item'
 import { ActivityBarAccountSection } from './activity-bar-account-section'
-import { ActivityBarToggleButton } from './activity-bar-toggle-button'
 
 export function ActivityBar() {
   const {
@@ -97,8 +96,6 @@ export function ActivityBar() {
               setActiveView={setActiveView}
               hasUpdate={hasUpdate}
               onSettingsClick={() => setSettingsModalOpen(true)}
-              activityBarState={activityBarState}
-              onCycleState={cycleActivityBarState}
               projectPath={activeProject?.path}
             />
           </div>
@@ -121,8 +118,6 @@ export function ActivityBar() {
         setActiveView={setActiveView}
         hasUpdate={hasUpdate}
         onSettingsClick={() => setSettingsModalOpen(true)}
-        activityBarState={activityBarState}
-        onCycleState={cycleActivityBarState}
         projectPath={activeProject?.path}
       />
     </div>
@@ -136,8 +131,6 @@ interface ActivityBarContentProps {
   setActiveView: (view: 'terminals' | 'github') => void
   hasUpdate: boolean
   onSettingsClick: () => void
-  activityBarState: 'collapsed' | 'expanded' | 'hidden'
-  onCycleState: () => void
   projectPath?: string
 }
 
@@ -148,8 +141,6 @@ function ActivityBarContent({
   setActiveView,
   hasUpdate,
   onSettingsClick,
-  activityBarState,
-  onCycleState,
   projectPath
 }: ActivityBarContentProps) {
   return (
@@ -235,13 +226,6 @@ function ActivityBarContent({
             </div>
           )}
         </div>
-
-        {/* Toggle Button */}
-        <ActivityBarToggleButton
-          state={activityBarState}
-          onCycle={onCycleState}
-          collapsed={collapsed}
-        />
       </div>
     </>
   )

@@ -186,6 +186,9 @@ export interface TerminalLimit {
   customValue?: number
 }
 
+// Activity Bar state (3 states: collapsed, expanded, hidden)
+export type ActivityBarState = 'collapsed' | 'expanded' | 'hidden'
+
 export interface ThemePreviewColors {
   bg: string
   accent: string
@@ -215,6 +218,8 @@ export interface AppSettings {
   terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
+  // Activity Bar state: collapsed (default), expanded, or hidden
+  activityBarState: ActivityBarState
 }
 
 // GitHub Issues/PRs types

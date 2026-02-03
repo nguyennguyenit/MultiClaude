@@ -123,6 +123,9 @@ export const COLOR_THEMES: ColorThemeDefinition[] = [
   }
 ]
 
+// Default Activity Bar state
+export const DEFAULT_ACTIVITY_BAR_STATE = 'collapsed' as const
+
 export const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'system',
   colorTheme: 'default',
@@ -137,5 +140,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   modernFontFamily: 'system',
   terminalFontFamily: 'jetbrains-mono',
-  windowsShell: { type: 'cmd' }
+  windowsShell: { type: 'cmd' },
+  activityBarState: DEFAULT_ACTIVITY_BAR_STATE
 }
