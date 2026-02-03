@@ -154,7 +154,7 @@ export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 // UI Style types for Terminal/TUI mode
 export type UiStyle = 'modern' | 'terminal'
 export type TerminalColorPreset = 'green' | 'blue' | 'white'
-export type TerminalFontId = 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
+export type TerminalFontId = 'system' | 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
 
 export interface TerminalStyleOptions {
   colorPreset: TerminalColorPreset
@@ -211,6 +211,8 @@ export interface AppSettings {
   terminalStyleOptions: TerminalStyleOptions
   // Modern style font family
   modernFontFamily: TerminalFontId
+  // Terminal content font family (xterm)
+  terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
 }

@@ -47,6 +47,7 @@ interface SettingsState {
   setWindowsShell: (shell: WindowsShell) => void
   setUiStyle: (style: UiStyle) => void
   setModernFontFamily: (fontId: TerminalFontId) => void
+  setTerminalFontFamily: (fontId: TerminalFontId) => void
   setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
 
   // Actions
@@ -74,6 +75,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
   if (a.uiStyle !== b.uiStyle) return false
   if (a.modernFontFamily !== b.modernFontFamily) return false
+  if (a.terminalFontFamily !== b.terminalFontFamily) return false
 
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
@@ -177,6 +179,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setModernFontFamily: (fontId) => {
     const pending = { ...get().pendingSettings, modernFontFamily: fontId }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setTerminalFontFamily: (fontId) => {
+    const pending = { ...get().pendingSettings, terminalFontFamily: fontId }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

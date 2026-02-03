@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
-import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS } from '@shared/constants'
+import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS } from '@shared/constants'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -17,8 +17,18 @@ const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
 // NOTE: Cursor restore delay removed - CLI manages its own cursor
 
 // Terminal font family - used for font loading detection
-const TERMINAL_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
+const DEFAULT_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
 const PRIMARY_FONT = 'JetBrains Mono'
+
+/**
+ * Get terminal font family from settings
+ */
+function getTerminalFontFamily(): string {
+  const { savedSettings } = useSettingsStore.getState()
+  const fontId = savedSettings.terminalFontFamily ?? 'jetbrains-mono'
+  const font = TERMINAL_FONTS.find(f => f.id === fontId)
+  return font ? `${font.family}, Menlo, Monaco, Consolas, monospace` : DEFAULT_FONT_FAMILY
+}
 
 interface UseTerminalOptions {
   terminalId: string
@@ -131,7 +141,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       cursorStyle: 'block',
       cursorInactiveStyle: 'block',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
       fontSize: 14,
-      fontFamily: TERMINAL_FONT_FAMILY,
+      fontFamily: getTerminalFontFamily(),
       theme: getCurrentTerminalTheme(),
       allowProposedApi: true,
       windowsMode: false,     // Don't auto-convert \r to \r\n - fixes in-place status line updates

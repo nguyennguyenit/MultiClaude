@@ -287,12 +287,18 @@ body {
 /* Terminal font custom property */
 :root {
   --mc-terminal-font: 'JetBrains Mono', monospace;
-  --mc-modern-font: 'JetBrains Mono', monospace;
+  --mc-modern-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
 }
 
 /* Modern UI Style - Apply custom font when not in terminal mode */
+/* Exclude terminal-container to preserve xterm font */
 html:not(.ui-terminal) body {
   font-family: var(--mc-modern-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif);
+}
+
+/* Terminal container always uses monospace font for xterm compatibility */
+.terminal-container {
+  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
 }
 
 /* Terminal Color Presets */
@@ -342,7 +348,13 @@ html:not(.ui-terminal) body {
   --mc-accent-hover: var(--mc-terminal-accent);
   --mc-backdrop: rgba(0, 0, 0, 0.95);
 
-  /* Font */
+  /* Font - apply to all elements */
+  font-family: var(--mc-terminal-font);
+}
+
+/* Ensure all text elements in terminal mode use terminal font */
+.ui-terminal,
+.ui-terminal *:not(.terminal-container *) {
   font-family: var(--mc-terminal-font);
 }
 

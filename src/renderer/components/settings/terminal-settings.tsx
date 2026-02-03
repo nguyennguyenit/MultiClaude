@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
-import { getShellKey } from '../../utils'
-import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
+import { getShellKey, getFontFamily } from '../../utils'
+import { TERMINAL_FONTS } from '@shared/constants'
+import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell, TerminalFontId } from '@shared/types'
 import { SettingsTitle, SettingsSubheading } from './settings-typography'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
@@ -19,7 +20,7 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
 ]
 
 export function TerminalSettings() {
-  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
+  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell, setTerminalFontFamily } = useSettingsStore()
   const { terminalLimit } = pendingSettings
 
   const [customValue, setCustomValue] = useState(
@@ -208,6 +209,37 @@ export function TerminalSettings() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Terminal Font */}
+        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
+          <SettingsSubheading>Terminal Font</SettingsSubheading>
+          <div className="space-y-3 mt-3">
+            <div>
+              <span className="text-sm font-medium text-[var(--mc-text-primary)]">Font Family</span>
+              <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
+                Font used inside terminal content
+              </p>
+            </div>
+            <label htmlFor="terminal-content-font-select" className="sr-only">
+              Select terminal font
+            </label>
+            <select
+              id="terminal-content-font-select"
+              value={pendingSettings.terminalFontFamily ?? 'jetbrains-mono'}
+              onChange={(e) => setTerminalFontFamily(e.target.value as TerminalFontId)}
+              className="w-full p-2.5 text-sm border border-[var(--mc-border)] bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)] rounded-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+            >
+              {TERMINAL_FONTS.map((font) => (
+                <option key={font.id} value={font.id} style={{ fontFamily: font.family }}>
+                  {font.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-[var(--mc-text-muted)]">
+              Preview: <span style={{ fontFamily: getFontFamily(pendingSettings.terminalFontFamily) }}>$ echo "Hello World"</span>
+            </p>
           </div>
         </div>
       </div>

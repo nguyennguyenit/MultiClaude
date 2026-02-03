@@ -51,6 +51,7 @@ export interface TerminalFontConfig {
 
 // Terminal UI font options
 export const TERMINAL_FONTS: readonly TerminalFontConfig[] = [
+  { id: 'system', name: 'System Default', family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif" },
   { id: 'jetbrains-mono', name: 'JetBrains Mono', family: "'JetBrains Mono', monospace" },
   { id: 'source-code-pro', name: 'Source Code Pro', family: "'Source Code Pro', monospace" },
   { id: 'fira-code', name: 'Fira Code', family: "'Fira Code', monospace" },
@@ -134,6 +135,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     fontFamily: 'jetbrains-mono',
     useBorderChars: false
   },
-  modernFontFamily: 'jetbrains-mono',
+  modernFontFamily: 'system',
+  terminalFontFamily: 'jetbrains-mono',
   windowsShell: { type: 'cmd' }
 }
