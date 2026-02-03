@@ -99,7 +99,7 @@ export function ActivityBar() {
   return (
     <div
       data-testid="activity-bar"
-      className="activity-bar bg-[var(--mc-bg-secondary)] border-r border-[var(--mc-border)] flex flex-col h-full overflow-hidden"
+      className="activity-bar bg-[var(--mc-bg-secondary)] border-r border-[var(--mc-border)] flex flex-col h-full"
       style={{ width }}
     >
       <ActivityBarContent
@@ -151,7 +151,7 @@ function ActivityBarContent({
             <span className="text-xs text-[var(--mc-text-muted)] uppercase">Views</span>
             <button
               onClick={() => setActivityBarState('collapsed')}
-              className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              className="p-1 hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
               title="Collapse (Ctrl+B)"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,7 +164,7 @@ function ActivityBarContent({
           <div className="flex items-center justify-center gap-1 py-1 mb-1">
             <button
               onClick={() => setActivityBarState('hidden')}
-              className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              className="p-1 hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
               title="Hide (Ctrl+B)"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -173,7 +173,7 @@ function ActivityBarContent({
             </button>
             <button
               onClick={() => setActivityBarState('expanded')}
-              className="p-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              className="p-1 hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
               title="Expand (Ctrl+B)"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -186,7 +186,7 @@ function ActivityBarContent({
           <div className="flex items-center justify-center py-1 mb-1">
             <button
               onClick={() => setActivityBarState('collapsed')}
-              className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              className="p-1.5 hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
               title="Show Activity Bar (Ctrl+B)"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
