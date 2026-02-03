@@ -72,10 +72,12 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
   if (isLoading) {
     return (
       <div className={`px-3 py-2 ${collapsed ? 'flex justify-center' : ''}`}>
-        <div className="w-6 h-6 rounded-full bg-[var(--mc-bg-tertiary)] animate-pulse" />
+        <div className={`${collapsed ? 'w-8 h-8' : 'w-6 h-6'} rounded-full bg-[var(--mc-bg-tertiary)] animate-pulse`} />
       </div>
     )
   }
+
+  const avatarSize = collapsed ? 'w-8 h-8' : 'w-6 h-6'
 
   return (
     <div className="relative group border-t border-[var(--mc-border)]">
@@ -92,10 +94,10 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
           <img
             src={avatarUrl}
             alt={username}
-            className="w-6 h-6 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)] flex-shrink-0"
+            className={`${avatarSize} rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)] flex-shrink-0`}
           />
         ) : (
-          <div className="w-6 h-6 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs flex-shrink-0">
+          <div className={`${avatarSize} rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center ${collapsed ? 'text-sm' : 'text-xs'} flex-shrink-0`}>
             {username.slice(0, 1).toUpperCase()}
           </div>
         )}
