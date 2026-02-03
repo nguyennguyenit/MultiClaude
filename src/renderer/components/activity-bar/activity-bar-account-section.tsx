@@ -177,9 +177,9 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
       {/* User info */}
       <div className="flex items-center gap-2 mb-2">
         {avatarUrl ? (
-          <img src={avatarUrl} alt={username} className="w-6 h-6 flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
+          <img src={avatarUrl} alt={username} className="w-8 h-8 flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
         ) : (
-          <div className="w-6 h-6 flex-shrink-0 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-[10px]" style={{ borderRadius: '50%' }}>
+          <div className="w-8 h-8 flex-shrink-0 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs" style={{ borderRadius: '50%' }}>
             {username.slice(0, 1).toUpperCase()}
           </div>
         )}
