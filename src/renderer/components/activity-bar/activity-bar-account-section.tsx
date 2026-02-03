@@ -131,7 +131,7 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
   if (collapsed) {
     return (
       <div className="relative group px-1">
-        <div className="flex justify-center px-3 py-1.5 cursor-pointer hover:bg-[var(--mc-bg-hover)] rounded transition-colors">
+        <div className="flex justify-center px-3 pt-1.5 pb-0.5 cursor-pointer hover:bg-[var(--mc-bg-hover)] rounded transition-colors">
           {avatarUrl ? (
             <img src={avatarUrl} alt={username} className="w-6 h-6 min-w-[24px] min-h-[24px] flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
           ) : (

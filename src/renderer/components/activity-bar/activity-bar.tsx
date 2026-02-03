@@ -236,7 +236,7 @@ function ActivityBarContent({
         />
 
         {/* Settings Button */}
-        <div className="px-1 py-2">
+        <div className="px-1 pb-2 pt-1">
           <div className="relative group">
             <button
             data-testid="settings-button"
