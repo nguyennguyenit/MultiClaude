@@ -463,8 +463,11 @@ function App() {
         {/* Logo */}
         <TitlebarLogo showText={activityBarState === 'expanded'} />
 
+        {/* Vertical divider */}
+        <div className="h-5 w-px bg-[var(--mc-border)] mx-3" />
+
         {/* Project Tabs - inline after logo */}
-        <div className="flex-1 min-w-0 ml-3 titlebar-no-drag">
+        <div className="flex-1 min-w-0 titlebar-no-drag">
           <ProjectTabs
             projects={projects}
             activeProjectId={activeProjectId}
@@ -483,7 +486,7 @@ function App() {
             <div className="flex-1 min-w-0 flex flex-col relative">
               {/* Terminal View - always rendered, hidden via visibility to preserve xterm state */}
               <div
-                className="flex flex-col"
+                className="flex flex-col border-t border-[var(--mc-border)]"
                 style={{
                   position: 'absolute',
                   top: 0,

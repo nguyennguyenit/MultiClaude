@@ -99,7 +99,7 @@ export function ActivityBar() {
   return (
     <div
       data-testid="activity-bar"
-      className="activity-bar bg-[var(--mc-bg-secondary)] border-r border-[var(--mc-border)] flex flex-col h-full"
+      className="activity-bar bg-[var(--mc-bg-secondary)] border-r border-t border-[var(--mc-border)] flex flex-col h-full"
       style={{ width }}
     >
       <ActivityBarContent
