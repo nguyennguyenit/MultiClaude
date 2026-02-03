@@ -6,6 +6,7 @@ interface ActivityBarNavigationItemProps {
   badge?: number
   active: boolean
   collapsed: boolean
+  iconSize?: 'sm' | 'md' | 'lg'  // sm=4, md=5, lg=6
   onClick: () => void
 }
 
@@ -15,6 +16,7 @@ export function ActivityBarNavigationItem({
   badge,
   active,
   collapsed,
+  iconSize = 'sm',
   onClick
 }: ActivityBarNavigationItemProps) {
   const [shouldPulse, setShouldPulse] = useState(false)
@@ -53,7 +55,7 @@ export function ActivityBarNavigationItem({
         )}
 
         {/* Icon with badge */}
-        <span className="relative flex-shrink-0">
+        <span className={`relative flex-shrink-0 ${iconSize === 'lg' ? '[&>svg]:w-6 [&>svg]:h-6' : iconSize === 'md' ? '[&>svg]:w-5 [&>svg]:h-5' : '[&>svg]:w-4 [&>svg]:h-4'}`}>
           {icon}
           {badge !== undefined && badge > 0 && (
             <span

@@ -47,10 +47,21 @@ export function ActivityBar() {
       ? 'var(--mc-activity-bar-width-collapsed)'
       : 'var(--mc-activity-bar-width-expanded)'
 
-  // Hidden state: render hover zone
+  // Hidden state: render reveal button + hover zone
   if (hidden) {
     return (
       <>
+        {/* Persistent reveal button - always visible when hidden */}
+        <button
+          onClick={cycleActivityBarState}
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-50 p-1.5 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] border-l-0 rounded-r-md shadow-lg hover:bg-[var(--mc-bg-hover)] transition-colors group"
+          title="Show Activity Bar (Ctrl+B)"
+        >
+          <svg className="w-4 h-4 text-[var(--mc-text-muted)] group-hover:text-[var(--mc-text-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
         {/* Hover detection zone */}
         <div
           className="activity-bar-hover-zone"
@@ -162,6 +173,7 @@ function ActivityBarContent({
             badge={terminalCount}
             active={activeView === 'terminals'}
             collapsed={collapsed}
+            iconSize={collapsed ? 'lg' : 'sm'}
             onClick={() => setActiveView('terminals')}
           />
 
@@ -174,6 +186,7 @@ function ActivityBarContent({
             label="GitHub"
             active={activeView === 'github'}
             collapsed={collapsed}
+            iconSize={collapsed ? 'lg' : 'sm'}
             onClick={() => setActiveView('github')}
           />
         </div>
