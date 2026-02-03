@@ -175,36 +175,36 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
       </div>
 
       {/* User info */}
-      <div className="flex items-center gap-2.5 mb-3">
+      <div className="flex items-center gap-2 mb-2">
         {avatarUrl ? (
-          <img src={avatarUrl} alt={username} className="w-9 h-9 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" />
+          <img src={avatarUrl} alt={username} className="w-7 h-7 rounded-full border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" />
         ) : (
-          <div className="w-9 h-9 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-sm">
+          <div className="w-7 h-7 rounded-full bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] flex items-center justify-center text-xs">
             {username.slice(0, 1).toUpperCase()}
           </div>
         )}
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-medium truncate">{isAuthenticated ? username : 'GitHub CLI'}</span>
-          <span className={`text-xs ${statusColor}`}>
+          <span className="text-xs font-medium truncate">{isAuthenticated ? username : 'GitHub CLI'}</span>
+          <span className={`text-[10px] ${statusColor}`}>
             {connectionState === 'connected' ? 'Connected' : connectionState === 'syncing' ? 'Syncing...' : connectionState === 'error' ? 'Error' : 'Not logged in'}
           </span>
         </div>
       </div>
 
-      <div className="h-px bg-[var(--mc-border)] mb-3" />
+      <div className="h-px bg-[var(--mc-border)] mb-2" />
 
       {/* Git status */}
       {projectPath && gitStatus && (
-        <div className="mb-3 space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5 text-[var(--mc-text-muted)]">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mb-2 space-y-1">
+          <div className="flex items-center justify-between text-[10px]">
+            <div className="flex items-center gap-1 text-[var(--mc-text-muted)]">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
               <span className="truncate">{gitStatus.branch || 'No branch'}</span>
             </div>
             <span className={gitStatus.hasRemote ? 'text-green-400' : 'text-gray-400'}>
-              {gitStatus.hasRemote ? '● Connected' : '○ No remote'}
+              {gitStatus.hasRemote ? '● Remote' : '○ Local'}
             </span>
           </div>
         </div>
@@ -212,11 +212,11 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
 
       {/* Git Identity */}
       <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--mc-text-muted)]">Git Identity</span>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[9px] uppercase tracking-wider font-semibold text-[var(--mc-text-muted)]">Git Identity</span>
           {!isEditingConfig && (
-            <button onClick={handleStartEdit} title="Edit" className="p-1 -mr-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button onClick={handleStartEdit} title="Edit" className="p-0.5 -mr-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </button>
@@ -224,29 +224,29 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
         </div>
 
         {!isEditingConfig ? (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs">
-              <svg className="w-3.5 h-3.5 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <svg className="w-3 h-3 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
               <span className="truncate">{gitConfig.userName || '(not set)'}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-[var(--mc-text-secondary)]">
-              <svg className="w-3.5 h-3.5 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center gap-1.5 text-[10px] text-[var(--mc-text-secondary)]">
+              <svg className="w-3 h-3 text-[var(--mc-text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
               <span className="truncate">{gitConfig.userEmail || '(not set)'}</span>
             </div>
           </div>
         ) : (
-          <div className="space-y-2 p-1 rounded bg-[var(--mc-bg-tertiary)] -mx-1">
-            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="User Name" className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]" autoFocus />
-            <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="User Email" className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]" />
-            <div className="flex gap-2">
-              <button onClick={handleSaveConfig} disabled={isSavingConfig} className="flex-1 px-2 py-1 text-xs bg-[var(--mc-accent)] text-white rounded hover:opacity-90 disabled:opacity-50">
+          <div className="space-y-1.5 p-1 rounded bg-[var(--mc-bg-tertiary)] -mx-1">
+            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="User Name" className="w-full px-1.5 py-0.5 text-[10px] bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]" autoFocus />
+            <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="User Email" className="w-full px-1.5 py-0.5 text-[10px] bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]" />
+            <div className="flex gap-1.5">
+              <button onClick={handleSaveConfig} disabled={isSavingConfig} className="flex-1 px-1.5 py-0.5 text-[10px] bg-[var(--mc-accent)] text-white rounded hover:opacity-90 disabled:opacity-50">
                 {isSavingConfig ? '...' : 'Save'}
               </button>
-              <button onClick={handleCancelEdit} className="flex-1 px-2 py-1 text-xs bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)]">
+              <button onClick={handleCancelEdit} className="flex-1 px-1.5 py-0.5 text-[10px] bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)]">
                 Cancel
               </button>
             </div>
