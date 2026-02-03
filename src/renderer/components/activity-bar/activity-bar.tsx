@@ -51,20 +51,9 @@ export function ActivityBar() {
   if (hidden) {
     return (
       <>
-        {/* Persistent reveal button - always visible when hidden */}
-        <button
-          onClick={cycleActivityBarState}
-          className="fixed left-0 top-1/2 -translate-y-1/2 z-50 p-1.5 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] border-l-0 rounded-r-md shadow-lg hover:bg-[var(--mc-bg-hover)] transition-colors group"
-          title="Show Activity Bar (Ctrl+B)"
-        >
-          <svg className="w-4 h-4 text-[var(--mc-text-muted)] group-hover:text-[var(--mc-text-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        {/* Hover detection zone */}
+        {/* Hover detection zone - wider for easier discovery */}
         <div
-          className="activity-bar-hover-zone"
+          className="activity-bar-hover-zone group"
           onMouseEnter={() => {
             if (hideTimeoutRef.current) {
               clearTimeout(hideTimeoutRef.current)
@@ -74,7 +63,18 @@ export function ActivityBar() {
           onMouseLeave={() => {
             hideTimeoutRef.current = window.setTimeout(() => setIsHovering(false), 300)
           }}
-        />
+        >
+          {/* Reveal button - only visible on hover, positioned at bottom like Expand/Collapse button */}
+          <button
+            onClick={cycleActivityBarState}
+            className="absolute left-0 bottom-4 p-2 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] border-l-0 rounded-r-md shadow-lg opacity-0 group-hover:opacity-100 hover:bg-[var(--mc-bg-hover)] transition-all"
+            title="Show Activity Bar (Ctrl+B)"
+          >
+            <svg className="w-4 h-4 text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
 
         {/* Revealed Activity Bar on hover */}
         {isHovering && (
