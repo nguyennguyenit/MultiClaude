@@ -445,11 +445,49 @@ html:not(.ui-terminal) body {
 }
 
 /* ASCII Border Mode
- * Usage: Add .ascii-border class to element in .ui-terminal.use-border-chars
+ * When use-border-chars is enabled, switch from solid to dashed/double borders
+ * for a classic terminal/ASCII aesthetic
+ */
+
+/* ASCII Border Mode - Apply dashed borders to common elements */
+.ui-terminal.use-border-chars button {
+  border: 1px dashed var(--mc-terminal-border) !important;
+}
+
+.ui-terminal.use-border-chars input,
+.ui-terminal.use-border-chars select,
+.ui-terminal.use-border-chars textarea {
+  border: 1px dashed var(--mc-terminal-border) !important;
+}
+
+/* Panels, cards, modals - use double border for ASCII box feel */
+.ui-terminal.use-border-chars [class*="panel"],
+.ui-terminal.use-border-chars [class*="card"],
+.ui-terminal.use-border-chars [class*="modal"],
+.ui-terminal.use-border-chars [class*="dialog"],
+.ui-terminal.use-border-chars [class*="rounded-lg"],
+.ui-terminal.use-border-chars .settings-section {
+  border: 2px double var(--mc-terminal-border) !important;
+}
+
+/* Dividers and separators - dashed style */
+.ui-terminal.use-border-chars hr,
+.ui-terminal.use-border-chars [class*="divider"],
+.ui-terminal.use-border-chars [class*="separator"] {
+  border-style: dashed !important;
+}
+
+/* Activity bar and sidebar borders */
+.ui-terminal.use-border-chars .activity-bar,
+.ui-terminal.use-border-chars [class*="sidebar"] {
+  border-style: dashed !important;
+}
+
+/* Custom .ascii-border class for explicit ASCII box styling
+ * Usage: Add .ascii-border class to element
  * Attributes:
- *   - data-ascii-title: optional title text displayed in top border (e.g., "────Settings────")
- *   - data-ascii-width: optional filler for bottom border (e.g., "────────────────")
- * Note: Components in Phase 04 will generate these attributes dynamically
+ *   - data-ascii-title: optional title text displayed in top border
+ *   - data-ascii-width: optional filler for bottom border
  */
 .ui-terminal.use-border-chars .ascii-border {
   position: relative;

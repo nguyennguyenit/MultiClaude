@@ -141,8 +141,9 @@ function App() {
       return
     }
 
-    // Use default shell from settings if not specified (Windows only)
-    const effectiveShell = shell ?? useSettingsStore.getState().settings.windowsShell
+    // Use default shell from saved settings if not specified (Windows only)
+    // Use savedSettings (persisted to disk) instead of pendingSettings to ensure consistency
+    const effectiveShell = shell ?? useSettingsStore.getState().savedSettings.windowsShell
 
     const terminal = await window.electron.terminal.create({
       cwd: activeProject?.path,
