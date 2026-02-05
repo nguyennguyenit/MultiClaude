@@ -130,6 +130,12 @@
         "portable"
       ],
       "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     }
   }
 }
