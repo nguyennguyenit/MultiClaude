@@ -468,7 +468,7 @@ function App() {
         <div className="h-5 w-px bg-[var(--mc-border)] mx-3" />
 
         {/* Project Tabs - inline after logo */}
-        <div className="flex-1 min-w-0 titlebar-no-drag">
+        <div className="flex-1 min-w-0">
           <ProjectTabs
             projects={projects}
             activeProjectId={activeProjectId}
