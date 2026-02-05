@@ -44,7 +44,7 @@ export function ProjectTabs({
   const overflowProjects = projects.slice(MAX_VISIBLE_TABS)
 
   return (
-    <div data-testid="project-tabs-container" className="flex items-center h-9 bg-[var(--mc-bg-secondary)] border-b border-[var(--mc-border)]">
+    <div data-testid="project-tabs-container" className="flex items-center h-full">
       {/* Project Tabs */}
       <div className="flex-1 flex items-center overflow-x-auto">
         {visibleProjects.map((project, index) => (

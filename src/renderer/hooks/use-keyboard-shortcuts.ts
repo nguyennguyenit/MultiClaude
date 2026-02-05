@@ -10,8 +10,9 @@ interface KeyboardShortcutsOptions {
 /**
  * Global keyboard shortcuts hook
  * - Alt+1~9: Switch to project by index
- * - Ctrl+N: Create new terminal
+ * - Ctrl+N/T: Create new terminal
  * - Ctrl+W: Close active terminal
+ * - Ctrl+B: Cycle Activity Bar state (collapsed → expanded → hidden)
  */
 export function useKeyboardShortcuts({
   onAddTerminal,
@@ -54,6 +55,13 @@ export function useKeyboardShortcuts({
       if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
         e.preventDefault()
         onCloseTerminal()
+        return
+      }
+
+      // Ctrl+B: Cycle Activity Bar state (Cmd+B on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault()
+        useAppStore.getState().cycleActivityBarState()
         return
       }
     }
