@@ -53,7 +53,7 @@ export function ProjectTabs({
             data-testid={`project-tab-${project.id}`}
             onClick={() => onSelectProject(project.id)}
             className={`
-              group flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer
+              group flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer titlebar-no-drag
               border-r border-[var(--mc-border)] min-w-[100px] max-w-[200px]
               transition-colors duration-150
               ${activeProjectId === project.id
@@ -94,7 +94,7 @@ export function ProjectTabs({
           type="button"
           data-testid="project-tabs-add"
           onClick={onAddProject}
-          className="flex-shrink-0 p-1.5 mx-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] transition-colors"
+          className="flex-shrink-0 p-1.5 mx-1 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] transition-colors titlebar-no-drag"
           title="Add Project"
           aria-label="Add Project"
         >
@@ -105,7 +105,7 @@ export function ProjectTabs({
 
         {/* Empty state when no projects */}
         {projects.length === 0 && (
-          <div data-testid="project-tabs-empty" className="px-4 py-1.5 text-sm text-[var(--mc-text-muted)]">
+          <div data-testid="project-tabs-empty" className="px-4 py-1.5 text-sm text-[var(--mc-text-muted)] titlebar-no-drag">
             No projects - click + to add
           </div>
         )}
@@ -113,7 +113,7 @@ export function ProjectTabs({
 
       {/* Overflow dropdown for 10+ projects */}
       {overflowProjects.length > 0 && (
-        <div className="flex items-center px-2" ref={overflowRef}>
+        <div className="flex items-center px-2 titlebar-no-drag" ref={overflowRef}>
           <div className="relative">
             <button
               data-testid="project-tabs-overflow"

@@ -6,7 +6,7 @@ interface TitlebarLogoProps {
 
 export function TitlebarLogo({ showText }: TitlebarLogoProps) {
   return (
-    <div className="flex items-center gap-2 titlebar-no-drag flex-shrink-0">
+    <div className="flex items-center gap-2 flex-shrink-0">
       <img src={logoImg} alt="MultiClaude" className="w-5 h-5 flex-shrink-0 aspect-square object-contain" />
       {showText && (
         <span className="font-semibold text-sm text-[var(--mc-text-primary)] whitespace-nowrap">
