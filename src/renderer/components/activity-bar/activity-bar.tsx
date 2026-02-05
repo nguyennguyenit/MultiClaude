@@ -266,7 +266,7 @@ function ActivityBarContent({
 
           {/* Tooltip when collapsed */}
           {collapsed && (
-            <div className="absolute left-full ml-2 px-2 py-1 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
+            <div className="absolute bottom-full left-full mb-1 ml-1 px-2 py-1 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
               Settings
               {hasUpdate && <span className="ml-1 text-[var(--mc-accent)]">(Update available)</span>}
             </div>

@@ -142,7 +142,7 @@ export function ActivityBarAccountSection({ collapsed, projectPath }: ActivityBa
           <div className={`absolute bottom-1 right-2 w-1.5 h-1.5 border border-[var(--mc-bg-secondary)] ${isAuthenticated ? 'bg-green-400' : 'bg-gray-400'}`} style={{ borderRadius: '50%' }} />
         </div>
         {/* Tooltip */}
-        <div className="absolute left-full bottom-0 ml-2 px-3 py-2 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
+        <div className="absolute bottom-full left-full mb-1 ml-1 px-3 py-2 bg-[var(--mc-bg-tertiary)] text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 pointer-events-none transition-opacity shadow-lg border border-[var(--mc-border)]">
           <div className="flex items-center gap-2 mb-1">
             {avatarUrl ? (
               <img src={avatarUrl} alt={username} className="w-5 h-5 flex-shrink-0 border border-[var(--mc-border)] object-cover bg-[var(--mc-bg-tertiary)]" style={{ borderRadius: '50%' }} />
