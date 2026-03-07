@@ -59,11 +59,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         </TabButton>
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'appearance' && <ThemeSelector />}
-      {activeTab === 'terminals' && <TerminalSettings />}
-      {activeTab === 'notifications' && <NotificationSettings />}
-      {activeTab === 'updates' && <UpdateSettings />}
+      {/* Tab content - fixed height so panel doesn't resize when switching tabs */}
+      <div className="h-[320px] overflow-y-auto">
+        {activeTab === 'appearance' && <ThemeSelector />}
+        {activeTab === 'terminals' && <TerminalSettings />}
+        {activeTab === 'notifications' && <NotificationSettings />}
+        {activeTab === 'updates' && <UpdateSettings />}
+      </div>
     </div>
   )
 }

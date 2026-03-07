@@ -447,49 +447,46 @@ export function GitHubConnectDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[var(--mc-bg-secondary)] rounded-lg p-5 w-[420px] max-w-[90vw] shadow-xl border border-[var(--mc-border)]">
+    <div className="dialog-backdrop">
+      <div className="dialog" style={{ padding: '0' }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <GitHubIcon />
-            <h3 className="text-base font-medium text-[var(--mc-text-primary)]">
-              Connect to GitHub
-            </h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-[var(--mc-bg-hover)] rounded transition-colors"
-          >
-            <CloseIcon />
-          </button>
+        <div className="dialog-header">
+          <span>Connect to GitHub</span>
+          <button onClick={onClose} className="slide-panel-close" title="Close">×</button>
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded mb-4">
-            <ErrorIcon />
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
+        {/* Body */}
+        <div className="dialog-body">
+          {/* Error message */}
+          {error && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px',
+              background: 'rgba(247,118,142,0.1)', border: '1px solid rgba(247,118,142,0.3)',
+              marginBottom: '12px', fontSize: '13px', color: '#f7768e'
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: '1px' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
 
-        {/* Content */}
-        {renderContent()}
+          {/* Content */}
+          {renderContent()}
 
-        {/* Don't ask again checkbox - only show on options view */}
-        {view === 'options' && (
-          <label className="flex items-center gap-2 mt-4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={dontAskAgain}
-              onChange={(e) => setDontAskAgain(e.target.checked)}
-              className="w-4 h-4 rounded border-[var(--mc-border)] bg-[var(--mc-bg-primary)] accent-[var(--mc-accent)]"
-            />
-            <span className="text-xs text-[var(--mc-text-muted)]">
+          {/* Don't ask again checkbox - only show on options view */}
+          {view === 'options' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <input
+                type="checkbox"
+                checked={dontAskAgain}
+                onChange={(e) => setDontAskAgain(e.target.checked)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
               Don't ask again for this project
-            </span>
-          </label>
-        )}
+            </label>
+          )}
+        </div>
       </div>
     </div>
   )

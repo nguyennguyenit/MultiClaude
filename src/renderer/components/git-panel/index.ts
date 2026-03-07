@@ -1,1 +1,1 @@
-export { GitPanel } from './git-panel'
+export { GitPanelContent } from './git-panel'

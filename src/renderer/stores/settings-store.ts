@@ -196,12 +196,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setTerminalStyleOptions: (options) => {
-    const pending = {
+    const pending: AppSettings = {
       ...get().pendingSettings,
       terminalStyleOptions: {
         ...get().pendingSettings.terminalStyleOptions,
         ...options
-      }
+      } as TerminalStyleOptions
     }
     set({
       pendingSettings: pending,

@@ -146,7 +146,11 @@ export interface GitOperationResult {
 
 // Theme types
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest' | 'neon-cyber' | 'pro-dark' | 'vibrant'
+export type ColorTheme =
+  // Legacy themes (kept for backward compat - map to new themes on save)
+  | 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest' | 'neon-cyber' | 'vibrant'
+  // New VibeTerminal themes
+  | 'tokyo-night' | 'catppuccin' | 'dracula' | 'rose-pine' | 'pro-dark'
 
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
@@ -204,22 +208,23 @@ export interface ColorThemeDefinition {
 }
 
 export interface AppSettings {
-  themeMode: ThemeMode
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   glassmorphismEnabled: boolean
-  // UI style: modern (default) or terminal/TUI mode
-  uiStyle: UiStyle
-  terminalStyleOptions: TerminalStyleOptions
-  // Modern style font family
-  modernFontFamily: TerminalFontId
   // Terminal content font family (xterm)
   terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
-  // Activity Bar state: collapsed (default), expanded, or hidden
-  activityBarState: ActivityBarState
+  // Legacy fields - kept optional for backward compat with saved settings + hook
+  themeMode?: ThemeMode
+  // Modern style font family
+  modernFontFamily?: TerminalFontId
+  // Legacy: UI style (terminal/modern toggle - removed in VibeTerminal reskin)
+  uiStyle?: UiStyle
+  terminalStyleOptions?: TerminalStyleOptions
+  // Legacy: Activity Bar state (removed in VibeTerminal reskin)
+  activityBarState?: ActivityBarState
 }
 
 // GitHub Issues/PRs types

@@ -1,37 +1,142 @@
 @import '@xterm/xterm/css/xterm.css';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ============================================
+   CSS Reset
+   ============================================ */
 
-body {
+*, *::before, *::after {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  overflow: hidden;
-  -webkit-app-region: no-drag;
+  box-sizing: border-box;
 }
 
-/* Custom scrollbar */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--modern-font);
+  -webkit-app-region: no-drag;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* ============================================
+   CSS Variables - VibeTerminal Theme System
+   Set via JS in App.tsx on theme change
+   ============================================ */
+
+:root {
+  /* Layout dimensions */
+  --toolbar-height: 32px;
+  --tab-height: 32px;
+  --panel-width: 340px;
+  --transition-fast: 0.15s ease;
+
+  /* Fonts */
+  --terminal-font: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  --modern-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+
+  /* Default colors (Tokyo Night) - overridden by JS theme system */
+  --bg-primary: #1a1b26;
+  --bg-secondary: #16161e;
+  --bg-tertiary: #292e42;
+  --text-primary: #c0caf5;
+  --text-secondary: rgba(192, 202, 245, 0.6);
+  --text-muted: rgba(192, 202, 245, 0.4);
+  --accent: #7aa2f7;
+  --border: #292e42;
+  --hover: #292e42;
+  --tab-bg: #16161e;
+  --tab-active-bg: #1a1b26;
+  --cursor: #c0caf5;
+  --selection-bg: #283457;
+}
+
+/* ============================================
+   Backward-Compat CSS Variable Aliases
+   --mc-* → new short var names
+   Remove after all components migrated in phases 2-5
+   ============================================ */
+
+:root {
+  --mc-bg-primary: var(--bg-primary);
+  --mc-bg-secondary: var(--bg-secondary);
+  --mc-bg-tertiary: var(--bg-tertiary);
+  --mc-bg-hover: var(--hover);
+  --mc-bg-active: var(--hover);
+  --mc-text-primary: var(--text-primary);
+  --mc-text-secondary: var(--text-secondary);
+  --mc-text-muted: var(--text-muted);
+  --mc-border: var(--border);
+  --mc-accent: var(--accent);
+  --mc-accent-hover: var(--accent);
+  --mc-terminal-font: var(--terminal-font);
+  --mc-modern-font: var(--modern-font);
+  /* Legacy layout vars (no longer used in new layout) */
+  --mc-activity-bar-width-expanded: 200px;
+  --mc-activity-bar-width-collapsed: 48px;
+  --mc-sidebar-width-expanded: 240px;
+  --mc-sidebar-width-collapsed: 60px;
+  --mc-activity-bar-transition: 200ms ease-in-out;
+  --mc-sidebar-transition: 200ms ease-in-out;
+}
+
+/* ============================================
+   Custom Scrollbar
+   ============================================ */
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #2d2d2d;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4d4d4d;
-  border-radius: 4px;
+  background: var(--border);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5d5d5d;
+  background: var(--text-muted);
 }
 
-/* Title bar drag region */
+/* ============================================
+   App Layout Classes
+   ============================================ */
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  font-family: var(--modern-font);
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.terminal-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Drag region for window movement */
 .titlebar-drag {
   -webkit-app-region: drag;
 }
@@ -40,23 +145,168 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Terminal container */
+/* ============================================
+   Critical Layout Utilities
+   (Replaces most-used Tailwind classes in untouched components)
+   ============================================ */
+
+.flex { display: flex; }
+.inline-flex { display: inline-flex; }
+.flex-col { flex-direction: column; }
+.flex-1 { flex: 1; min-width: 0; min-height: 0; }
+.flex-shrink-0 { flex-shrink: 0; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+.overflow-hidden { overflow: hidden; }
+.overflow-y-auto { overflow-y: auto; }
+.min-w-0 { min-width: 0; }
+.min-h-0 { min-height: 0; }
+.relative { position: relative; }
+.absolute { position: absolute; }
+.fixed { position: fixed; }
+.inset-0 { inset: 0; }
+.h-full { height: 100%; }
+.w-full { width: 100%; }
+.h-screen { height: 100vh; }
+.hidden { display: none; }
+.block { display: block; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whitespace-nowrap { white-space: nowrap; }
+.select-none { user-select: none; }
+.pointer-events-none { pointer-events: none; }
+.cursor-pointer { cursor: pointer; }
+.cursor-default { cursor: default; }
+.z-10 { z-index: 10; }
+.z-50 { z-index: 50; }
+.text-center { text-align: center; }
+.font-mono { font-family: var(--terminal-font); }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+.text-xs { font-size: 12px; line-height: 1.4; }
+.text-sm { font-size: 13px; line-height: 1.5; }
+.text-base { font-size: 14px; line-height: 1.5; }
+.text-lg { font-size: 16px; line-height: 1.5; }
+.text-xl { font-size: 18px; line-height: 1.4; }
+.text-3xl { font-size: 28px; line-height: 1.2; }
+.border-t { border-top: 1px solid var(--border); }
+.border-b { border-bottom: 1px solid var(--border); }
+.border-l { border-left: 1px solid var(--border); }
+.border-r { border-right: 1px solid var(--border); }
+.rounded { border-radius: 4px; }
+.rounded-md { border-radius: 6px; }
+.rounded-lg { border-radius: 8px; }
+.rounded-xl { border-radius: 12px; }
+.rounded-2xl { border-radius: 16px; }
+.rounded-full { border-radius: 9999px; }
+.rounded-l-md { border-radius: 6px 0 0 6px; }
+.rounded-r-md { border-radius: 0 6px 6px 0; }
+.shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.shadow-lg { box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.transition-all { transition: all var(--transition-fast); }
+.transition-colors { transition: background var(--transition-fast), color var(--transition-fast); }
+.transition-opacity { transition: opacity var(--transition-fast); }
+.transition-transform { transition: transform var(--transition-fast); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+.rotate-90 { transform: rotate(90deg); }
+.rotate-180 { transform: rotate(180deg); }
+.opacity-25 { opacity: 0.25; }
+.opacity-75 { opacity: 0.75; }
+.space-y-1 > * + * { margin-top: 4px; }
+.space-y-3 > * + * { margin-top: 12px; }
+.ml-4 { margin-left: 16px; }
+.ml-auto { margin-left: auto; }
+.leading-relaxed { line-height: 1.625; }
+.grid { display: grid; }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Spacing utilities - most frequent patterns */
+.p-0\.5 { padding: 2px; }
+.p-1 { padding: 4px; }
+.p-2 { padding: 8px; }
+.p-3 { padding: 12px; }
+.p-4 { padding: 16px; }
+.p-8 { padding: 32px; }
+.px-1 { padding-left: 4px; padding-right: 4px; }
+.px-1\.5 { padding-left: 6px; padding-right: 6px; }
+.px-2 { padding-left: 8px; padding-right: 8px; }
+.px-3 { padding-left: 12px; padding-right: 12px; }
+.px-4 { padding-left: 16px; padding-right: 16px; }
+.px-6 { padding-left: 24px; padding-right: 24px; }
+.py-0\.5 { padding-top: 2px; padding-bottom: 2px; }
+.py-1 { padding-top: 4px; padding-bottom: 4px; }
+.py-1\.5 { padding-top: 6px; padding-bottom: 6px; }
+.py-2 { padding-top: 8px; padding-bottom: 8px; }
+.py-3 { padding-top: 12px; padding-bottom: 12px; }
+.py-4 { padding-top: 16px; padding-bottom: 16px; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.mx-1 { margin-left: 4px; margin-right: 4px; }
+.mx-3 { margin-left: 12px; margin-right: 12px; }
+.my-1 { margin-top: 4px; margin-bottom: 4px; }
+.mb-1 { margin-bottom: 4px; }
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+.mb-8 { margin-bottom: 32px; }
+.mr-1 { margin-right: 4px; }
+.mr-2 { margin-right: 8px; }
+.ml-1 { margin-left: 4px; }
+.ml-2 { margin-left: 8px; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+.gap-8 { gap: 32px; }
+
+/* Size utilities */
+.w-1\.5 { width: 6px; }
+.h-1\.5 { height: 6px; }
+.w-3\.5 { width: 14px; }
+.h-3\.5 { height: 14px; }
+.w-4 { width: 16px; }
+.h-4 { height: 16px; }
+.h-5 { height: 20px; }
+.w-5 { width: 20px; }
+.h-6 { height: 24px; }
+.w-6 { width: 24px; }
+.h-8 { height: 32px; }
+.w-8 { width: 32px; }
+.h-10 { height: 40px; }
+.w-10 { width: 40px; }
+.w-20 { width: 80px; }
+.h-20 { height: 80px; }
+.w-px { width: 1px; }
+.h-px { height: 1px; }
+.min-w-\[200px\] { min-width: 200px; }
+.max-w-md { max-width: 448px; }
+.max-w-\[90vw\] { max-width: 90vw; }
+.max-h-\[80vh\] { max-height: 80vh; }
+
+/* ============================================
+   Terminal Container
+   ============================================ */
+
 .terminal-container {
   width: 100%;
   height: 100%;
+  font-family: var(--terminal-font);
 }
 
-/* Terminal drop zone highlight */
 .terminal-container.terminal-drop-active {
-  outline: 2px solid var(--mc-accent);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
-  background: color-mix(in srgb, var(--mc-accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-/* Drop overlay - appears during drag, captures drop above xterm canvas */
 .terminal-drop-overlay {
-  background: color-mix(in srgb, var(--mc-accent) 12%, transparent);
-  border: 2px dashed var(--mc-accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 2px dashed var(--accent);
   border-radius: 4px;
 }
 
@@ -70,190 +320,702 @@ body {
   overflow-y: auto !important;
 }
 
-/* Clickable image path cursor */
 .terminal-container.image-hover .xterm-screen {
   cursor: pointer !important;
 }
 
-/* Style IME composition view for Vietnamese/CJK input - follows theme */
+/* IME composition view - follows theme accent */
 .terminal-container .composition-view {
-  background: var(--mc-accent) !important;
-  color: var(--mc-bg-primary) !important;
+  background: var(--accent) !important;
+  color: var(--bg-primary) !important;
   padding: 0 2px !important;
 }
 
-/* Terminal UI style - use terminal color preset */
-.ui-terminal .terminal-container .composition-view {
-  background: var(--mc-terminal-accent, var(--mc-accent)) !important;
-  color: var(--mc-terminal-bg, var(--mc-bg-primary)) !important;
-}
-
-/* Terminal UI style - checkmarks in settings use terminal accent */
-.ui-terminal .text-\[var\(--mc-accent\)\] {
-  color: var(--mc-terminal-accent) !important;
-}
-
 /* ============================================
-   Theme System - CSS Variables
+   Toolbar
    ============================================ */
 
-:root {
-  /* Activity Bar dimensions (VS Code-style) */
-  --mc-activity-bar-width-expanded: 200px;
-  --mc-activity-bar-width-collapsed: 48px;
-  --mc-activity-bar-transition: 200ms ease-in-out;
-
-  /* Legacy sidebar dimensions (deprecated - use activity-bar) */
-  --mc-sidebar-width-expanded: 240px;
-  --mc-sidebar-width-collapsed: 60px;
-  --mc-sidebar-transition: 200ms ease-in-out;
-
-  /* Base colors - will be overridden by theme classes */
-  --mc-bg-primary: #1e1e1e;
-  --mc-bg-secondary: #252526;
-  --mc-bg-tertiary: #2d2d2d;
-  --mc-bg-hover: #3c3c3c;
-  --mc-bg-active: #37373d;
-  --mc-text-primary: #d4d4d4;
-  --mc-text-secondary: #9d9d9d;
-  --mc-text-muted: #6b6b6b;
-  --mc-border: #3c3c3c;
-  --mc-accent: #E6E7A3;
-  --mc-accent-hover: #f0f1b8;
-}
-
-/* Light Mode Base */
-.light {
-  --mc-bg-primary: #ffffff;
-  --mc-bg-secondary: #f5f5f5;
-  --mc-bg-tertiary: #ebebeb;
-  --mc-bg-hover: #e0e0e0;
-  --mc-bg-active: #d5d5d5;
-  --mc-text-primary: #1e1e1e;
-  --mc-text-secondary: #555555;
-  --mc-text-muted: #888888;
-  --mc-border: #e0e0e0;
-  --mc-backdrop: rgba(255, 255, 255, 0.8);
-}
-
-/* Dark Mode Base (default) */
-.dark {
-  --mc-bg-primary: #1e1e1e;
-  --mc-bg-secondary: #252526;
-  --mc-bg-tertiary: #2d2d2d;
-  --mc-bg-hover: #3c3c3c;
-  --mc-bg-active: #37373d;
-  --mc-text-primary: #d4d4d4;
-  --mc-text-secondary: #9d9d9d;
-  --mc-text-muted: #6b6b6b;
-  --mc-border: #3c3c3c;
-  --mc-backdrop: rgba(0, 0, 0, 0.8);
-}
-
-/* Theme: Default */
-.theme-default.light { --mc-accent: #b8a900; --mc-bg-primary: #F2F2ED; }
-.theme-default.dark { --mc-accent: #E6E7A3; --mc-bg-primary: #0B0B0F; }
-
-/* Theme: Dusk */
-.theme-dusk.light { --mc-accent: #b8a900; --mc-bg-primary: #F5F5F0; }
-.theme-dusk.dark { --mc-accent: #E6E7A3; --mc-bg-primary: #131419; }
-
-/* Theme: Lime */
-.theme-lime.light { --mc-accent: #7C3AED; --mc-bg-primary: #E8F5A3; }
-.theme-lime.dark { --mc-accent: #A855F7; --mc-bg-primary: #0F0F1A; }
-
-/* Theme: Ocean */
-.theme-ocean.light { --mc-accent: #0284C7; --mc-bg-primary: #E0F2FE; }
-.theme-ocean.dark { --mc-accent: #38BDF8; --mc-bg-primary: #082F49; }
-
-/* Theme: Retro */
-.theme-retro.light { --mc-accent: #D97706; --mc-bg-primary: #FEF3C7; }
-.theme-retro.dark { --mc-accent: #FBBF24; --mc-bg-primary: #1C1917; }
-
-/* Theme: Neo */
-.theme-neo.light { --mc-accent: #D946EF; --mc-bg-primary: #FDF4FF; }
-.theme-neo.dark { --mc-accent: #E879F9; --mc-bg-primary: #0F0720; }
-
-/* Theme: Forest */
-.theme-forest.light { --mc-accent: #16A34A; --mc-bg-primary: #DCFCE7; }
-.theme-forest.dark { --mc-accent: #4ADE80; --mc-bg-primary: #052E16; }
-
-/* Theme: Neon Cyber - DeFi/crypto cyberpunk with neon cyan */
-.theme-neon-cyber.light { --mc-accent: #0095A3; --mc-bg-primary: #EDF8FF; }
-.theme-neon-cyber.dark { --mc-accent: #00E5FF; --mc-bg-primary: #0A0E17; }
-
-/* Theme: Pro Dark - Professional trading platform aesthetic */
-.theme-pro-dark.light { --mc-accent: #2563EB; --mc-bg-primary: #F6F8FA; }
-.theme-pro-dark.dark { --mc-accent: #3B82F6; --mc-bg-primary: #0D1117; }
-
-/* Theme: Vibrant - Music streaming inspired with warm gradients */
-.theme-vibrant.light { --mc-accent: #E11D48; --mc-bg-primary: #FFFBFB; }
-.theme-vibrant.dark { --mc-accent: #FF5E62; --mc-bg-primary: #121212; }
-
-/* ============================================
-   Terminal Grid - Resize Handles & Pane Styles
-   ============================================ */
-
-/* Resize handle base */
-.terminal-resize-handle {
-  background: var(--mc-border);
-  transition: background 0.15s ease;
-}
-
-.terminal-resize-handle:hover,
-.terminal-resize-handle:active {
-  background: var(--mc-accent);
-}
-
-/* Horizontal resize handle (between columns) */
-.terminal-resize-handle-horizontal {
-  width: 4px;
-  cursor: col-resize;
-}
-
-/* Vertical resize handle (between rows) */
-.terminal-resize-handle-vertical {
-  height: 4px;
-  cursor: row-resize;
-}
-
-/* Terminal pane wrapper */
-.terminal-pane {
-  --terminal-active-glow:
-    inset 0 0 0 2px var(--mc-accent),
-    0 0 20px 2px color-mix(in srgb, var(--mc-accent) 30%, transparent);
-  --terminal-transition: 0.25s ease;
+.toolbar {
+  height: var(--toolbar-height);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
   position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+/* Full-size drag region behind interactive elements */
+.toolbar-drag {
+  position: absolute;
+  inset: 0;
+  -webkit-app-region: drag;
+}
+
+/* Interactive groups sit above drag region */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 1;
+}
+
+.toolbar-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  opacity: 0.5;
+  cursor: pointer;
+  position: relative;
+  border-radius: 4px;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toolbar-btn:hover { opacity: 0.8; background: var(--hover); }
+.toolbar-btn.active { opacity: 1; }
+
+/* Active indicator underline */
+.toolbar-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* Highlight for update indicator */
+.toolbar-btn.highlight { opacity: 1; color: var(--accent); }
+
+/* Badge (terminal count, notifications) */
+.toolbar-btn-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-radius: 9999px;
+  padding: 1px 3px;
+  min-width: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Project Bar (bottom tab list)
+   ============================================ */
+
+.project-bar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
   overflow: hidden;
-  will-change: opacity, box-shadow;
+  -webkit-app-region: no-drag;
 }
 
-/* Active pane focus indicator with glow */
-.terminal-pane-active {
-  box-shadow: var(--terminal-active-glow);
+.project-bar-tabs {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.project-bar-tabs::-webkit-scrollbar { display: none; }
+
+.project-bar-empty {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.project-bar-tab {
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.project-bar-tab.active {
+  background: var(--tab-active-bg);
+}
+
+.project-bar-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  height: 100%;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--transition-fast);
+}
+
+.project-bar-tab.active .project-bar-tab-btn { color: var(--text-primary); }
+.project-bar-tab-btn:hover { color: var(--text-primary); }
+
+.project-bar-badge {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border-radius: 3px;
+}
+
+.project-bar-delete {
+  flex-shrink: 0;
+  padding: 0 5px;
+  height: 100%;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  font-size: 10px;
+  transition: opacity var(--transition-fast);
+}
+
+.project-bar-tab:hover .project-bar-delete { opacity: 0.6; }
+.project-bar-delete:hover { opacity: 1 !important; color: var(--text-primary); }
+
+/* Inline "+" button adjacent to last tab (Chrome-style) */
+.project-bar-add-inline {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: 0 3px;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.project-bar-add-inline:hover { color: var(--text-primary); background: var(--hover); }
+
+/* Settings gear icon button at bottom-right of project bar */
+.project-bar-settings {
+  flex-shrink: 0;
+  width: 28px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: color var(--transition-fast), opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.project-bar-settings:hover { opacity: 1; color: var(--text-primary); background: var(--hover); }
+.project-bar-settings.active { opacity: 1; color: var(--accent); }
+
+/* ============================================
+   Terminal Grid - Flex Pane Layout (Phase 3)
+   ============================================ */
+
+.terminal-grid {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.terminal-row + .terminal-row {
+  border-top: 1px solid var(--border);
+}
+
+.terminal-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.terminal-cell + .terminal-cell {
+  border-left: 1px solid var(--border);
+}
+
+.terminal-cell.active {
+  z-index: 1;
+}
+
+.terminal-cell.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--accent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ============================================
+   Pane Tab Bar (bottom of each terminal cell)
+   ============================================ */
+
+.pane-tab-bar {
+  height: var(--tab-height);
+  display: flex;
+  align-items: center;
+  background: var(--tab-bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 6px;
+}
+
+.pane-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  height: 100%;
+  font-size: 12px;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.pane-tab.active { opacity: 1; }
+.pane-tab:hover { opacity: 1; }
+
+.pane-tab-claude {
+  font-size: 9px;
+  padding: 1px 4px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.pane-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+  cursor: inherit;
+  text-align: left;
+}
+
+.pane-tab-name:focus {
+  outline: 1px solid var(--accent);
+  background: var(--bg-tertiary);
+  padding: 0 2px;
+}
+
+/* Action buttons in tab bar - always visible, larger */
+.pane-tab-action {
+  flex-shrink: 0;
+  padding: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+  line-height: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pane-tab-action:hover {
   opacity: 1;
-  transition: opacity var(--terminal-transition);
-  animation: terminal-activate var(--terminal-transition) ease-out forwards;
+  color: var(--text-primary);
+  background: var(--hover);
+  border-color: var(--border);
 }
 
-/* Dim inactive terminals for contrast */
-.terminal-pane:not(.terminal-pane-active) {
-  opacity: 0.85;
-  transition: opacity var(--terminal-transition);
+.pane-tab-close {
+  flex-shrink: 0;
+  padding: 3px 5px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+  font-size: 15px;
+  line-height: 1;
 }
 
-@keyframes terminal-activate {
-  0% {
-    box-shadow:
-      inset 0 0 0 3px var(--mc-accent),
-      0 0 40px 8px color-mix(in srgb, var(--mc-accent) 50%, transparent);
-  }
-  100% {
-    box-shadow: var(--terminal-active-glow);
-  }
+.pane-tab-close:hover {
+  opacity: 1;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
-/* Toast slide-in animation */
+/* ============================================
+   Terminal Status Bar (slim action bar, Phase 3)
+   ============================================ */
+
+.terminal-status-bar {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
+}
+
+.terminal-count-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.yolo-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.status-btn {
+  padding: 1px 8px;
+  font-size: 11px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.status-btn:hover { background: var(--hover); color: var(--text-primary); }
+.status-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.status-btn.danger:hover { background: rgba(247, 118, 142, 0.12); color: #f7768e; border-color: rgba(247, 118, 142, 0.4); }
+
+/* ============================================
+   Slide Panels (Phase 4)
+   ============================================ */
+
+.slide-panel {
+  position: absolute;
+  z-index: 20;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.slide-panel-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Landscape: slides from right */
+.slide-panel-right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--panel-width);
+  border-left: 1px solid var(--border);
+  transform: translateX(100%);
+}
+
+.slide-panel-right.slide-panel-open {
+  transform: translateX(0);
+}
+
+/* Portrait: slides from bottom */
+.slide-panel-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40%;
+  border-top: 1px solid var(--border);
+  transform: translateY(100%);
+}
+
+.slide-panel-bottom.slide-panel-open {
+  transform: translateY(0);
+}
+
+/* Panel header */
+.slide-panel-header {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.slide-panel-title {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.slide-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  opacity: 0.4;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  line-height: 1;
+  transition: opacity var(--transition-fast);
+  font-family: inherit;
+}
+
+.slide-panel-close:hover { opacity: 1; }
+
+/* Panel body */
+.slide-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   Dialogs (Git Init, GitHub Connect)
+   ============================================ */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dialog-body {
+  padding: 16px;
+  font-size: 13px;
+}
+
+.dialog-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.dialog-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  font-family: inherit;
+}
+
+.dialog-btn:hover { background: var(--hover); }
+.dialog-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dialog-btn-primary { background: var(--accent); color: var(--bg-primary); border: none; }
+.dialog-btn-primary:hover { opacity: 0.85; background: var(--accent); }
+
+.dialog-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(224, 175, 104, 0.1);
+  border: 1px solid rgba(224, 175, 104, 0.3);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.dialog-code {
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-family: var(--terminal-font);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Kill confirm popup */
+.kill-confirm-popup {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 12px;
+  z-index: 50;
+  min-width: 180px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.kill-confirm-popup p {
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.kill-confirm-btns {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* ============================================
+   Welcome / Empty State Screen
+   ============================================ */
+
+.welcome-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+}
+
+.welcome-icon {
+  font-size: 36px;
+  opacity: 0.25;
+  font-family: var(--terminal-font);
+  letter-spacing: -2px;
+}
+
+.welcome-title {
+  font-size: 22px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.welcome-hint {
+  font-size: 13px;
+  opacity: 0.45;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.welcome-hint kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-family: var(--terminal-font);
+}
+
+.welcome-btn {
+  margin-top: 8px;
+  padding: 7px 20px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+  font-family: inherit;
+}
+
+.welcome-btn:hover { opacity: 0.85; }
+
+/* ============================================
+   Toast Notifications
+   ============================================ */
+
 @keyframes slideIn {
   from {
     transform: translateX(100%);
@@ -262,358 +1024,5 @@ body {
   to {
     transform: translateX(0);
     opacity: 1;
-  }
-}
-
-/* ============================================
-   Sidebar Polish - Smooth Transitions
-   ============================================ */
-
-/* Prevent text wrapping during sidebar transition */
-.sidebar-content {
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-/* Ensure smooth icon centering when collapsed */
-.sidebar-collapsed .sidebar-icon {
-  margin: 0 auto;
-}
-
-/* Navigation item text fade during transition */
-.nav-item-text {
-  transition: opacity 150ms ease-in-out;
-}
-
-/* ============================================
-   Terminal UI Style System
-   ============================================ */
-
-/* Terminal font custom property */
-:root {
-  --mc-terminal-font: 'JetBrains Mono', monospace;
-  --mc-modern-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-}
-
-/* Modern UI Style - Apply custom font when not in terminal mode */
-/* Exclude terminal-container to preserve xterm font */
-html:not(.ui-terminal) body {
-  font-family: var(--mc-modern-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif);
-}
-
-/* Terminal container always uses monospace font for xterm compatibility */
-.terminal-container {
-  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
-}
-
-/* Terminal Color Presets */
-.terminal-preset-green {
-  --mc-terminal-bg: #001C00;
-  --mc-terminal-bg-secondary: #002200;
-  --mc-terminal-text: #00FF00;
-  --mc-terminal-text-secondary: #00A300;
-  --mc-terminal-text-muted: #006600;
-  --mc-terminal-accent: #00FF00;
-  --mc-terminal-border: #00FF00;
-}
-
-.terminal-preset-blue {
-  --mc-terminal-bg: #001020;
-  --mc-terminal-bg-secondary: #001830;
-  --mc-terminal-text: #00BFFF;
-  --mc-terminal-text-secondary: #0088AA;
-  --mc-terminal-text-muted: #005577;
-  --mc-terminal-accent: #00FFFF;
-  --mc-terminal-border: #00BFFF;
-}
-
-.terminal-preset-white {
-  --mc-terminal-bg: #000000;
-  --mc-terminal-bg-secondary: #111111;
-  --mc-terminal-text: #FFFFFF;
-  --mc-terminal-text-secondary: #AAAAAA;
-  --mc-terminal-text-muted: #666666;
-  --mc-terminal-accent: #FFFFFF;
-  --mc-terminal-border: #FFFFFF;
-}
-
-/* Terminal UI Style - Override CSS Variables */
-.ui-terminal {
-  /* Override core variables with terminal values */
-  --mc-bg-primary: var(--mc-terminal-bg);
-  --mc-bg-secondary: var(--mc-terminal-bg-secondary);
-  --mc-bg-tertiary: var(--mc-terminal-bg-secondary);
-  --mc-bg-hover: color-mix(in srgb, var(--mc-terminal-text) 10%, var(--mc-terminal-bg));
-  --mc-bg-active: color-mix(in srgb, var(--mc-terminal-text) 15%, var(--mc-terminal-bg));
-  --mc-text-primary: var(--mc-terminal-text);
-  --mc-text-secondary: var(--mc-terminal-text-secondary);
-  --mc-text-muted: var(--mc-terminal-text-muted);
-  --mc-border: var(--mc-terminal-border);
-  --mc-accent: var(--mc-terminal-accent);
-  --mc-accent-hover: var(--mc-terminal-accent);
-  --mc-backdrop: rgba(0, 0, 0, 0.95);
-
-  /* Font - apply to all elements */
-  font-family: var(--mc-terminal-font);
-}
-
-/* Ensure all text elements in terminal mode use terminal font */
-.ui-terminal,
-.ui-terminal *:not(.terminal-container *) {
-  font-family: var(--mc-terminal-font);
-}
-
-/* Remove border-radius from common elements in terminal mode */
-.ui-terminal button,
-.ui-terminal input,
-.ui-terminal select,
-.ui-terminal textarea,
-.ui-terminal [class*="rounded"]:not(.rounded-full),
-.ui-terminal [class*="modal"],
-.ui-terminal [class*="dialog"],
-.ui-terminal [class*="panel"],
-.ui-terminal [class*="card"] {
-  border-radius: 0 !important;
-}
-
-/* Preserve rounded-full in terminal mode */
-.ui-terminal .rounded-full {
-  border-radius: 9999px !important;
-}
-
-/* Terminal scrollbar */
-.ui-terminal ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.ui-terminal ::-webkit-scrollbar-track {
-  background: var(--mc-terminal-bg);
-}
-
-.ui-terminal ::-webkit-scrollbar-thumb {
-  background: var(--mc-terminal-border);
-  border: 1px solid var(--mc-terminal-bg);
-}
-
-.ui-terminal ::-webkit-scrollbar-thumb:hover {
-  background: var(--mc-terminal-accent);
-}
-
-/* Button styles in terminal mode */
-.ui-terminal button {
-  border: 1px solid var(--mc-terminal-border);
-  background: transparent;
-  color: var(--mc-terminal-text);
-  font-family: var(--mc-terminal-font);
-}
-
-.ui-terminal button:hover {
-  background: var(--mc-bg-hover);
-}
-
-.ui-terminal button:focus {
-  outline: 1px solid var(--mc-terminal-accent);
-  outline-offset: -1px;
-}
-
-/* Input styles in terminal mode */
-.ui-terminal input,
-.ui-terminal select,
-.ui-terminal textarea {
-  border: 1px solid var(--mc-terminal-border);
-  background: var(--mc-terminal-bg);
-  color: var(--mc-terminal-text);
-  font-family: var(--mc-terminal-font);
-}
-
-.ui-terminal input:focus,
-.ui-terminal select:focus,
-.ui-terminal textarea:focus {
-  outline: 1px solid var(--mc-terminal-accent);
-  outline-offset: -1px;
-}
-
-.ui-terminal input::placeholder,
-.ui-terminal textarea::placeholder {
-  color: var(--mc-terminal-text-muted);
-}
-
-/* Modal backdrop in terminal mode - uses --mc-backdrop from .ui-terminal */
-.ui-terminal .modal-backdrop {
-  background: var(--mc-backdrop);
-}
-
-/* ASCII Border Mode
- * When use-border-chars is enabled, switch from solid to dashed/double borders
- * for a classic terminal/ASCII aesthetic
- */
-
-/* ASCII Border Mode - Apply dashed borders to common elements */
-.ui-terminal.use-border-chars button {
-  border: 1px dashed var(--mc-terminal-border) !important;
-}
-
-.ui-terminal.use-border-chars input,
-.ui-terminal.use-border-chars select,
-.ui-terminal.use-border-chars textarea {
-  border: 1px dashed var(--mc-terminal-border) !important;
-}
-
-/* Panels, cards, modals - use double border for ASCII box feel */
-.ui-terminal.use-border-chars [class*="panel"],
-.ui-terminal.use-border-chars [class*="card"],
-.ui-terminal.use-border-chars [class*="modal"],
-.ui-terminal.use-border-chars [class*="dialog"],
-.ui-terminal.use-border-chars [class*="rounded-lg"],
-.ui-terminal.use-border-chars .settings-section {
-  border: 2px double var(--mc-terminal-border) !important;
-}
-
-/* Dividers and separators - dashed style */
-.ui-terminal.use-border-chars hr,
-.ui-terminal.use-border-chars [class*="divider"],
-.ui-terminal.use-border-chars [class*="separator"] {
-  border-style: dashed !important;
-}
-
-/* Activity bar and sidebar borders */
-.ui-terminal.use-border-chars .activity-bar,
-.ui-terminal.use-border-chars [class*="sidebar"] {
-  border-style: dashed !important;
-}
-
-/* Custom .ascii-border class for explicit ASCII box styling
- * Usage: Add .ascii-border class to element
- * Attributes:
- *   - data-ascii-title: optional title text displayed in top border
- *   - data-ascii-width: optional filler for bottom border
- */
-.ui-terminal.use-border-chars .ascii-border {
-  position: relative;
-  border: none !important;
-}
-
-/* ASCII border corners using box-drawing characters */
-.ui-terminal.use-border-chars .ascii-border::before,
-.ui-terminal.use-border-chars .ascii-border::after {
-  font-family: var(--mc-terminal-font);
-  color: var(--mc-terminal-border);
-  line-height: 1;
-  pointer-events: none;
-}
-
-/* Top border with corners - displays: ┌{data-ascii-title}┐ */
-.ui-terminal.use-border-chars .ascii-border::before {
-  content: '┌' attr(data-ascii-title) '┐';
-  position: absolute;
-  top: -1em;
-  left: 0;
-  right: 0;
-}
-
-/* Bottom border with corners - displays: └{data-ascii-width}┘ */
-.ui-terminal.use-border-chars .ascii-border::after {
-  content: '└' attr(data-ascii-width) '┘';
-  position: absolute;
-  bottom: -1em;
-  left: 0;
-  right: 0;
-}
-
-/* Utility class for horizontal ASCII line */
-.ui-terminal .ascii-line-h {
-  border-top: none;
-  background: linear-gradient(to right,
-    var(--mc-terminal-border) 2px,
-    transparent 2px
-  );
-  background-size: 4px 1px;
-  height: 1px;
-}
-
-/* Utility class for vertical ASCII line */
-.ui-terminal .ascii-line-v {
-  border-left: none;
-  background: linear-gradient(to bottom,
-    var(--mc-terminal-border) 2px,
-    transparent 2px
-  );
-  background-size: 1px 4px;
-  width: 1px;
-}
-
-/* Terminal cursor blink animation */
-.ui-terminal .terminal-cursor {
-  animation: terminal-blink 1s step-end infinite;
-}
-
-@keyframes terminal-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-/* ============================================
-   Activity Bar - VS Code-style sidebar
-   ============================================ */
-
-/* Activity Bar base transition */
-.activity-bar {
-  transition: width var(--mc-activity-bar-transition);
-  will-change: width;
-}
-
-/* Hover zone for hidden state */
-.activity-bar-hover-zone {
-  position: fixed;
-  left: 0;
-  top: 40px; /* Below titlebar */
-  bottom: 0;
-  width: 8px;
-  z-index: 50;
-  cursor: pointer;
-}
-
-/* Slide-in animation for hover reveal */
-.activity-bar-reveal {
-  animation: activity-bar-slide-in 200ms ease-out forwards;
-  background: var(--mc-bg-secondary);
-  border-right: 1px solid var(--mc-border);
-}
-
-@keyframes activity-bar-slide-in {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
-}
-
-/* Active indicator animation */
-.activity-bar-indicator-animate {
-  animation: activity-bar-indicator-activate 200ms ease-out;
-}
-
-@keyframes activity-bar-indicator-activate {
-  from { transform: scaleY(0); }
-  to { transform: scaleY(1); }
-}
-
-/* Badge pulse animation */
-.activity-bar-badge-pulse {
-  animation: activity-bar-badge-pulse 150ms ease-out;
-}
-
-@keyframes activity-bar-badge-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); }
-}
-
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-  .activity-bar,
-  .activity-bar-reveal,
-  .activity-bar-indicator-animate,
-  .activity-bar-badge-pulse {
-    animation: none;
-    transition: none;
   }
 }

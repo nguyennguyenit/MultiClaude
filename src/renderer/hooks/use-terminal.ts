@@ -93,6 +93,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
+  const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
   const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
@@ -181,6 +182,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       const atBottom = linesFromBottom <= SCROLL_THRESHOLD
       isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
       setIsAtBottom(atBottom)  // With threshold for UI button visibility
+      setHasScrollback(buffer.baseY > 0)  // Track if any scrollback content exists
       // Note: Scroll position is saved in visibility effect when terminal becomes hidden
     }
 
@@ -778,6 +780,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     clear,
     scrollToBottom,
     isAtBottom,
+    hasScrollback,
     refresh,
     terminalRef  // Return ref instead of snapshot for live access
   }

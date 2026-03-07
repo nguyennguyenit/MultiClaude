@@ -86,7 +86,6 @@
     "electron-updater": "^6.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-resizable-panels": "^4.1.1",
     "simple-git": "^3.27.0",
     "zustand": "^5.0.2"
   },

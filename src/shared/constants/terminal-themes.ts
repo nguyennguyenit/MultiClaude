@@ -253,6 +253,76 @@ export const TERMINAL_THEMES: Record<`${ColorTheme}-${'dark' | 'light'}`, ITheme
     ...ANSI_COLORS.light
   },
 
+  // ---- New VibeTerminal themes (dark-only) ----
+
+  'tokyo-night-dark': {
+    background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5',
+    cursorAccent: '#1a1b26', selectionBackground: '#283457',
+    black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68',
+    blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6',
+    brightBlack: '#414868', brightRed: '#f7768e', brightGreen: '#9ece6a', brightYellow: '#e0af68',
+    brightBlue: '#7aa2f7', brightMagenta: '#bb9af7', brightCyan: '#7dcfff', brightWhite: '#c0caf5'
+  },
+  'tokyo-night-light': {
+    background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5',
+    cursorAccent: '#1a1b26', selectionBackground: '#283457',
+    black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68',
+    blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6',
+    brightBlack: '#414868', brightRed: '#f7768e', brightGreen: '#9ece6a', brightYellow: '#e0af68',
+    brightBlue: '#7aa2f7', brightMagenta: '#bb9af7', brightCyan: '#7dcfff', brightWhite: '#c0caf5'
+  },
+
+  'catppuccin-dark': {
+    background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc',
+    cursorAccent: '#1e1e2e', selectionBackground: '#45475a',
+    black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af',
+    blue: '#89b4fa', magenta: '#cba6f7', cyan: '#94e2d5', white: '#bac2de',
+    brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1', brightYellow: '#f9e2af',
+    brightBlue: '#89b4fa', brightMagenta: '#cba6f7', brightCyan: '#94e2d5', brightWhite: '#a6adc8'
+  },
+  'catppuccin-light': {
+    background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc',
+    cursorAccent: '#1e1e2e', selectionBackground: '#45475a',
+    black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af',
+    blue: '#89b4fa', magenta: '#cba6f7', cyan: '#94e2d5', white: '#bac2de',
+    brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1', brightYellow: '#f9e2af',
+    brightBlue: '#89b4fa', brightMagenta: '#cba6f7', brightCyan: '#94e2d5', brightWhite: '#a6adc8'
+  },
+
+  'dracula-dark': {
+    background: '#282a36', foreground: '#f8f8f2', cursor: '#f8f8f2',
+    cursorAccent: '#282a36', selectionBackground: '#44475a',
+    black: '#21222c', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
+    blue: '#bd93f9', magenta: '#ff79c6', cyan: '#8be9fd', white: '#f8f8f2',
+    brightBlack: '#6272a4', brightRed: '#ff6e6e', brightGreen: '#69ff94', brightYellow: '#ffffa5',
+    brightBlue: '#d6acff', brightMagenta: '#ff92df', brightCyan: '#a4ffff', brightWhite: '#ffffff'
+  },
+  'dracula-light': {
+    background: '#282a36', foreground: '#f8f8f2', cursor: '#f8f8f2',
+    cursorAccent: '#282a36', selectionBackground: '#44475a',
+    black: '#21222c', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
+    blue: '#bd93f9', magenta: '#ff79c6', cyan: '#8be9fd', white: '#f8f8f2',
+    brightBlack: '#6272a4', brightRed: '#ff6e6e', brightGreen: '#69ff94', brightYellow: '#ffffa5',
+    brightBlue: '#d6acff', brightMagenta: '#ff92df', brightCyan: '#a4ffff', brightWhite: '#ffffff'
+  },
+
+  'rose-pine-dark': {
+    background: '#191724', foreground: '#e0def4', cursor: '#e0def4',
+    cursorAccent: '#191724', selectionBackground: '#2a283e',
+    black: '#26233a', red: '#eb6f92', green: '#31748f', yellow: '#f6c177',
+    blue: '#9ccfd8', magenta: '#c4a7e7', cyan: '#ebbcba', white: '#e0def4',
+    brightBlack: '#6e6a86', brightRed: '#eb6f92', brightGreen: '#31748f', brightYellow: '#f6c177',
+    brightBlue: '#9ccfd8', brightMagenta: '#c4a7e7', brightCyan: '#ebbcba', brightWhite: '#e0def4'
+  },
+  'rose-pine-light': {
+    background: '#191724', foreground: '#e0def4', cursor: '#e0def4',
+    cursorAccent: '#191724', selectionBackground: '#2a283e',
+    black: '#26233a', red: '#eb6f92', green: '#31748f', yellow: '#f6c177',
+    blue: '#9ccfd8', magenta: '#c4a7e7', cyan: '#ebbcba', white: '#e0def4',
+    brightBlack: '#6e6a86', brightRed: '#eb6f92', brightGreen: '#31748f', brightYellow: '#f6c177',
+    brightBlue: '#9ccfd8', brightMagenta: '#c4a7e7', brightCyan: '#ebbcba', brightWhite: '#e0def4'
+  },
+
   // Vibrant theme - Music streaming inspired with warm gradients
   'vibrant-dark': {
     background: '#121212',

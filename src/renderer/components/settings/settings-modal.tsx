@@ -45,7 +45,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 top-10 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 top-10 z-50">
       {/* Backdrop - dark mode: black 80%, light mode: white 80% - starts below titlebar */}
       <div
         data-testid="settings-backdrop"
@@ -54,8 +54,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         aria-hidden="true"
       />
 
-      {/* Modal */}
-      <div data-testid="settings-modal" className="relative bg-[var(--mc-bg-primary)] rounded-lg shadow-xl w-[calc(100%-32px)] h-[calc(100%-80px)] flex flex-col border border-[var(--mc-border)] mx-4 mb-10">
+      {/* Modal - absolute inset so size is truly fixed regardless of content */}
+      <div data-testid="settings-modal" className="absolute inset-4 bottom-14 bg-[var(--mc-bg-primary)] rounded-lg shadow-xl flex flex-col border border-[var(--mc-border)]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--mc-border)]">
           <div>
@@ -105,6 +105,90 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {isSaving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+interface SettingsPanelContentProps {
+  onClose: () => void
+}
+
+/** Settings content for use inside a SlidePanel container */
+export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  const [isSaving, setIsSaving] = useState(false)
+  const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
+
+  const handleCancel = useCallback(() => {
+    cancelSettings()
+    onClose()
+  }, [cancelSettings, onClose])
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await saveSettings()
+      onClose()
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* Horizontal tab bar */}
+      <div data-testid="settings-sidebar" className="flex border-b border-[var(--mc-border)] flex-shrink-0">
+        {(['appearance', 'terminals', 'notifications', 'updates'] as SettingsTab[]).map(tab => (
+          <button
+            key={tab}
+            data-testid={`settings-tab-${tab}`}
+            onClick={() => setActiveTab(tab)}
+            className="px-3 py-2 text-xs capitalize"
+            style={{
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'color var(--transition-fast)',
+              fontFamily: 'inherit'
+            }}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 p-4 overflow-auto min-h-0">
+        {activeTab === 'appearance' && <ThemeSelector />}
+        {activeTab === 'terminals' && <TerminalSettings />}
+        {activeTab === 'notifications' && <NotificationSettings />}
+        {activeTab === 'updates' && <UpdateSettings />}
+      </div>
+
+      {/* Footer: save/cancel */}
+      <div className="flex justify-end gap-2 p-3 border-t border-[var(--mc-border)] flex-shrink-0">
+        <button
+          data-testid="settings-cancel-button"
+          onClick={handleCancel}
+          className="px-4 py-1.5 text-sm bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
+          style={{ border: '1px solid var(--border)', fontFamily: 'inherit', cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+        <button
+          data-testid="settings-save-button"
+          onClick={handleSave}
+          disabled={!hasUnsavedChanges || isSaving}
+          className="px-4 py-1.5 text-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: 'var(--accent)', color: 'var(--bg-primary)', border: 'none', fontFamily: 'inherit', cursor: 'pointer' }}
+        >
+          {isSaving ? 'Saving...' : 'Save Settings'}
+        </button>
       </div>
     </div>
   )

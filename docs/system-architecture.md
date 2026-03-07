@@ -63,38 +63,22 @@ src/main/
 
 ```
 src/renderer/
-├── App.tsx                   # Root component, layout, theme system, handlers
+├── App.tsx                   # Root component, theme system, layout, handlers
 ├── main.tsx                  # React entry point
 ├── components/
-│   ├── terminal/
-│   │   ├── terminal-grid.tsx      # Auto-split grid layout
-│   │   ├── terminal-pane.tsx      # Pane wrapper with header
+│   ├── toolbar/              # Compact 32px header (VibeTerminal)
+│   │   ├── toolbar.tsx            # Main toolbar container
+│   │   ├── toolbar-button.tsx     # Reusable icon button
+│   │   ├── project-dropdown.tsx   # Project selector/creator
+│   │   └── index.ts
+│   ├── terminal/             # Terminal workspace
+│   │   ├── terminal-grid.tsx      # Auto-flex grid layout (no resize handles)
+│   │   ├── terminal-pane.tsx      # Pane with bottom tab bar + actions
 │   │   ├── terminal-view.tsx      # xterm.js renderer
-│   │   ├── terminal-action-bar.tsx
 │   │   ├── shell-selector-dropdown.tsx  # WSL shell context menu
 │   │   └── index.ts
-│   ├── sidebar/
-│   │   ├── sidebar.tsx            # Navigation + tools
-│   │   ├── sidebar-header.tsx     # Logo + collapse toggle
-│   │   ├── navigation-item.tsx    # Menu item component
-│   │   ├── user-account-card.tsx  # GitHub account display
-│   │   └── index.ts
-│   ├── project-tabs/
-│   │   ├── project-tabs.tsx       # Tab bar with shortcuts
-│   │   └── index.ts
-│   ├── settings/
-│   │   ├── settings-modal.tsx     # Modal container
-│   │   ├── settings-panel.tsx     # Tabbed settings
-│   │   ├── settings-sidebar.tsx   # Settings navigation
-│   │   ├── theme-selector.tsx     # Theme picker
-│   │   ├── terminal-settings.tsx  # Terminal rendering modes
-│   │   ├── notification-settings.tsx
-│   │   ├── update-settings.tsx
-│   │   ├── telegram-config-modal.tsx
-│   │   ├── discord-config-modal.tsx
-│   │   └── index.ts
-│   ├── git-panel/
-│   │   ├── git-panel.tsx          # Main git UI
+│   ├── git-panel/            # Git slide panel (right/bottom)
+│   │   ├── git-panel.tsx          # GitPanelContent component
 │   │   ├── changes-list.tsx       # Staged/unstaged files
 │   │   ├── commit-form.tsx        # Commit message input
 │   │   ├── diff-viewer.tsx        # File diff display
@@ -103,12 +87,21 @@ src/renderer/
 │   │   ├── history-tab.tsx        # Commit log
 │   │   ├── stash-tab.tsx          # Stash operations
 │   │   └── index.ts
-│   ├── github-view/
+│   ├── github-view/          # GitHub slide panel (right/bottom)
 │   │   ├── github-view.tsx        # Issues/PRs container
-│   │   ├── github-action-bar.tsx  # Actions toolbar
+│   │   ├── github-action-bar.tsx  # Tab selector
 │   │   ├── repo-info-header.tsx   # Repo metadata
 │   │   ├── issues-tab.tsx         # Issue list
 │   │   ├── prs-tab.tsx            # PR list
+│   │   └── index.ts
+│   ├── settings/             # Settings slide panel (right/bottom)
+│   │   ├── settings-panel.tsx     # Tabbed settings container
+│   │   ├── theme-selector.tsx     # VibeTheme picker (5 themes)
+│   │   ├── terminal-settings.tsx  # Terminal rendering modes
+│   │   ├── notification-settings.tsx  # Telegram/Discord config
+│   │   ├── update-settings.tsx    # Update checker UI
+│   │   ├── telegram-config-modal.tsx
+│   │   ├── discord-config-modal.tsx
 │   │   └── index.ts
 │   ├── toast-container.tsx        # Toast notifications
 │   └── welcome-screen.tsx         # First-run screen
