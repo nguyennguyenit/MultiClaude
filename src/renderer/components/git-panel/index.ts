@@ -1,1 +1,1 @@
-export { GitPanelContent } from './git-panel'
+// Sub-components are imported directly by github-view

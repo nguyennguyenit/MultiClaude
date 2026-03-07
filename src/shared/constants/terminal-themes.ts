@@ -1,5 +1,5 @@
 import type { ITheme } from '@xterm/xterm'
-import type { ColorTheme, ThemeMode } from '../types'
+import type { ColorTheme } from '../types'
 
 // Base ANSI colors shared across themes
 const ANSI_COLORS = {

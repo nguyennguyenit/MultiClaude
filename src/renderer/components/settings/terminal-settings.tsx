@@ -238,7 +238,7 @@ export function TerminalSettings() {
               ))}
             </select>
             <p className="text-xs text-[var(--mc-text-muted)]">
-              Preview: <span style={{ fontFamily: getFontFamily(pendingSettings.terminalFontFamily) }}>$ echo "Hello World"</span>
+              Preview: <span style={{ fontFamily: getFontFamily(pendingSettings.terminalFontFamily) }}>$ echo &quot;Hello World&quot;</span>
             </p>
           </div>
         </div>

@@ -40,7 +40,7 @@ export function useFileDrop(options: UseFileDropOptions): UseFileDropReturn {
   } = options
 
   const [isDragOver, setIsDragOver] = useState(false)
-  const [dragCounter, setDragCounter] = useState(0)
+  const [, setDragCounter] = useState(0)
 
   const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault()

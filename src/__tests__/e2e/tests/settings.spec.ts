@@ -92,8 +92,6 @@ test.describe('Settings Modal', () => {
     await window.waitForTimeout(200)
 
     // Get current theme class on html
-    const htmlClassBefore = await window.evaluate(() => document.documentElement.className)
-
     // Find and click dark mode button
     const darkModeButton = window.locator('button:has-text("dark")').first()
     if (await darkModeButton.isVisible()) {

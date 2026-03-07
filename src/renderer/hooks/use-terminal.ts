@@ -10,7 +10,6 @@ import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINA
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
-const WEBGL_FOCUS_BUFFER = 10  // Extra buffer after WebGL toggle to ensure focus works
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
@@ -108,6 +107,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   // If xterm updates break this, fallback is safe - manual refresh button still works.
   const attachContextLostListener = useCallback((addon: WebglAddon) => {
     // Access WebGL canvas via internal renderer API
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing xterm internal API
     const canvas = (addon as any)._renderer?._renderLayers?.[0]?._canvas as HTMLCanvasElement | undefined
     if (!canvas) return
 
@@ -413,7 +413,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     if (!terminalRef.current || !fitAddonRef.current) return
     try {
       fitAddonRef.current.fit()
-    } catch (e) {
+    } catch {
       // Terminal not ready yet - dimensions not available
       // This can happen during initialization race conditions
     }

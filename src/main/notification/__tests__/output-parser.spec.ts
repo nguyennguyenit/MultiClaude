@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { JsonStreamParser } from '../json-stream-parser'
 import { PlainTextParser } from '../plain-text-parser'
 import { OutputParser } from '../output-parser'

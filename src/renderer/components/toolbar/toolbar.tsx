@@ -8,21 +8,9 @@ interface ToolbarProps {
   onAddTerminal: () => void
   terminalCount: number
   terminalLimit: number
-  onToggleGit: () => void
   onToggleGitHub: () => void
   onToggleSettings: () => void
   activePanel: string | null
-}
-
-function IconGitBranch() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="6" y1="3" x2="6" y2="15" />
-      <circle cx="18" cy="6" r="3" />
-      <circle cx="6" cy="18" r="3" />
-      <path d="M18 9a9 9 0 01-9 9" />
-    </svg>
-  )
 }
 
 function IconGitHub() {
@@ -46,10 +34,9 @@ import { WindowControls } from './window-controls'
 
 /** Compact 32px toolbar replacing the titlebar + activity bar */
 export function Toolbar({
-  onAddTerminal,
-  terminalCount,
-  terminalLimit,
-  onToggleGit,
+  onAddTerminal: _onAddTerminal,
+  terminalCount: _terminalCount,
+  terminalLimit: _terminalLimit,
   onToggleGitHub,
   onToggleSettings,
   activePanel
@@ -67,14 +54,8 @@ export function Toolbar({
       {/* Right group: panel toggles + update indicator + custom window controls */}
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
         <ToolbarButton
-          icon={<IconGitBranch />}
-          title="Git Panel (Ctrl+B)"
-          onClick={onToggleGit}
-          active={activePanel === 'git'}
-        />
-        <ToolbarButton
           icon={<IconGitHub />}
-          title="GitHub Panel"
+          title="GitHub Panel (Ctrl+B)"
           onClick={onToggleGitHub}
           active={activePanel === 'github'}
         />
@@ -86,7 +67,7 @@ export function Toolbar({
             highlight
           />
         )}
-        
+
         {/* Only show custom window controls on non-macOS platforms since macOS has native traffic lights on the left */}
         {!isMac && <WindowControls />}
       </div>

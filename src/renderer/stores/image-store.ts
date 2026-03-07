@@ -54,7 +54,8 @@ export const useImageStore = create<ImageState>((set, get) => ({
 
   clearTerminal: (terminalId) =>
     set((state) => {
-      const { [terminalId]: _, ...rest } = state.images
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [terminalId]: _removed, ...rest } = state.images
       return { images: rest }
     }),
 

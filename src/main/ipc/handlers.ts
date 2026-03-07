@@ -340,7 +340,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // App handlers
   ipcMain.handle(IPC_CHANNELS.APP_GET_PATH, async (_, name: string) => {
-    return app.getPath(name as any)
+    return app.getPath(name as Parameters<typeof app.getPath>[0])
   })
 
   ipcMain.handle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, async () => {

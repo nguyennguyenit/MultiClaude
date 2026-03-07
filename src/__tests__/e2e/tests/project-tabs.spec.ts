@@ -34,8 +34,6 @@ test.describe('Project Tabs', () => {
 
     // Look for keyboard shortcut badges
     const badge1 = tabsContainer.locator('span:has-text("1")').first()
-    const badge2 = tabsContainer.locator('span:has-text("2")').first()
-    const badge3 = tabsContainer.locator('span:has-text("3")').first()
 
     // At least verify first badge is visible
     await expect(badge1).toBeVisible()

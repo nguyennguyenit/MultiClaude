@@ -5,7 +5,6 @@ import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
-import { GitPanelContent } from './components/git-panel/git-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
@@ -122,7 +121,7 @@ function App() {
     // Atomic project switch - updates project + terminal in single state update
     switchToProject(id)
     prevProjectIdRef.current = id
-  }, [projects, switchToProject, removeProject])
+  }, [projects, switchToProject, removeProject, setActiveProject, setActiveTerminal])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
@@ -246,7 +245,7 @@ function App() {
     onAddTerminal: handleAddTerminal,
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
-    onToggleGitPanel: () => togglePanel('git')
+    onToggleGitPanel: () => togglePanel('github')
   })
 
 
@@ -254,6 +253,7 @@ function App() {
   useEffect(() => {
     loadSettings()
     detectWsl()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Load YOLO status when project changes
@@ -347,6 +347,7 @@ function App() {
       setProjects(validProjects)
     }
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // NOTE: Removed auto-create terminal - now shows welcome screen instead
@@ -388,14 +389,7 @@ function App() {
         onClose={() => setActivePanel(null)}
       />
 
-      {/* Git slide panel */}
-      <SlidePanel
-        isOpen={activePanel === 'git'}
-        onClose={() => setActivePanel(null)}
-        title="Git"
-      >
-        <GitPanelContent projectPath={activeProject?.path} />
-      </SlidePanel>
+
 
       {/* GitHub slide panel */}
       <SlidePanel
@@ -434,7 +428,6 @@ function App() {
         onAddTerminal={handleAddTerminal}
         terminalCount={visibleTerminals.length}
         terminalLimit={getTerminalLimitValue()}
-        onToggleGit={() => togglePanel('git')}
         onToggleGitHub={() => togglePanel('github')}
         onToggleSettings={() => togglePanel('settings')}
         activePanel={activePanel}

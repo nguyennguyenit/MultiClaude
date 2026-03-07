@@ -71,7 +71,7 @@ export class GitManager {
         unstaged: status.modified.length + status.deleted.length,
         untracked: status.not_added.length
       }
-    } catch (error) {
+    } catch {
       return {
         isRepo: false,
         hasRemote: false,

@@ -52,7 +52,7 @@ export function GitInitDialog({
           </div>
 
           {/* Description */}
-          <p style={{ color: 'var(--text-muted)', marginBottom: '8px' }}>We'll set up git for you:</p>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '8px' }}>We&apos;ll set up git for you:</p>
           <ul style={{ color: 'var(--text-muted)', paddingLeft: '16px', marginBottom: '12px', lineHeight: '1.8' }}>
             <li>Initialize a new git repository</li>
             <li>Create an initial commit</li>
@@ -68,10 +68,10 @@ export function GitInitDialog({
             </button>
             {showManual && (
               <div className="dialog-code" style={{ marginTop: '6px' }}>
-                <div>cd "{projectPath}"</div>
+                <div>cd &quot;{projectPath}&quot;</div>
                 <div>git init</div>
                 <div>git add .</div>
-                <div>git commit -m "Initial commit"</div>
+                <div>git commit -m &quot;Initial commit&quot;</div>
               </div>
             )}
           </div>
@@ -84,7 +84,7 @@ export function GitInitDialog({
               onChange={(e) => setDontAskAgain(e.target.checked)}
               style={{ accentColor: 'var(--accent)' }}
             />
-            Don't ask again for this project
+            Don&apos;t ask again for this project
           </label>
         </div>
 
