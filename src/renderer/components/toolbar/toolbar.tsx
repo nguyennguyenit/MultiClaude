@@ -42,6 +42,8 @@ function IconUpdate() {
   )
 }
 
+import { WindowControls } from './window-controls'
+
 /** Compact 32px toolbar replacing the titlebar + activity bar */
 export function Toolbar({
   onAddTerminal,
@@ -62,7 +64,7 @@ export function Toolbar({
       {/* Left group: macOS traffic light padding */}
       <div className="toolbar-group" style={{ paddingLeft: isMac ? 72 : 0 }} />
 
-      {/* Right group: panel toggles + update indicator */}
+      {/* Right group: panel toggles + update indicator + custom window controls */}
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
         <ToolbarButton
           icon={<IconGitBranch />}
@@ -84,6 +86,9 @@ export function Toolbar({
             highlight
           />
         )}
+        
+        {/* Only show custom window controls on non-macOS platforms since macOS has native traffic lights on the left */}
+        {!isMac && <WindowControls />}
       </div>
     </div>
   )

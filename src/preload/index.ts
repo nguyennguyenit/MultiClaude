@@ -154,6 +154,9 @@ export interface ElectronAPI {
   }
   window: {
     updateTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>
+    minimize: () => Promise<void>
+    maximize: () => Promise<void>
+    close: () => Promise<void>
   }
   onFileDrop: (callback: (filePath: string) => void) => () => void
 }
@@ -304,7 +307,10 @@ const api: ElectronAPI = {
     getFilePath: (file) => webUtils.getPathForFile(file)
   },
   window: {
-    updateTitleBarOverlay: (colors) => ipcRenderer.invoke('update-title-bar-overlay', colors)
+    updateTitleBarOverlay: (colors) => ipcRenderer.invoke('update-title-bar-overlay', colors),
+    minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
+    maximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
+    close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE)
   },
   onFileDrop: (callback) => {
     const listener = (_: unknown, data: { filePath: string }) => callback(data.filePath)

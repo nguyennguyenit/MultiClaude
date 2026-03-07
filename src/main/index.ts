@@ -39,11 +39,6 @@ function createWindow() {
       nodeIntegration: false
     },
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#1e1e1e',
-      symbolColor: '#d4d4d4',
-      height: 40
-    },
     backgroundColor: '#1e1e1e'
   })
 
@@ -94,17 +89,6 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
-  })
-
-  // Handle title bar overlay color updates from renderer
-  ipcMain.handle('update-title-bar-overlay', (_event, colors: { color: string; symbolColor: string }) => {
-    if (mainWindow) {
-      mainWindow.setTitleBarOverlay({
-        color: colors.color,
-        symbolColor: colors.symbolColor,
-        height: 40
-      })
-    }
   })
 }
 

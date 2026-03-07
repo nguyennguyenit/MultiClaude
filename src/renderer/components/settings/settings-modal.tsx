@@ -49,26 +49,28 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       {/* Backdrop - dark mode: black 80%, light mode: white 80% - starts below titlebar */}
       <div
         data-testid="settings-backdrop"
-        className="absolute inset-0 bg-[var(--mc-backdrop)]"
+        className="absolute inset-0"
+        style={{ background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }}
         onClick={handleCancel}
         aria-hidden="true"
       />
 
       {/* Modal - absolute inset so size is truly fixed regardless of content */}
-      <div data-testid="settings-modal" className="absolute inset-4 bottom-14 bg-[var(--mc-bg-primary)] rounded-lg shadow-xl flex flex-col border border-[var(--mc-border)]">
+      <div data-testid="settings-modal" className="absolute bg-[var(--mc-bg-primary)] rounded-lg shadow-xl flex flex-col overflow-hidden" style={{ inset: '16px', border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))' }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--mc-border)]">
+        <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <div>
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <SettingsIcon />
+              <span style={{ color: 'var(--mc-accent)' }}><SettingsIcon /></span>
               Settings
             </h2>
-            <p className="text-sm text-[var(--mc-text-muted)]">App Settings</p>
+            <p className="text-sm" style={{ color: 'var(--mc-accent)', opacity: 0.7 }}>App Settings</p>
           </div>
           <button
             data-testid="settings-close-button"
             onClick={handleCancel}
-            className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded transition-colors"
+            className="p-1.5 rounded transition-colors"
+            style={{ color: 'var(--mc-accent)' }}
             title="Close"
           >
             <CloseIcon />
@@ -87,7 +89,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 p-4 border-t border-[var(--mc-border)]">
+        <div className="flex justify-end gap-2 p-4" style={{ borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <button
             data-testid="settings-cancel-button"
             onClick={handleCancel}

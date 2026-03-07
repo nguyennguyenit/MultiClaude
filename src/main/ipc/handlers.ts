@@ -596,4 +596,27 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       throw error
     }
   })
+
+  // Window handlers
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
+    if (window && !window.isDestroyed()) {
+      window.minimize()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, () => {
+    if (window && !window.isDestroyed()) {
+      if (window.isMaximized()) {
+        window.unmaximize()
+      } else {
+        window.maximize()
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, () => {
+    if (window && !window.isDestroyed()) {
+      window.close()
+    }
+  })
 }

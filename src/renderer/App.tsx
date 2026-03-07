@@ -309,12 +309,6 @@ function App() {
     if (termFont) {
       root.style.setProperty('--terminal-font', `${termFont.family}, Menlo, Monaco, Consolas, monospace`)
     }
-
-    // Update titlebar overlay color to match theme
-    window.electron.window.updateTitleBarOverlay({
-      color: theme.background,
-      symbolColor: theme.foreground
-    })
   }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily])
 
   // Load saved projects on mount and validate folder existence
