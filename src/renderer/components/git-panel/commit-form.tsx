@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 interface CommitFormProps {
   stagedCount: number
@@ -11,6 +11,15 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
   const [isCommitting, setIsCommitting] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-expand textarea based on content (max ~4 rows)
+  const adjustTextareaHeight = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 72) + 'px'
+  }, [])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -24,6 +33,11 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
   }, [])
 
   const canCommit = !!message.trim() && stagedCount > 0 && !isCommitting
+
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessage(e.target.value)
+    adjustTextareaHeight()
+  }
 
   const handleCommit = async () => {
     if (!canCommit) return
@@ -63,11 +77,13 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
   return (
     <div className="px-3 py-1.5 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)]/50">
       <textarea
+        ref={textareaRef}
         value={message}
-        onChange={(e) => setMessage(e.target.value)}
+        onChange={handleMessageChange}
         onKeyDown={handleKeyDown}
         placeholder="Commit message..."
-        rows={2}
+        rows={1}
+        style={{ minHeight: 24, overflow: 'hidden' }}
         className="w-full px-2 py-1 text-[11px] bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded resize-none focus:outline-none focus:border-[var(--mc-accent)] placeholder-[var(--mc-text-muted)] mb-1.5"
         disabled={isCommitting}
       />
