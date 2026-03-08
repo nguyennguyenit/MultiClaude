@@ -9,6 +9,7 @@ interface TerminalWithOutput extends Terminal {
 interface TerminalGridProps {
   terminals: TerminalWithOutput[]
   activeProjectId: string | null
+  activeProjectPath?: string
   activeTerminalId: string | null
   onTerminalClick: (id: string) => void
   onAddTerminal?: () => void
@@ -50,6 +51,7 @@ function splitIntoRows<T>(items: T[], cols: number): T[][] {
 export const TerminalGrid = memo(function TerminalGrid({
   terminals,
   activeProjectId,
+  activeProjectPath,
   activeTerminalId,
   onTerminalClick,
   onAddTerminal,
@@ -97,9 +99,12 @@ export const TerminalGrid = memo(function TerminalGrid({
   if (visibleTerminalCount === 0) {
     return (
       <div className="welcome-screen">
-        <div className="welcome-icon">$_</div>
-        <h2 className="welcome-title">Multi Terminals</h2>
-        <p className="welcome-hint">
+        <svg className="welcome-terminal-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="4 17 10 11 4 5" />
+          <line x1="12" y1="19" x2="20" y2="19" />
+        </svg>
+        <h2 className="welcome-title" style={{ fontSize: '24px' }}>Multi Terminals</h2>
+        <p className="welcome-hint" style={{ margin: 0 }}>
           Spawn multiple terminals to run agents in parallel.
           <br />
           Press <kbd>Ctrl+T</kbd> to create a new terminal.
@@ -108,6 +113,14 @@ export const TerminalGrid = memo(function TerminalGrid({
           <button type="button" onClick={() => onAddTerminal()} className="welcome-btn">
             + New Terminal
           </button>
+        )}
+        {activeProjectPath && (
+          <p className="welcome-project-path" title={activeProjectPath}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+            </svg>
+            {activeProjectPath}
+          </p>
         )}
       </div>
     )

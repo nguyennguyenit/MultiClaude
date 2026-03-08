@@ -143,8 +143,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
     const terminal = new XTerm({
       cursorBlink: true,
-      cursorStyle: 'block',
-      cursorInactiveStyle: 'block',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
+      cursorStyle: 'bar',
+      cursorInactiveStyle: 'bar',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
       fontSize: 14,
       fontFamily: getTerminalFontFamily(),
       theme: getCurrentTerminalTheme(),

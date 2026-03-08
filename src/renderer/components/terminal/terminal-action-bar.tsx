@@ -40,7 +40,7 @@ export function TerminalActionBar({
         type="button"
         onClick={() => onAddTerminal()}
         disabled={disabled || terminalCount >= terminalLimit}
-        className="status-btn"
+        className="status-btn primary"
         title={terminalCount >= terminalLimit ? `Terminal limit (${terminalLimit}) reached` : 'New Terminal (Ctrl+T)'}
       >
         + New
@@ -48,7 +48,7 @@ export function TerminalActionBar({
 
       <div style={{ flex: 1 }} />
 
-      {/* YOLO toggle - single button showing current state */}
+      {/* YOLO toggle - dot indicator shows state */}
       <button
         type="button"
         onClick={() => onToggleYolo(!yoloEnabled)}
@@ -57,16 +57,17 @@ export function TerminalActionBar({
         style={yoloEnabled ? { color: '#f97316', borderColor: 'rgba(249,115,22,0.4)', background: 'rgba(249,115,22,0.08)' } : undefined}
         title={yoloEnabled ? 'YOLO Mode: ON — Click to disable' : 'YOLO Mode: OFF — Click to enable'}
       >
-        ⚡ YOLO {yoloEnabled ? 'ON' : 'OFF'}
+        ⚡ YOLO
       </button>
 
       {/* Kill All with confirmation */}
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <button
           type="button"
           onClick={() => setShowKillConfirm(true)}
           disabled={disabled || terminalCount === 0}
           className="status-btn danger"
+          style={{ color: '#f7768e', borderColor: 'rgba(247,118,142,0.4)', background: 'rgba(247,118,142,0.08)' }}
         >
           Kill All
         </button>

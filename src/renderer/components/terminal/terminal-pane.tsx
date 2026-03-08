@@ -130,8 +130,8 @@ export const TerminalPane = memo(function TerminalPane({
       style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
     >
       {/* Top tab bar */}
-      <div className={`pane-tab-bar`}>
-        <div className={`pane-tab active`}>
+      <div className={`pane-tab-bar${isActive ? ' active' : ''}`}>
+        <div className={`pane-tab${isActive ? ' active' : ''}`}>
           {/* Claude mode badge */}
           {isClaudeMode && <span className="pane-tab-claude">AI</span>}
 
@@ -214,7 +214,9 @@ export const TerminalPane = memo(function TerminalPane({
             title="Close terminal"
             aria-label="Close terminal"
           >
-            ×
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       </div>
