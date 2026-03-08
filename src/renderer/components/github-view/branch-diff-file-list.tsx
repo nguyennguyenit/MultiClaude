@@ -9,7 +9,7 @@ interface BranchDiffFileListProps {
 export function BranchDiffFileList({ files, onFileClick }: BranchDiffFileListProps) {
   if (files.length === 0) {
     return (
-      <div className="px-3 py-3 text-[10px] text-[var(--mc-text-muted)] text-center">
+      <div className="px-4 py-1 text-[10px] italic text-[var(--mc-text-muted)] opacity-60">
         No differences from base branch
       </div>
     )

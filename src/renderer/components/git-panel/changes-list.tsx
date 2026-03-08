@@ -20,8 +20,8 @@ export function ChangesList({
 }: ChangesListProps) {
   if (files.length === 0) {
     return (
-      <div className="flex items-center justify-center py-3 text-[var(--mc-text-muted)] opacity-50">
-        <span className="text-[10px]">No changes</span>
+      <div className="px-4 py-1 text-[10px] italic text-[var(--mc-text-muted)] opacity-60">
+        No changes
       </div>
     )
   }
