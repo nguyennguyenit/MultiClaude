@@ -459,6 +459,7 @@ function App() {
               <TerminalGrid
                 terminals={terminals}
                 activeProjectId={activeProjectId}
+                activeProjectPath={activeProject?.path}
                 activeTerminalId={activeTerminalId}
                 onTerminalClick={setActiveTerminal}
                 onAddTerminal={handleAddTerminal}
