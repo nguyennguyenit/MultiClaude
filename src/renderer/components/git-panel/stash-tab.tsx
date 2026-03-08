@@ -4,6 +4,8 @@ import type { GitStashEntry } from '@shared/types'
 interface StashTabProps {
   entries: GitStashEntry[]
   isLoading?: boolean
+  showSaveInput?: boolean
+  onSaveInputClose?: () => void
   onSave: (message?: string) => Promise<void>
   onApply: (index: number) => Promise<void>
   onPop: (index: number) => Promise<void>
@@ -13,12 +15,13 @@ interface StashTabProps {
 export function StashTab({
   entries,
   isLoading,
+  showSaveInput,
+  onSaveInputClose,
   onSave,
   onApply,
   onPop,
   onDrop
 }: StashTabProps) {
-  const [showSaveInput, setShowSaveInput] = useState(false)
   const [stashMessage, setStashMessage] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -26,8 +29,8 @@ export function StashTab({
     setSaving(true)
     await onSave(stashMessage || undefined)
     setStashMessage('')
-    setShowSaveInput(false)
     setSaving(false)
+    onSaveInputClose?.()
   }
 
   const formatDate = (dateStr: string) => {
@@ -36,61 +39,48 @@ export function StashTab({
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Stash button */}
-      <div className="px-3 py-2 border-b border-[var(--mc-border)]">
-        {showSaveInput ? (
-          <div className="space-y-1">
-            <input
-              type="text"
-              value={stashMessage}
-              onChange={(e) => setStashMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              placeholder="Stash message (optional)"
-              className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-hover)] rounded"
-              autoFocus
-            />
-            <div className="flex gap-1">
-              <button
-                onClick={() => setShowSaveInput(false)}
-                className="flex-1 px-2 py-1 text-xs bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 px-2 py-1 text-xs bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 rounded"
-              >
-                {saving ? '...' : 'Stash'}
-              </button>
-            </div>
+    <div>
+      {/* Inline save input (shown when header action icon clicked) */}
+      {showSaveInput && (
+        <div className="px-3 py-2 border-b border-[var(--mc-border)] space-y-1">
+          <input
+            type="text"
+            value={stashMessage}
+            onChange={(e) => setStashMessage(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            placeholder="Stash message (optional)"
+            className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] rounded focus:outline-none focus:border-[var(--mc-accent)]"
+            autoFocus
+          />
+          <div className="flex gap-1">
+            <button
+              onClick={onSaveInputClose}
+              className="flex-1 px-2 py-1 text-xs bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 px-2 py-1 text-xs bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 disabled:opacity-50 rounded"
+            >
+              {saving ? '...' : 'Stash'}
+            </button>
           </div>
-        ) : (
-          <button
-            onClick={() => setShowSaveInput(true)}
-            className="w-full px-2 py-1 text-xs bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] rounded flex items-center justify-center gap-1"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-            </svg>
-            Stash Changes
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Stash list */}
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-xs text-[var(--mc-text-muted)]">
+        <div className="px-3 py-3 text-xs text-[var(--mc-text-muted)] text-center">
           Loading stashes...
         </div>
       ) : entries.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-xs text-[var(--mc-text-muted)]">
+        <div className="px-3 py-3 text-xs text-[var(--mc-text-muted)] text-center">
           No stashes
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div>
           {entries.map((entry) => (
             <div
               key={entry.index}

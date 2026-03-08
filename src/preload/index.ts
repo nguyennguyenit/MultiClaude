@@ -13,6 +13,7 @@ import type {
   GitLogEntry,
   GitStashEntry,
   GitOperationResult,
+  GitBranchDiff,
   AppSession,
   AppSettings,
   NotificationSettings,
@@ -78,6 +79,9 @@ export interface ElectronAPI {
     // Config methods
     configGet: () => Promise<GitConfig>
     configSet: (config: GitConfig) => Promise<GitOperationResult>
+    // Branch diff comparison
+    diffBranch: (cwd: string, baseBranch?: string) => Promise<GitBranchDiff>
+    diffAgainstBranch: (cwd: string, file: string, baseBranch: string) => Promise<GitDiffResult>
     // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback: (data: { projectPath: string }) => void) => () => void
     // Watch project for external git changes
@@ -225,6 +229,9 @@ const api: ElectronAPI = {
     // Config methods
     configGet: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_GET),
     configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config),
+    // Branch diff comparison
+    diffBranch: (cwd, baseBranch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_BRANCH, { cwd, baseBranch }),
+    diffAgainstBranch: (cwd, file, baseBranch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, { cwd, file, baseBranch }),
     // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback) => {
       const listener = (_: unknown, data: { projectPath: string }) => callback(data)

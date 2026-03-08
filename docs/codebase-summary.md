@@ -284,18 +284,18 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (84 total)
+## IPC Channels (85 total)
 
 ### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
 - `terminal:resize`, `terminal:list`, `terminal:invoke-claude`, `terminal:title-change`
 - `terminal:detect-wsl`
 
-### Project (6 channels)
-- `project:list`, `project:create`, `project:delete`, `project:set-active`
+### Project (7 channels)
+- `project:list`, `project:create`, `project:update`, `project:delete`, `project:set-active`
 - `project:open-folder`, `project:check-folder`
 
-### Git (35 channels)
+### Git (38 channels)
 **Basic**: `git:status`, `git:init`, `git:add-remote`, `git:push`
 **File Operations**: `git:file-status`, `git:stage-file`, `git:unstage-file`, `git:stage-all`, `git:discard`, `git:diff`
 **Commit**: `git:commit`
@@ -304,6 +304,7 @@ src/
 **History**: `git:log`
 **Stash**: `git:stash-list`, `git:stash-save`, `git:stash-apply`, `git:stash-pop`, `git:stash-drop`
 **Config**: `git:config-get`, `git:config-set`
+**Branch Diff**: `git:diff-branch`, `git:diff-against-branch`
 **Watcher**: `git:branch-changed`, `git:watch-project`, `git:unwatch-project`
 
 ### GitHub (5 channels)
@@ -630,6 +631,56 @@ interface ProjectTerminal {
   - `getAllTerminalLayouts()`: Bulk retrieval for app initialization
 - **Deleted Components**: Removed terminal-tabs.tsx (consolidated into ProjectTabs)
 - **Feature Complete**: Project tabs redesign fully integrated with persistence layer
+
+## GitHub Panel Redesign Implementation
+
+**Status**: Completed (2026-03-08)
+
+**Architecture Shift**: From tabbed layout to single-column scrollable container with collapsible sections.
+
+**Components & Layout**:
+- **github-view.tsx**: Main container rendering sections in single-column scrollable layout
+  - Compact header (branch selector + sync buttons)
+  - Commit form (stage/commit/push workflow)
+  - Changes list (staged/unstaged files with grouping)
+  - History tab (commit log)
+  - Stash tab (stash operations)
+  - Branch diff section (comparison against base branch)
+  - Issues and PRs tabs (GitHub integration)
+
+**New Components**:
+- **CompactHeader**: Branch dropdown with fetch/pull/push controls (compact 32px design)
+- **BranchDiffFileList**: Single-column scrollable file list showing changes vs base branch
+  - Displays path, status icon (A/M/D/R), and addition/deletion counts
+  - Grouped by directory using `groupByDir()` utility
+  - Click to open diff modal
+
+**New Module - git-file-utils.ts**:
+- `getStatusColor(status)`: Maps file status (A/M/D/R) to CSS color class
+- `getStatusLabel(status)`: Maps file status to human-readable label
+- `groupByDir(files)`: Groups files by parent directory for organized listing
+
+**New IPC Method - git:diff-against-branch**:
+- Handler in git-manager.ts: `getDiffAgainstBranch(cwd, file, baseBranch)`
+- Shows diff of a file compared to base branch (not working tree)
+- Used by `openBranchFileDiff()` callback to populate diff modal
+- Accurate file status detection via `git diff --name-status`
+
+**Hook Enhancement - use-git-panel.ts**:
+- Added `branchDiff` state for holding branch comparison results
+- Added `baseBranch` state with `setBaseBranch()` setter (default: 'main')
+- Added `baseBranchRef` (useRef) to avoid double-fetch on branch changes
+- Integrates with useEffect hook for fetching branch diffs when baseBranch updates
+
+**DiffModal Integration**:
+- Unified modal for both working-tree and branch-comparison diffs
+- `fileStatus`, `additions`, `deletions` display (empty for branch diffs without stats)
+- Diff content rendering via `diff-modal.tsx`
+
+**Collapsible Sections**:
+- **collapsible-section.tsx**: Reusable header with expand/collapse toggle
+- Used for: Commit Form, Staged Changes, Unstaged Changes, History, Stash, Branch Diff, Issues, PRs
+- State managed locally per section (no global collapse state)
 
 ## In-App Update Settings Implementation
 

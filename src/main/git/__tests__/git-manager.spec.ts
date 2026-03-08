@@ -7,18 +7,23 @@ const mockGit = {
   status: vi.fn().mockResolvedValue({
     current: 'main',
     isClean: () => true,
-    staged: [],
+    staged: ['file.ts'],
     modified: [],
     deleted: [],
-    not_added: []
+    not_added: [],
+    renamed: [],
+    created: ['file.ts']
   }),
   getRemotes: vi.fn().mockResolvedValue([
     { name: 'origin', refs: { fetch: 'https://github.com/user/repo' } }
   ]),
   init: vi.fn().mockResolvedValue(undefined),
+  add: vi.fn().mockResolvedValue(undefined),
+  commit: vi.fn().mockResolvedValue({ commit: 'abc123' }),
   addRemote: vi.fn().mockResolvedValue(undefined),
   push: vi.fn().mockResolvedValue(undefined),
-  log: vi.fn().mockResolvedValue({ total: 1 })
+  log: vi.fn().mockResolvedValue({ total: 1 }),
+  diff: vi.fn().mockResolvedValue('')
 }
 
 vi.mock('simple-git', () => ({
@@ -85,7 +90,8 @@ describe('GitManager', () => {
     })
 
     it('returns false on error', async () => {
-      mockGit.init.mockRejectedValueOnce(new Error('fail'))
+      // Simulate commit failure — init succeeds but commit phase fails
+      mockGit.commit.mockRejectedValueOnce(new Error('fail'))
       const result = await manager.init('/error')
       expect(result).toBe(false)
     })
@@ -113,7 +119,7 @@ describe('GitManager', () => {
   describe('push', () => {
     it('pushes to remote with upstream', async () => {
       const result = await manager.push('/test', 'main', true)
-      expect(result).toBe(true)
+      expect(result.success).toBe(true)
       expect(mockGit.push).toHaveBeenCalledWith(['--set-upstream', 'origin', 'main'])
     })
 
@@ -125,7 +131,7 @@ describe('GitManager', () => {
     it('returns false on error', async () => {
       mockGit.push.mockRejectedValueOnce(new Error('fail'))
       const result = await manager.push('/error')
-      expect(result).toBe(false)
+      expect(result.success).toBe(false)
     })
   })
 })

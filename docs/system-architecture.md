@@ -77,20 +77,21 @@ src/renderer/
 │   │   ├── terminal-view.tsx      # xterm.js renderer
 │   │   ├── shell-selector-dropdown.tsx  # WSL shell context menu
 │   │   └── index.ts
-│   ├── git-panel/            # Git slide panel (right/bottom)
-│   │   ├── git-panel.tsx          # GitPanelContent component
-│   │   ├── changes-list.tsx       # Staged/unstaged files
-│   │   ├── commit-form.tsx        # Commit message input
+│   ├── git-panel/            # Git panel components (single-column collapsible sections)
+│   │   ├── git-panel.tsx          # Main container (not actively used; replaced by github-view)
+│   │   ├── changes-list.tsx       # File list with status indicators
+│   │   ├── commit-form.tsx        # Commit message input + action buttons
 │   │   ├── diff-viewer.tsx        # File diff display
-│   │   ├── branch-selector.tsx    # Branch dropdown
-│   │   ├── branches-tab.tsx       # Branch management
-│   │   ├── history-tab.tsx        # Commit log
-│   │   ├── stash-tab.tsx          # Stash operations
+│   │   ├── diff-modal.tsx         # Modal for viewing file diffs
+│   │   ├── history-tab.tsx        # Commit log with details
+│   │   ├── stash-tab.tsx          # Stash operations (save/apply/pop/drop)
+│   │   ├── collapsible-section.tsx # Reusable header with collapse/expand toggle
+│   │   ├── git-file-utils.ts      # Utilities: getStatusColor(), getStatusLabel(), groupByDir()
 │   │   └── index.ts
-│   ├── github-view/          # GitHub slide panel (right/bottom)
-│   │   ├── github-view.tsx        # Issues/PRs container
-│   │   ├── github-action-bar.tsx  # Tab selector
-│   │   ├── repo-info-header.tsx   # Repo metadata
+│   ├── github-view/          # GitHub slide panel (right/bottom, single-column redesign)
+│   │   ├── github-view.tsx        # Main view: CommitForm, StashTab, HistoryTab, Branch Comparison, Issues/PRs
+│   │   ├── compact-header.tsx      # Branch selector + fetch/pull/push controls
+│   │   ├── branch-diff-file-list.tsx  # Single-column scrollable diff file listing
 │   │   ├── issues-tab.tsx         # Issue list
 │   │   ├── prs-tab.tsx            # PR list
 │   │   └── index.ts
@@ -198,13 +199,13 @@ Terminal UI Style Integration (App.tsx):
 
 ## IPC Channel Architecture
 
-### Channel Categories (84 total)
+### Channel Categories (86 total)
 
 | Category | Count | Purpose |
 |----------|-------|---------|
 | Terminal | 9 | PTY lifecycle, I/O, WSL detection |
-| Project | 6 | CRUD, folder ops |
-| Git | 35 | Full git workflow |
+| Project | 7 | CRUD, folder ops |
+| Git | 38 | Full git workflow + branch comparison + diff-against-branch |
 | GitHub | 5 | Auth, repo, issues/PRs |
 | Session | 2 | Save/restore |
 | App | 2 | Paths, updates |
@@ -214,6 +215,7 @@ Terminal UI Style Integration (App.tsx):
 | File Picker | 1 | Folder selection |
 | Update | 5 | Auto-update system |
 | Settings | 3 | App preferences persistence |
+| Window | 3 | Window controls |
 
 ### IPC Type Safety
 

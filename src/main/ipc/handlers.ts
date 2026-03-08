@@ -298,6 +298,14 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.getGitConfig()
   })
 
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_BRANCH, async (_, { cwd, baseBranch }: { cwd: string; baseBranch?: string }) => {
+    return gitManager.diffBranch(cwd, baseBranch)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, async (_, { cwd, file, baseBranch }: { cwd: string; file: string; baseBranch: string }) => {
+    return gitManager.getDiffAgainstBranch(cwd, file, baseBranch)
+  })
+
   ipcMain.handle(IPC_CHANNELS.GIT_CONFIG_SET, async (_, config: { userName?: string; userEmail?: string }) => {
     return gitManager.setGitConfig(config)
   })

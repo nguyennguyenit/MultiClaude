@@ -99,6 +99,22 @@ export interface GitFileStatus {
   status: 'staged' | 'modified' | 'untracked' | 'deleted' | 'renamed' | 'copied'
   staged: boolean
   oldPath?: string
+  additions?: number
+  deletions?: number
+}
+
+export interface GitBranchDiffFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  additions: number
+  deletions: number
+}
+
+export interface GitBranchDiff {
+  baseBranch: string
+  files: GitBranchDiffFile[]
+  aheadBy: number
+  behindBy: number
 }
 
 export interface GitCommitResult {

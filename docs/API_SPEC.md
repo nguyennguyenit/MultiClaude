@@ -81,7 +81,10 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | invoke | `git:stash-drop` | `{ cwd, index? }` | `GitOperationResult` | 🔄 |
 | invoke | `git:config-get` | - | `GitConfig` | 🔄 |
 | invoke | `git:config-set` | `GitConfig` | `GitOperationResult` | 🔄 |
+| invoke | `git:diff-branch` | `{ cwd, baseBranch }` | `GitBranchDiff` | 🔄 |
+| invoke | `git:diff-against-branch` | `{ cwd, file, baseBranch }` | `GitDiffResult` | 🔄 |
 | invoke | `git:watch-project` | `projectPath: string` | `boolean` | 🔄 |
+| invoke | `git:unwatch-project` | `projectPath: string` | `boolean` | 🔄 |
 | invoke | `git:unwatch-project` | `projectPath: string` | `boolean` | 🔄 |
 | on | `git:branch-changed` | - | `{ projectPath }` | 🔄 |
 
@@ -182,6 +185,20 @@ interface GitStatus {
   staged: number
   unstaged: number
   untracked: number
+}
+
+interface GitBranchDiffFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  additions: number
+  deletions: number
+}
+
+interface GitBranchDiff {
+  baseBranch: string
+  files: GitBranchDiffFile[]
+  aheadBy: number
+  behindBy: number
 }
 
 interface GitHubAuth {

@@ -1,140 +1,75 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useGitPanel } from '../../hooks/use-git-panel'
-import { ChangesList } from '../git-panel/changes-list'
-import { DiffViewer } from '../git-panel/diff-viewer'
+import { CollapsibleSection } from '../git-panel/collapsible-section'
+import { DiffModal } from '../git-panel/diff-modal'
 import { CommitForm } from '../git-panel/commit-form'
+import { ChangesList } from '../git-panel/changes-list'
 import { HistoryTab } from '../git-panel/history-tab'
 import { StashTab } from '../git-panel/stash-tab'
-import { BranchesTab } from '../git-panel/branches-tab'
-import { GitHubActionBar } from './github-action-bar'
-import { RepoInfoHeader } from './repo-info-header'
 import { IssuesTab } from './issues-tab'
 import { PRsTab } from './prs-tab'
+import { CompactHeader } from './compact-header'
+import { BranchDiffFileList } from './branch-diff-file-list'
+import type { GitFileStatus, GitBranchDiffFile } from '@shared/types'
 
-type TabId = 'changes' | 'history' | 'stash' | 'branches' | 'issues' | 'prs'
+interface DiffModalState {
+  fileName: string
+  fileStatus?: string
+  additions?: number
+  deletions?: number
+  diff: string | null
+  staged?: boolean
+}
 
 interface GitHubPanelContentProps {
   projectPath: string | undefined
 }
 
-// Parse remote URL to get owner/repo
-function parseRepoName(remoteUrl: string | undefined): string | undefined {
-  if (!remoteUrl) return undefined
-
-  // Handle SSH format: git@github.com:owner/repo.git
-  const sshMatch = remoteUrl.match(/git@github\.com:(.+?)(?:\.git)?$/)
-  if (sshMatch) return sshMatch[1]
-
-  // Handle HTTPS format: https://github.com/owner/repo.git
-  const httpsMatch = remoteUrl.match(/github\.com\/(.+?)(?:\.git)?$/)
-  if (httpsMatch) return httpsMatch[1]
-
-  return undefined
-}
-
-/** GitHub panel content for use inside a SlidePanel container */
 export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('changes')
   const [syncing, setSyncing] = useState(false)
+  const [diffModal, setDiffModal] = useState<DiffModalState | null>(null)
+  const [showStashInput, setShowStashInput] = useState(false)
 
   const gitPanel = useGitPanel({ projectPath, enabled: true })
-  const repoName = parseRepoName(gitPanel.gitStatus?.remoteUrl)
-  const changesCount = gitPanel.files.length
-  const stagedCount = gitPanel.files.filter(f => f.staged).length
 
-  const tabs = [
-    {
-      id: 'changes' as const,
-      label: 'Changes',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-      )
-    },
-    {
-      id: 'history' as const,
-      label: 'History',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      )
-    },
-    {
-      id: 'branches' as const,
-      label: 'Branches',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-        </svg>
-      )
-    },
-    {
-      id: 'stash' as const,
-      label: 'Stash',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-        </svg>
-      )
-    },
-    {
-      id: 'issues' as const,
-      label: 'Issues',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      )
-    },
-    {
-      id: 'prs' as const,
-      label: 'Pull Requests',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-        </svg>
-      )
-    }
-  ]
+  const stagedFiles = gitPanel.files.filter(f => f.staged)
+  const unstagedFiles = gitPanel.files.filter(f => !f.staged)
 
-  // Sync handlers
-  const handlePush = async () => {
-    setSyncing(true)
-    try {
-      await gitPanel.push()
-    } finally {
-      setSyncing(false)
-    }
-  }
+  // Open diff modal for a working-tree file
+  const openFileDiff = useCallback(async (file: GitFileStatus) => {
+    if (!projectPath) return
+    const result = await window.electron.git.diff(projectPath, file.path, file.staged)
+    setDiffModal({
+      fileName: file.path,
+      fileStatus: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      diff: result.success ? result.diff || null : null,
+      staged: file.staged
+    })
+  }, [projectPath])
 
-  const handlePull = async () => {
-    setSyncing(true)
-    try {
-      await gitPanel.pull()
-    } finally {
-      setSyncing(false)
-    }
-  }
+  // Open diff modal for a branch-diff file (diff against base branch, not working tree)
+  const openBranchFileDiff = useCallback(async (file: GitBranchDiffFile) => {
+    if (!projectPath) return
+    const result = await window.electron.git.diffAgainstBranch(projectPath, file.path, gitPanel.baseBranch)
+    setDiffModal({
+      fileName: file.path,
+      fileStatus: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      diff: result.success ? result.diff || null : null
+    })
+  }, [projectPath, gitPanel.baseBranch])
 
-  const handleSync = async () => {
-    setSyncing(true)
-    try {
-      await gitPanel.pull()
-      await gitPanel.push()
-    } finally {
-      setSyncing(false)
-    }
-  }
+  const handlePush = async () => { setSyncing(true); try { await gitPanel.push() } finally { setSyncing(false) } }
+  const handlePull = async () => { setSyncing(true); try { await gitPanel.pull() } finally { setSyncing(false) } }
+  const handleFetch = async () => { setSyncing(true); try { await gitPanel.fetch() } finally { setSyncing(false) } }
 
-  const handleFetch = async () => {
-    setSyncing(true)
-    try {
-      await gitPanel.fetch()
-    } finally {
-      setSyncing(false)
-    }
+  const handleCommitAndPush = async (message: string): Promise<boolean> => {
+    const ok = await gitPanel.commit(message)
+    if (ok) await gitPanel.push()
+    return ok
   }
 
   if (!projectPath) {
@@ -151,120 +86,157 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--mc-bg-primary)]">
-      {/* Action Bar */}
-      <GitHubActionBar
-        repoName={repoName}
+      {/* Compact header: branch selector + fetch/pull/push */}
+      <CompactHeader
+        currentBranch={gitPanel.currentBranch}
+        branches={gitPanel.branches}
         hasRemote={gitPanel.gitStatus?.hasRemote ?? false}
         syncing={syncing}
-        onPush={handlePush}
-        onPull={handlePull}
-        onSync={handleSync}
-        onFetch={handleFetch}
-      />
-
-      {/* Repo Info Header */}
-      <RepoInfoHeader
-        repoName={repoName}
-        currentBranch={gitPanel.currentBranch}
-        changesCount={changesCount}
-        branches={gitPanel.branches}
+        isLoading={gitPanel.isLoading}
         onCheckoutBranch={gitPanel.checkoutBranch}
         onCreateBranch={gitPanel.createBranch}
-        isLoading={gitPanel.isLoading}
+        onFetch={handleFetch}
+        onPull={handlePull}
+        onPush={handlePush}
       />
 
-      {/* Tabs */}
-      <div className="flex border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)] px-4 gap-6">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`
-              group relative py-3 text-sm font-medium flex items-center gap-2 transition-colors
-              ${activeTab === tab.id
-                ? 'text-[var(--mc-text-primary)]'
-                : 'text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]'
-              }
-            `}
-          >
-            <span className={`${activeTab === tab.id ? 'text-[var(--mc-accent)]' : 'opacity-70 group-hover:opacity-100'}`}>
-              {tab.icon}
-            </span>
-            {tab.label}
-            {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--mc-accent)] rounded-t-full" />
-            )}
-          </button>
-        ))}
-      </div>
+      {/* Commit form */}
+      <CommitForm
+        stagedCount={stagedFiles.length}
+        onCommit={gitPanel.commit}
+        onCommitAndPush={handleCommitAndPush}
+      />
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-hidden bg-[var(--mc-bg-primary)]">
-        {activeTab === 'changes' && (
-          <div className="flex h-full">
-            {/* File list */}
-            <div className="w-72 border-r border-[var(--mc-border)] flex flex-col bg-[var(--mc-bg-secondary)]">
-              <ChangesList
-                files={gitPanel.files}
-                selectedFile={gitPanel.selectedFile}
-                onSelectFile={gitPanel.selectFile}
-                onStageFile={gitPanel.stageFile}
-                onUnstageFile={gitPanel.unstageFile}
-                onDiscardFile={gitPanel.discardFile}
-                onStageAll={gitPanel.stageAll}
-              />
-              <CommitForm
-                stagedCount={stagedCount}
-                onCommit={gitPanel.commit}
-              />
-            </div>
-            {/* Diff viewer */}
-            <div className="flex-1 flex flex-col min-w-0 bg-[var(--mc-bg-primary)]">
-              <DiffViewer
-                diff={gitPanel.diff}
-                fileName={gitPanel.selectedFile}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'history' && (
-          <HistoryTab
-            entries={gitPanel.logEntries}
-            isLoading={gitPanel.isLoading}
+      {/* Scrollable sections */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* Against base branch */}
+        <CollapsibleSection
+          id="against"
+          title={`Against ${gitPanel.baseBranch}`}
+          count={gitPanel.branchDiff?.files.length}
+          defaultOpen
+        >
+          <BranchDiffFileList
+            files={gitPanel.branchDiff?.files ?? []}
+            onFileClick={openBranchFileDiff}
           />
-        )}
+        </CollapsibleSection>
 
-        {activeTab === 'stash' && (
+        {/* Staged */}
+        <CollapsibleSection
+          id="staged"
+          title="Staged"
+          count={stagedFiles.length}
+          countColor="text-green-400"
+          defaultOpen
+          actionIcon={<MinusIcon />}
+          onAction={() => Promise.all(stagedFiles.map(f => gitPanel.unstageFile(f.path)))}
+        >
+          <ChangesList
+            files={stagedFiles}
+            mode="staged"
+            onFileClick={openFileDiff}
+            onUnstageFile={gitPanel.unstageFile}
+          />
+        </CollapsibleSection>
+
+        {/* Unstaged */}
+        <CollapsibleSection
+          id="unstaged"
+          title="Unstaged"
+          count={unstagedFiles.length}
+          countColor="text-amber-400"
+          defaultOpen
+          actionIcon={<PlusIcon />}
+          onAction={gitPanel.stageAll}
+        >
+          <ChangesList
+            files={unstagedFiles}
+            mode="unstaged"
+            onFileClick={openFileDiff}
+            onStageFile={gitPanel.stageFile}
+            onDiscardFile={gitPanel.discardFile}
+          />
+        </CollapsibleSection>
+
+        {/* Commits */}
+        <CollapsibleSection
+          id="commits"
+          title="Commits"
+          count={gitPanel.logEntries.length}
+          defaultOpen={false}
+        >
+          <HistoryTab entries={gitPanel.logEntries} isLoading={gitPanel.isLoading} />
+        </CollapsibleSection>
+
+        {/* Stash */}
+        <CollapsibleSection
+          id="stash"
+          title="Stash"
+          count={gitPanel.stashEntries.length}
+          defaultOpen={false}
+          actionIcon={<StashIcon />}
+          onAction={() => setShowStashInput(prev => !prev)}
+        >
           <StashTab
             entries={gitPanel.stashEntries}
             isLoading={gitPanel.isLoading}
+            showSaveInput={showStashInput}
+            onSaveInputClose={() => setShowStashInput(false)}
             onSave={gitPanel.stashSave}
             onApply={gitPanel.stashApply}
             onPop={gitPanel.stashPop}
             onDrop={gitPanel.stashDrop}
           />
-        )}
+        </CollapsibleSection>
 
-        {activeTab === 'branches' && (
-          <BranchesTab
-            branches={gitPanel.branches}
-            currentBranch={gitPanel.currentBranch}
-            isLoading={gitPanel.isLoading}
-            onCheckout={gitPanel.checkoutBranch}
-            onDelete={gitPanel.deleteBranch}
-            onMerge={gitPanel.mergeBranch}
-          />
-        )}
-
-        {activeTab === 'issues' && projectPath && (
+        {/* Issues */}
+        <CollapsibleSection id="issues" title="Issues" defaultOpen={false}>
           <IssuesTab projectPath={projectPath} />
-        )}
+        </CollapsibleSection>
 
-        {activeTab === 'prs' && projectPath && (
+        {/* Pull Requests */}
+        <CollapsibleSection id="prs" title="Pull Requests" defaultOpen={false}>
           <PRsTab projectPath={projectPath} />
-        )}
+        </CollapsibleSection>
       </div>
+
+      {/* Diff modal overlay */}
+      <DiffModal
+        isOpen={!!diffModal}
+        onClose={() => setDiffModal(null)}
+        fileName={diffModal?.fileName ?? null}
+        fileStatus={diffModal?.fileStatus}
+        additions={diffModal?.additions}
+        deletions={diffModal?.deletions}
+        diff={diffModal?.diff ?? null}
+        staged={diffModal?.staged}
+      />
     </div>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+    </svg>
+  )
+}
+
+function MinusIcon() {
+  return (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+    </svg>
+  )
+}
+
+function StashIcon() {
+  return (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+    </svg>
   )
 }
