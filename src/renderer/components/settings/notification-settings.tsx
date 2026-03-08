@@ -73,7 +73,7 @@ export function NotificationSettings() {
           <select
             value={settings.outputMode}
             onChange={(e) => updateSettings({ outputMode: e.target.value as OutputMode })}
-            className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px]"
+            className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px] text-[var(--mc-text-primary)]"
           >
             <option value="auto">Auto (Recommended)</option>
             <option value="stream-json">JSON Stream</option>
@@ -104,7 +104,7 @@ export function NotificationSettings() {
               <select
                 value={settings.soundPreset}
                 onChange={(e) => updateSettings({ soundPreset: e.target.value as SoundPreset })}
-                className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px]"
+                className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px] text-[var(--mc-text-primary)]"
               >
                 {SOUND_PRESETS.map((preset) => (
                   <option key={preset.id} value={preset.id}>{preset.name}</option>
@@ -141,7 +141,7 @@ export function NotificationSettings() {
             />
             <button
               onClick={() => setTelegramModalOpen(true)}
-              className="text-sm px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors"
+              className="text-sm px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors text-[var(--mc-text-primary)]"
             >
               Configure
             </button>
@@ -172,7 +172,7 @@ export function NotificationSettings() {
           />
           <button
             onClick={() => setDiscordModalOpen(true)}
-            className="text-sm px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors"
+            className="text-sm px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors text-[var(--mc-text-primary)]"
           >
             Configure
             </button>
@@ -215,16 +215,23 @@ function Toggle({
       role="switch"
       style={{ backgroundColor: checked ? 'var(--mc-accent)' : 'var(--mc-bg-tertiary)' }}
       className={`
-        relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 outline-none
+        relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 outline-none border-0
         focus-visible:ring-2 focus-visible:ring-[var(--mc-accent)] focus-visible:ring-offset-1
         ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
       `}
     >
       <span
-        className={`
-          absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
-          ${checked ? 'translate-x-5' : 'translate-x-0'}
-        `}
+        className="absolute rounded-full bg-white"
+        style={{
+          top: '50%',
+          left: '3px',
+          width: '18px',
+          height: '18px',
+          transform: checked ? 'translateY(-50%) translateX(20px)' : 'translateY(-50%)',
+          transition: 'transform 200ms',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+          pointerEvents: 'none'
+        }}
       />
     </button>
   )
