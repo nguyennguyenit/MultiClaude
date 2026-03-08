@@ -1,5 +1,6 @@
 import { useUpdateStore } from '../../stores'
 import { ToolbarButton } from './toolbar-button'
+import logoImg from '../../assets/logo.png'
 
 // Detect macOS for traffic light padding
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -48,8 +49,13 @@ export function Toolbar({
       {/* Drag region sits behind interactive elements */}
       <div className="toolbar-drag" />
 
-      {/* Left group: macOS traffic light padding */}
-      <div className="toolbar-group" style={{ paddingLeft: isMac ? 72 : 0 }} />
+      {/* Left group: macOS traffic light padding + branding */}
+      <div className="toolbar-group" style={{ paddingLeft: isMac ? 72 : 8 }}>
+        <div className="toolbar-brand">
+          <img src={logoImg} alt="MultiClaude" className="toolbar-brand-logo" />
+          <span className="toolbar-brand-name">MultiClaude</span>
+        </div>
+      </div>
 
       {/* Right group: panel toggles + update indicator + custom window controls */}
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>

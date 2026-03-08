@@ -9,6 +9,7 @@ import { StashTab } from '../git-panel/stash-tab'
 import { IssuesTab } from './issues-tab'
 import { PRsTab } from './prs-tab'
 import { CompactHeader } from './compact-header'
+import { GitHubAccountSection } from './github-account-section'
 import { BranchDiffFileList } from './branch-diff-file-list'
 import type { GitFileStatus, GitBranchDiffFile } from '@shared/types'
 
@@ -108,7 +109,7 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
       />
 
       {/* Quick actions toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-[3px] border-b border-[var(--mc-border)]/60 bg-[var(--mc-bg-secondary)]/20">
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--mc-border)]/60 bg-[var(--mc-bg-secondary)]/20">
         <ToolbarButton onClick={gitPanel.stageAll} title="Stage All"><PlusAllIcon /></ToolbarButton>
         <ToolbarButton onClick={() => Promise.all(stagedFiles.map(f => gitPanel.unstageFile(f.path)))} title="Unstage All"><MinusAllIcon /></ToolbarButton>
         <ToolbarButton onClick={handleFetch} title="Refresh"><RefreshIcon /></ToolbarButton>
@@ -209,6 +210,12 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
           />
         </CollapsibleSection>
       </div>
+
+      {/* GitHub Account: auth status, git identity, login/logout */}
+      <GitHubAccountSection
+        currentBranch={gitPanel.currentBranch}
+        hasRemote={gitPanel.gitStatus?.hasRemote ?? false}
+      />
 
       {/* Diff modal overlay */}
       <DiffModal

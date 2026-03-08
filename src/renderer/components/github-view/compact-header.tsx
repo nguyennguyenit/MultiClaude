@@ -27,7 +27,7 @@ export function CompactHeader({
   onPush
 }: CompactHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-2.5 h-8 border-b border-[var(--mc-border)] flex-shrink-0 gap-2">
+    <div className="flex items-center justify-between px-2.5 border-b border-[var(--mc-border)] flex-shrink-0 gap-2" style={{ height: 40, marginTop: 4 }}>
       {/* Branch selector */}
       <BranchSelector
         currentBranch={currentBranch}

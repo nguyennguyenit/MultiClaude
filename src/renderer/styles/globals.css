@@ -248,6 +248,31 @@ body {
   z-index: 1;
 }
 
+/* App branding: logo + name */
+.toolbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-brand-logo {
+  height: 18px;
+  width: auto;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.toolbar-brand-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  opacity: 0.7;
+  white-space: nowrap;
+  user-select: none;
+  letter-spacing: 0.2px;
+}
+
 .toolbar-btn {
   width: 28px;
   height: 28px;

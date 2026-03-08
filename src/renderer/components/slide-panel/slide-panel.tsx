@@ -4,11 +4,13 @@ interface SlidePanelProps {
   isOpen: boolean
   onClose: () => void
   title: string
+  /** Optional extra content rendered in the header, between the title and close button */
+  headerExtra?: React.ReactNode
   children: React.ReactNode
 }
 
 /** Generic slide panel that overlays from right (landscape) or bottom (portrait) */
-export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps) {
+export function SlidePanel({ isOpen, onClose, title, headerExtra, children }: SlidePanelProps) {
   const [isPortrait, setIsPortrait] = useState(
     () => typeof window !== 'undefined' && window.innerHeight > window.innerWidth
   )
@@ -40,6 +42,11 @@ export function SlidePanel({ isOpen, onClose, title, children }: SlidePanelProps
     >
       <div className="slide-panel-header">
         <span className="slide-panel-title">{title}</span>
+        {headerExtra && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+            {headerExtra}
+          </div>
+        )}
         <button className="slide-panel-close" onClick={onClose} title="Close (Esc)">
           ×
         </button>
