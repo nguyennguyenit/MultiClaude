@@ -8,7 +8,7 @@ export function ToastContainer() {
   return (
     <div style={{
       position: 'fixed',
-      top: '44px',
+      bottom: '16px',
       right: '12px',
       zIndex: 100,
       display: 'flex',
