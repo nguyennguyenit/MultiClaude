@@ -107,25 +107,37 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
         onCommitAndPush={handleCommitAndPush}
       />
 
+      {/* Quick actions toolbar */}
+      <div className="flex items-center gap-0.5 px-2 py-0.5 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)]/30">
+        <button
+          onClick={gitPanel.stageAll}
+          title="Stage All"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors"
+        >
+          <PlusAllIcon />
+        </button>
+        <button
+          onClick={() => Promise.all(stagedFiles.map(f => gitPanel.unstageFile(f.path)))}
+          title="Unstage All"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors"
+        >
+          <MinusAllIcon />
+        </button>
+        <button
+          onClick={handleFetch}
+          title="Refresh"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors"
+        >
+          <RefreshIcon />
+        </button>
+      </div>
+
       {/* Scrollable sections */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {/* Against base branch */}
-        <CollapsibleSection
-          id="against"
-          title={`Against ${gitPanel.baseBranch}`}
-          count={gitPanel.branchDiff?.files.length}
-          defaultOpen
-        >
-          <BranchDiffFileList
-            files={gitPanel.branchDiff?.files ?? []}
-            onFileClick={openBranchFileDiff}
-          />
-        </CollapsibleSection>
-
         {/* Staged */}
         <CollapsibleSection
           id="staged"
-          title="Staged"
+          title="Staged Changes"
           count={stagedFiles.length}
           countColor="text-green-400"
           defaultOpen
@@ -143,7 +155,7 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
         {/* Unstaged */}
         <CollapsibleSection
           id="unstaged"
-          title="Unstaged"
+          title="Changes"
           count={unstagedFiles.length}
           countColor="text-amber-400"
           defaultOpen
@@ -159,6 +171,19 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
           />
         </CollapsibleSection>
 
+        {/* Against base branch */}
+        <CollapsibleSection
+          id="against"
+          title={`Against ${gitPanel.baseBranch}`}
+          count={gitPanel.branchDiff?.files.length}
+          defaultOpen={false}
+        >
+          <BranchDiffFileList
+            files={gitPanel.branchDiff?.files ?? []}
+            onFileClick={openBranchFileDiff}
+          />
+        </CollapsibleSection>
+
         {/* Commits */}
         <CollapsibleSection
           id="commits"
@@ -167,6 +192,16 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
           defaultOpen={false}
         >
           <HistoryTab entries={gitPanel.logEntries} isLoading={gitPanel.isLoading} />
+        </CollapsibleSection>
+
+        {/* Issues */}
+        <CollapsibleSection id="issues" title="Issues" defaultOpen={false}>
+          <IssuesTab projectPath={projectPath} />
+        </CollapsibleSection>
+
+        {/* Pull Requests */}
+        <CollapsibleSection id="prs" title="Pull Requests" defaultOpen={false}>
+          <PRsTab projectPath={projectPath} />
         </CollapsibleSection>
 
         {/* Stash */}
@@ -188,16 +223,6 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
             onPop={gitPanel.stashPop}
             onDrop={gitPanel.stashDrop}
           />
-        </CollapsibleSection>
-
-        {/* Issues */}
-        <CollapsibleSection id="issues" title="Issues" defaultOpen={false}>
-          <IssuesTab projectPath={projectPath} />
-        </CollapsibleSection>
-
-        {/* Pull Requests */}
-        <CollapsibleSection id="prs" title="Pull Requests" defaultOpen={false}>
-          <PRsTab projectPath={projectPath} />
         </CollapsibleSection>
       </div>
 
@@ -228,6 +253,30 @@ function MinusIcon() {
   return (
     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+    </svg>
+  )
+}
+
+function PlusAllIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+    </svg>
+  )
+}
+
+function MinusAllIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+    </svg>
+  )
+}
+
+function RefreshIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
   )
 }
