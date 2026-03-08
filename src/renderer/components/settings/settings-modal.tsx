@@ -93,8 +93,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <button
             data-testid="settings-cancel-button"
             onClick={handleCancel}
-            className="rounded-lg text-base font-medium bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
-            style={{ padding: '10px 28px' }}
+            className="rounded-lg text-base font-semibold transition-all"
+            style={{ padding: '10px 28px', background: 'transparent', border: '2px solid var(--mc-text-secondary)', color: 'var(--mc-text-primary)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-primary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--mc-bg-hover)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
           >
             Cancel
           </button>
@@ -102,8 +104,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             data-testid="settings-save-button"
             onClick={handleSave}
             disabled={!hasUnsavedChanges || isSaving}
-            className="rounded-lg text-base font-medium hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '1px solid var(--mc-accent)' }}
+            className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
           >
             <SaveIcon />
             {isSaving ? 'Saving...' : 'Save Settings'}
@@ -179,8 +181,10 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
         <button
           data-testid="settings-cancel-button"
           onClick={handleCancel}
-          className="rounded-lg text-base font-medium bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
-          style={{ padding: '8px 20px' }}
+          className="rounded-lg text-base font-semibold transition-all"
+          style={{ padding: '8px 20px', background: 'transparent', border: '2px solid var(--mc-text-secondary)', color: 'var(--mc-text-primary)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-primary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--mc-bg-hover)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
         >
           Cancel
         </button>
@@ -188,8 +192,8 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
           data-testid="settings-save-button"
           onClick={handleSave}
           disabled={!hasUnsavedChanges || isSaving}
-          className="rounded-lg text-base font-medium hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ padding: '8px 20px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '1px solid var(--mc-accent)' }}
+          className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          style={{ padding: '8px 20px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
         >
           {isSaving ? 'Saving...' : 'Save Settings'}
         </button>

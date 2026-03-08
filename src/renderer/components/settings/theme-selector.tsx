@@ -47,11 +47,11 @@ export function ThemeSelector() {
                     />
                   ))}
                 </div>
-                <span style={{ fontSize: '13px', color: theme.foreground, fontWeight: 600 }}>
+                <span style={{ fontSize: '13px', color: theme.foreground, fontWeight: 600, fontFamily: 'inherit' }}>
                   {theme.name}
                 </span>
                 {isSelected && (
-                  <span style={{ fontSize: '11px', color: theme.accent, opacity: 0.9 }}>✓ active</span>
+                  <span style={{ fontSize: '11px', color: theme.accent, opacity: 0.9, fontFamily: 'inherit' }}>✓ active</span>
                 )}
               </button>
             )
