@@ -55,39 +55,45 @@ export function TelegramConfigModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[var(--mc-bg-secondary)] rounded-lg p-4 w-96 max-w-[90vw]">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-[var(--mc-text-primary)]">
-            Configure Telegram
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-[var(--mc-bg-hover)] rounded">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      <div className="rounded-xl w-[420px] max-w-[92vw] flex flex-col" style={{ background: 'var(--mc-bg-secondary)', border: '1px solid color-mix(in srgb, var(--mc-accent) 25%, var(--mc-border))', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--mc-border)' }}>
+          <h3 className="text-base font-semibold text-[var(--mc-text-primary)]">Configure Telegram</h3>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-7 h-7 rounded-md transition-colors hover:bg-[var(--mc-bg-hover)]"
+            style={{ border: 'none', background: 'transparent', color: 'var(--mc-text-muted)', cursor: 'pointer' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="space-y-3">
+        {/* Body */}
+        <div className="px-5 py-4 flex flex-col gap-4">
           <div>
-            <label className="text-xs text-[var(--mc-text-muted)] block mb-1">Bot Token</label>
+            <label className="text-xs font-medium text-[var(--mc-text-secondary)] block mb-1.5">Bot Token</label>
             <input
               type="password"
               value={botToken}
               onChange={(e) => setBotToken(e.target.value)}
               placeholder="123456:ABC-DEF..."
-              className="w-full px-2 py-1.5 text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
+              className="w-full px-3 py-2 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+              style={{ background: 'var(--mc-bg-primary)', border: '1px solid var(--mc-border)', color: 'var(--mc-text-primary)' }}
             />
           </div>
 
           <div>
-            <label className="text-xs text-[var(--mc-text-muted)] block mb-1">Chat ID</label>
+            <label className="text-xs font-medium text-[var(--mc-text-secondary)] block mb-1.5">Chat ID</label>
             <input
               type="text"
               value={chatId}
               onChange={(e) => setChatId(e.target.value)}
               placeholder="-1001234567890"
-              className="w-full px-2 py-1.5 text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
+              className="w-full px-3 py-2 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
+              style={{ background: 'var(--mc-bg-primary)', border: '1px solid var(--mc-border)', color: 'var(--mc-text-primary)' }}
             />
           </div>
 
@@ -95,23 +101,25 @@ export function TelegramConfigModal({
             href="https://core.telegram.org/bots#how-do-i-create-a-bot"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-[var(--mc-accent)] hover:underline block"
+            className="text-xs text-[var(--mc-accent)] hover:underline"
           >
             How to create a Telegram bot
           </a>
 
           {testResult && (
-            <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-              {testResult.success ? 'Test successful!' : testResult.error}
+            <div className={`text-xs px-3 py-2 rounded-md ${testResult.success ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+              {testResult.success ? '✓ Test successful!' : testResult.error}
             </div>
           )}
         </div>
 
-        <div className="flex gap-2 mt-4">
+        {/* Footer */}
+        <div className="flex items-center gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--mc-border)' }}>
           {isConfigured && (
             <button
               onClick={handleClear}
-              className="px-3 py-1.5 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+              className="px-3 py-1.5 text-sm rounded-md transition-colors hover:bg-red-500/20"
+              style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer' }}
             >
               Clear
             </button>
@@ -119,14 +127,16 @@ export function TelegramConfigModal({
           <button
             onClick={handleTest}
             disabled={!botToken || !chatId || testing}
-            className="px-3 py-1.5 text-xs bg-[var(--mc-bg-hover)] rounded hover:bg-[var(--mc-bg-active)] disabled:opacity-50"
+            className="px-4 py-1.5 text-sm rounded-md font-medium transition-all disabled:opacity-40"
+            style={{ background: 'var(--mc-bg-hover)', color: 'var(--mc-text-primary)', border: '1px solid var(--mc-border)', cursor: 'pointer' }}
           >
             {testing ? 'Testing...' : 'Test'}
           </button>
           <button
             onClick={handleSave}
             disabled={!botToken || !chatId}
-            className="px-3 py-1.5 text-xs bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] rounded hover:opacity-90 disabled:opacity-50 ml-auto"
+            className="px-4 py-1.5 text-sm rounded-md font-semibold transition-all disabled:opacity-40 ml-auto"
+            style={{ background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 40%, transparent)', cursor: 'pointer' }}
           >
             Save
           </button>
