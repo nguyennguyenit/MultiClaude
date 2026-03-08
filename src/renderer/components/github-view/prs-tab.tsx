@@ -59,11 +59,11 @@ export function PRsTab({ projectPath }: PRsTabProps) {
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-[var(--mc-border)]">
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-[var(--mc-border)]">
         <select
           value={filter}
           onChange={e => setFilter(e.target.value as typeof filter)}
-          className="bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-primary)] text-sm px-2 py-1 rounded border border-[var(--mc-border)]"
+          className="bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-primary)] text-[11px] px-1.5 py-0.5 rounded border border-[var(--mc-border)] outline-none"
         >
           <option value="open">Open</option>
           <option value="closed">Closed</option>
@@ -73,30 +73,45 @@ export function PRsTab({ projectPath }: PRsTabProps) {
         <button
           onClick={fetchPRs}
           disabled={loading}
-          className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded disabled:opacity-50"
+          style={{
+            padding: '4px',
+            borderRadius: 4,
+            background: 'transparent',
+            border: 'none',
+            color: 'inherit',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.5 : 1,
+            transition: 'background 0.15s ease'
+          }}
+          onMouseEnter={e => {
+            if (!loading) e.currentTarget.style.background = 'var(--mc-bg-hover, rgba(255,255,255,0.05))'
+          }}
+          onMouseLeave={e => {
+            if (!loading) e.currentTarget.style.background = 'transparent'
+          }}
           title="Refresh"
         >
-          <span className={loading ? 'animate-spin inline-block' : ''}>↻</span>
+          <span className={`text-[11px] ${loading ? 'animate-spin inline-block' : ''}`}>↻</span>
         </button>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-3 text-sm text-red-400 bg-red-900/20">
+        <div className="p-2 text-[11px] text-red-400 bg-red-900/20">
           {error}
         </div>
       )}
 
       {/* Loading state */}
       {loading && prs.length === 0 && (
-        <div className="flex-1 flex items-center justify-center text-[var(--mc-text-muted)]">
+        <div className="flex-1 flex items-center justify-center text-[11px] text-[var(--mc-text-muted)]">
           Loading pull requests...
         </div>
       )}
 
       {/* Empty state */}
       {!loading && !error && prs.length === 0 && (
-        <div className="flex-1 flex items-center justify-center text-[var(--mc-text-muted)]">
+        <div className="flex-1 flex items-center justify-center text-[11px] text-[var(--mc-text-muted)]">
           No pull requests found
         </div>
       )}
@@ -108,24 +123,24 @@ export function PRsTab({ projectPath }: PRsTabProps) {
           return (
             <div
               key={pr.number}
-              className="p-3 border-b border-[var(--mc-border)] hover:bg-[var(--mc-bg-hover)] cursor-pointer"
+              className="px-2.5 py-2 border-b border-[var(--mc-border)] hover:bg-[var(--mc-bg-hover)] cursor-pointer"
             >
               <div className="flex items-start gap-2">
-                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 mt-0.5 rounded ${
                   pr.state === 'merged'
                     ? 'bg-purple-600/20 text-purple-400'
                     : pr.state === 'open'
                     ? 'bg-green-600/20 text-green-400'
                     : 'bg-red-600/20 text-red-400'
                 }`}>
-                  {pr.state}
+                  {pr.state.toUpperCase()}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[var(--mc-text-muted)] text-sm">#{pr.number}</span>
-                    <span className="text-sm font-medium truncate">{pr.title}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[var(--mc-text-muted)] text-[10px]">#{pr.number}</span>
+                    <span className="text-[11px] font-medium truncate leading-tight">{pr.title}</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-[var(--mc-text-muted)]">
+                  <div className="flex items-center gap-1.5 mt-1 text-[10px] text-[var(--mc-text-muted)]">
                     <span>@{pr.author?.login || 'unknown'}</span>
                     <span>·</span>
                     <span>{formatRelativeTime(pr.createdAt)}</span>
@@ -138,7 +153,7 @@ export function PRsTab({ projectPath }: PRsTabProps) {
                     </span>
                   </div>
                   <div className="mt-1.5">
-                    <span className="text-xs bg-[var(--mc-bg-tertiary)] px-2 py-0.5 rounded font-mono">
+                    <span className="text-[9px] bg-[var(--mc-bg-tertiary)] px-1.5 py-0.5 rounded font-mono">
                       {pr.headRefName}
                     </span>
                   </div>

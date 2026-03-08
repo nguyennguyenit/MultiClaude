@@ -85,45 +85,97 @@ export function StashTab({
             <div
               key={entry.index}
               className="px-3 py-2 border-b border-[var(--mc-border)] hover:bg-[var(--mc-bg-hover)]"
+              onMouseEnter={e => {
+                const actions = e.currentTarget.querySelector('.stash-actions') as HTMLElement | null;
+                if (actions) actions.style.opacity = '1';
+              }}
+              onMouseLeave={e => {
+                const actions = e.currentTarget.querySelector('.stash-actions') as HTMLElement | null;
+                if (actions) actions.style.opacity = '0';
+              }}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">
-                    stash@{'{' + entry.index + '}'}: {entry.message}
-                  </p>
-                  <p className="text-[10px] text-[var(--mc-text-muted)] mt-0.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-[var(--mc-text-muted)] font-mono">
+                      stash@&#123;{entry.index}&#125;:
+                    </span>
+                    <span className="text-[11px] truncate" title={entry.message}>
+                      {entry.message}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[var(--mc-text-muted)] mt-1">
                     {formatDate(entry.date)}
-                  </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onApply(entry.index)}
-                    title="Apply"
-                    className="p-1 hover:bg-[var(--mc-bg-active)] rounded text-blue-400"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => onPop(entry.index)}
-                    title="Pop"
-                    className="p-1 hover:bg-[var(--mc-bg-active)] rounded text-green-400"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => onDrop(entry.index)}
-                    title="Drop"
-                    className="p-1 hover:bg-[var(--mc-bg-active)] rounded text-red-400"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                <div className="stash-actions flex items-center shrink-0" style={{ opacity: 0, transition: 'opacity 0.15s ease' }}>
+                  {onApply && (
+                    <button
+                      onClick={() => onApply(entry.index)}
+                      title="Apply"
+                      style={{
+                        padding: 4,
+                        borderRadius: 4,
+                        background: 'transparent',
+                        border: 'none',
+                        boxShadow: 'none',
+                        color: '#60a5fa', // text-blue-400
+                        cursor: 'pointer',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  )}
+                  {onPop && (
+                    <button
+                      onClick={() => onPop(entry.index)}
+                      title="Pop"
+                      style={{
+                        padding: 4,
+                        borderRadius: 4,
+                        background: 'transparent',
+                        border: 'none',
+                        boxShadow: 'none',
+                        color: '#4ade80', // text-green-400
+                        cursor: 'pointer',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      </svg>
+                    </button>
+                  )}
+                  {onDrop && (
+                    <button
+                      onClick={() => onDrop(entry.index)}
+                      title="Drop"
+                      style={{
+                        padding: 4,
+                        borderRadius: 4,
+                        background: 'transparent',
+                        border: 'none',
+                        boxShadow: 'none',
+                        color: '#f87171', // text-red-400
+                        cursor: 'pointer',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

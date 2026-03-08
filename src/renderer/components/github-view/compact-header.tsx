@@ -27,7 +27,7 @@ export function CompactHeader({
   onPush
 }: CompactHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-2.5 h-8 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)] flex-shrink-0 gap-2">
+    <div className="flex items-center justify-between px-2.5 h-8 border-b border-[var(--mc-border)] flex-shrink-0 gap-2">
       {/* Branch selector */}
       <BranchSelector
         currentBranch={currentBranch}
@@ -79,7 +79,35 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="w-6 h-6 flex items-center justify-center rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors disabled:opacity-30"
+      style={{
+        width: 24,
+        height: 24,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 4,
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'transparent',
+        color: 'var(--mc-text-secondary, #8b949e)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'all 0.15s ease',
+        padding: 0,
+      }}
+      onMouseEnter={e => {
+        if (!disabled) {
+          e.currentTarget.style.color = 'var(--mc-accent, #58a6ff)'
+          e.currentTarget.style.background = 'var(--mc-bg-hover, rgba(255,255,255,0.05))'
+          e.currentTarget.style.borderColor = 'rgba(88, 166, 255, 0.4)'
+        }
+      }}
+      onMouseLeave={e => {
+        if (!disabled) {
+          e.currentTarget.style.color = 'var(--mc-text-secondary, #8b949e)'
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+        }
+      }}
     >
       {children}
     </button>

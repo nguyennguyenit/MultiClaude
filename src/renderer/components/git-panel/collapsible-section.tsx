@@ -7,6 +7,7 @@ interface CollapsibleSectionProps {
   defaultOpen?: boolean
   icon?: React.ReactNode
   actionIcon?: React.ReactNode
+  actionTitle?: string
   onAction?: () => void
   countColor?: string
   children: React.ReactNode
@@ -19,6 +20,7 @@ export function CollapsibleSection({
   defaultOpen = true,
   icon,
   actionIcon,
+  actionTitle,
   onAction,
   countColor,
   children
@@ -82,10 +84,34 @@ export function CollapsibleSection({
         </div>
 
         {/* Action button — appears on hover */}
-        {actionIcon && onAction && (
+        {actionTitle && actionIcon && onAction && (
           <button
+            title={actionTitle}
             onClick={(e) => { e.stopPropagation(); onAction() }}
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors flex-shrink-0 opacity-0 group-hover/section:opacity-100"
+            style={{
+              width: 20,
+              height: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 4,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--mc-text-muted)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              padding: 0,
+              flexShrink: 0
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--mc-accent, #58a6ff)'
+              e.currentTarget.style.background = 'var(--mc-bg-tertiary, rgba(255,255,255,0.05))'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--mc-text-muted)'
+              e.currentTarget.style.background = 'transparent'
+            }}
+            className="opacity-0 group-hover/section:opacity-100"
           >
             {actionIcon}
           </button>

@@ -108,7 +108,7 @@ function FileItem({ file, mode, onFileClick, onStageFile, onUnstageFile, onDisca
           <ActionButton
             onClick={(e) => { e.stopPropagation(); onUnstageFile(file.path) }}
             title="Unstage"
-            variant="default"
+            variant="warning"
           >
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -159,20 +159,66 @@ function ActionButton({
 }: {
   onClick: (e: React.MouseEvent) => void
   title: string
-  variant: 'default' | 'danger' | 'success'
+  variant: 'default' | 'danger' | 'success' | 'warning'
   children: React.ReactNode
 }) {
-  const variantClass = {
-    default: 'text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-tertiary)]',
-    danger: 'text-red-500/60 hover:text-red-400 hover:bg-red-900/20',
-    success: 'text-[var(--mc-text-muted)] hover:text-green-400 hover:bg-green-900/15',
-  }[variant]
+  const getColors = () => {
+    switch(variant) {
+      case 'danger':
+        return {
+          color: 'rgba(248, 113, 113, 0.6)', // text-red-500/60
+          hoverColor: '#f87171', // text-red-400
+          hoverBg: 'rgba(127, 29, 29, 0.2)', // bg-red-900/20
+        }
+      case 'success':
+        return {
+          color: 'var(--mc-text-muted)',
+          hoverColor: '#4ade80', // text-green-400
+          hoverBg: 'rgba(20, 83, 45, 0.15)', // bg-green-900/15
+        }
+      case 'warning':
+        return {
+          color: 'var(--mc-text-muted)',
+          hoverColor: '#fbbf24', // text-amber-400
+          hoverBg: 'rgba(180, 83, 9, 0.15)', // amber background
+        }
+      default:
+        return {
+          color: 'var(--mc-text-muted)',
+          hoverColor: 'var(--mc-text-primary)',
+          hoverBg: 'var(--mc-bg-tertiary)',
+        }
+    }
+  }
+
+  const colors = getColors()
 
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${variantClass}`}
+      style={{
+        width: 16,
+        height: 16,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 4,
+        background: 'transparent',
+        border: 'none',
+        color: colors.color,
+        cursor: 'pointer',
+        transition: 'all 0.15s ease',
+        padding: 0,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.color = colors.hoverColor
+        e.currentTarget.style.background = colors.hoverBg
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.color = colors.color
+        e.currentTarget.style.background = 'transparent'
+      }}
     >
       {children}
     </button>

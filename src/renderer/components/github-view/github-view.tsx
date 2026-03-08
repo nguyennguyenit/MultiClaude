@@ -124,6 +124,7 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
           countColor="text-green-400"
           defaultOpen
           actionIcon={<MinusIcon />}
+          actionTitle="Unstage All"
           onAction={() => Promise.all(stagedFiles.map(f => gitPanel.unstageFile(f.path)))}
         >
           <ChangesList
@@ -142,6 +143,7 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
           countColor="text-amber-400"
           defaultOpen
           actionIcon={<PlusIcon />}
+          actionTitle="Stage All"
           onAction={gitPanel.stageAll}
         >
           <ChangesList
@@ -268,7 +270,30 @@ function ToolbarButton({ onClick, title, children }: { onClick: () => void; titl
     <button
       onClick={onClick}
       title={title}
-      className="w-6 h-6 flex items-center justify-center rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors"
+      style={{
+        width: 24,
+        height: 24,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 4,
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'transparent',
+        color: 'var(--mc-text-secondary, #8b949e)',
+        cursor: 'pointer',
+        transition: 'all 0.15s ease',
+        padding: 0,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.color = 'var(--mc-accent, #58a6ff)'
+        e.currentTarget.style.background = 'var(--mc-bg-hover, rgba(255,255,255,0.05))'
+        e.currentTarget.style.borderColor = 'rgba(88, 166, 255, 0.4)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.color = 'var(--mc-text-secondary, #8b949e)'
+        e.currentTarget.style.background = 'transparent'
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+      }}
     >
       {children}
     </button>

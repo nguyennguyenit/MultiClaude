@@ -13,12 +13,12 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
   const dropdownRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-expand textarea based on content (max ~4 rows)
+  // Auto-expand textarea based on content (max ~8 rows)
   const adjustTextareaHeight = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 64) + 'px'
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px'
   }, [])
 
   // Close dropdown on outside click
@@ -102,10 +102,10 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
         onChange={handleMessageChange}
         onKeyDown={handleKeyDown}
         placeholder="Commit message..."
-        rows={1}
+        rows={3}
         style={{
           width: '100%',
-          padding: '2px 8px',
+          padding: '6px 8px',
           fontSize: 11,
           lineHeight: 1.625,
           background: 'var(--mc-bg-primary)',
@@ -116,7 +116,7 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
           color: 'inherit',
           fontFamily: 'inherit',
           marginBottom: 6,
-          minHeight: 24,
+          minHeight: 64,
           overflow: 'hidden',
         }}
         disabled={isCommitting}
@@ -133,9 +133,9 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
-            padding: '2px 12px',
-            fontSize: 10,
+            gap: 8,
+            padding: '6px 16px',
+            fontSize: 12,
             fontWeight: 600,
             borderRadius: '6px 0 0 6px',
             transition: 'all 0.15s ease',
@@ -159,12 +159,12 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
           }}
         >
           {isCommitting ? (
-            <svg className="animate-spin" style={{ width: 10, height: 10 }} fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin" style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24">
               <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           ) : (
-            <svg style={{ width: 10, height: 10 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
           )}
@@ -180,7 +180,7 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '0 6px',
+              padding: '0 10px',
               borderRadius: '0 6px 6px 0',
               transition: 'all 0.15s ease',
               border: '1px solid',
@@ -202,7 +202,7 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
             }}
             title="More commit options"
           >
-            <svg style={{ width: 10, height: 10 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
