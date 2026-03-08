@@ -45,7 +45,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 top-10 z-50">
+    <div className="fixed inset-0 top-10 z-50 flex items-center justify-center">
       {/* Backdrop - dark mode: black 80%, light mode: white 80% - starts below titlebar */}
       <div
         data-testid="settings-backdrop"
@@ -55,22 +55,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         aria-hidden="true"
       />
 
-      {/* Modal - absolute inset so size is truly fixed regardless of content */}
-      <div data-testid="settings-modal" className="absolute bg-[var(--mc-bg-primary)] rounded-lg shadow-xl flex flex-col overflow-hidden" style={{ inset: '16px', border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))' }}>
+      {/* Modal - centered with max dimensions */}
+      <div data-testid="settings-modal" className="relative bg-[var(--mc-bg-primary)] shadow-xl flex flex-col overflow-hidden rounded-xl" style={{ border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))', width: 'calc(100% - 80px)', height: 'calc(100% - 60px)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
+        <div className="flex items-center justify-between" style={{ padding: '25px 40px 25px 32px', borderBottom: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
               <span style={{ color: 'var(--mc-accent)' }}><SettingsIcon /></span>
               Settings
             </h2>
-            <p className="text-sm" style={{ color: 'var(--mc-accent)', opacity: 0.7 }}>App Settings</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--mc-accent)', opacity: 0.7 }}>App Settings & Project Settings</p>
           </div>
           <button
             data-testid="settings-close-button"
             onClick={handleCancel}
-            className="p-1.5 rounded transition-colors"
-            style={{ color: 'var(--mc-accent)' }}
+            className="p-1.5 rounded transition-colors hover:bg-[var(--mc-bg-hover)]"
+            style={{ color: 'var(--mc-accent)', border: 'none', background: 'transparent', cursor: 'pointer' }}
             title="Close"
           >
             <CloseIcon />
@@ -80,7 +80,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
           <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-          <div className="flex-1 p-4 overflow-auto">
+          <div className="flex-1 overflow-y-scroll text-left" style={{ padding: '32px 40px', scrollbarGutter: 'stable' }}>
             {activeTab === 'appearance' && <ThemeSelector />}
             {activeTab === 'terminals' && <TerminalSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
@@ -89,11 +89,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 p-4" style={{ borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
+        <div className="flex justify-end gap-4" style={{ padding: '25px 40px 25px 32px', borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <button
             data-testid="settings-cancel-button"
             onClick={handleCancel}
-            className="px-4 py-2 rounded text-sm bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
+            className="rounded-lg text-base font-medium bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
+            style={{ padding: '10px 28px' }}
           >
             Cancel
           </button>
@@ -101,7 +102,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             data-testid="settings-save-button"
             onClick={handleSave}
             disabled={!hasUnsavedChanges || isSaving}
-            className="px-4 py-2 rounded text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg text-base font-medium hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '1px solid var(--mc-accent)' }}
           >
             <SaveIcon />
             {isSaving ? 'Saving...' : 'Save Settings'}
@@ -165,7 +167,7 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 p-4 overflow-auto min-h-0">
+      <div className="flex-1 overflow-auto min-h-0" style={{ padding: '32px 40px' }}>
         {activeTab === 'appearance' && <ThemeSelector />}
         {activeTab === 'terminals' && <TerminalSettings />}
         {activeTab === 'notifications' && <NotificationSettings />}
@@ -173,12 +175,12 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
       </div>
 
       {/* Footer: save/cancel */}
-      <div className="flex justify-end gap-2 p-3 border-t border-[var(--mc-border)] flex-shrink-0">
+      <div className="flex justify-end gap-4 flex-shrink-0" style={{ padding: '16px 24px', borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
         <button
           data-testid="settings-cancel-button"
           onClick={handleCancel}
-          className="px-4 py-1.5 text-sm bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
-          style={{ border: '1px solid var(--border)', fontFamily: 'inherit', cursor: 'pointer' }}
+          className="rounded-lg text-base font-medium bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
+          style={{ padding: '8px 20px' }}
         >
           Cancel
         </button>
@@ -186,8 +188,8 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
           data-testid="settings-save-button"
           onClick={handleSave}
           disabled={!hasUnsavedChanges || isSaving}
-          className="px-4 py-1.5 text-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: 'var(--accent)', color: 'var(--bg-primary)', border: 'none', fontFamily: 'inherit', cursor: 'pointer' }}
+          className="rounded-lg text-base font-medium hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ padding: '8px 20px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '1px solid var(--mc-accent)' }}
         >
           {isSaving ? 'Saving...' : 'Save Settings'}
         </button>

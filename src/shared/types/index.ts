@@ -175,6 +175,8 @@ export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 export type UiStyle = 'modern' | 'terminal'
 export type TerminalColorPreset = 'green' | 'blue' | 'white'
 export type TerminalFontId = 'system' | 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
+// App/UI font (non-terminal) - sans-serif fonts for the main interface
+export type AppFontId = 'system' | 'inter' | 'geist' | 'plus-jakarta-sans' | 'roboto' | 'ubuntu' | 'segoe-ui'
 
 export interface TerminalStyleOptions {
   colorPreset: TerminalColorPreset
@@ -234,8 +236,8 @@ export interface AppSettings {
   windowsShell?: WindowsShell
   // Legacy fields - kept optional for backward compat with saved settings + hook
   themeMode?: ThemeMode
-  // Modern style font family
-  modernFontFamily?: TerminalFontId
+  // Main app/UI font family (non-terminal)
+  modernFontFamily?: AppFontId
   // Legacy: UI style (terminal/modern toggle - removed in VibeTerminal reskin)
   uiStyle?: UiStyle
   terminalStyleOptions?: TerminalStyleOptions

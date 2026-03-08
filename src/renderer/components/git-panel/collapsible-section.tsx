@@ -25,7 +25,6 @@ export function CollapsibleSection({
 }: CollapsibleSectionProps) {
   const storageKey = `git-panel-section-${id}`
 
-  // Initialize from localStorage or defaultOpen
   const [isOpen, setIsOpen] = useState(() => {
     try {
       const stored = localStorage.getItem(storageKey)
@@ -35,7 +34,6 @@ export function CollapsibleSection({
     }
   })
 
-  // Persist state to localStorage
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, String(isOpen))
@@ -47,49 +45,54 @@ export function CollapsibleSection({
   const toggleOpen = () => setIsOpen(prev => !prev)
 
   return (
-    <div className="group border-b border-[var(--mc-border)]">
+    <div className="group/section border-b border-[var(--mc-border)]/60">
       {/* Section header */}
       <div
-        className={`flex items-center justify-between px-2 py-0.5 cursor-pointer select-none hover:bg-[var(--mc-bg-hover)] transition-colors border-l-2 ${isOpen ? 'border-l-[var(--mc-accent)]' : 'border-l-transparent'}`}
+        className="flex items-center justify-between px-2.5 py-1 cursor-pointer select-none hover:bg-[var(--mc-bg-hover)]/50 transition-colors"
         onClick={toggleOpen}
       >
         <div className="flex items-center gap-1.5 min-w-0">
           {/* Chevron */}
           <svg
-            className={`w-3 h-3 text-[var(--mc-text-muted)] transition-transform flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`}
-            style={{ width: 12, height: 12 }}
+            className={`w-2.5 h-2.5 text-[var(--mc-text-muted)] transition-transform duration-150 flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
           </svg>
 
-          {icon && <span className="flex-shrink-0">{icon}</span>}
+          {icon && <span className="flex-shrink-0 text-[var(--mc-text-muted)]">{icon}</span>}
 
-          <span className="text-[11px] font-semibold text-[var(--mc-text-secondary)] truncate uppercase tracking-wider">
+          <span className="text-[10.5px] font-semibold text-[var(--mc-text-muted)] truncate uppercase tracking-widest">
             {title}
           </span>
 
           {count !== undefined && (
-            <span className={`text-[10px] font-medium px-1 py-0 rounded bg-[var(--mc-bg-tertiary)] flex-shrink-0 ${countColor || 'text-[var(--mc-text-muted)]'}`}>
+            <span className={`
+              text-[10px] font-semibold px-1.5 py-0 rounded-full leading-[16px] flex-shrink-0
+              ${countColor
+                ? `${countColor} bg-current/10`
+                : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-tertiary)]'
+              }
+            `}>
               {count}
             </span>
           )}
         </div>
 
-        {/* Action button — show only on hover */}
+        {/* Action button — appears on hover */}
         {actionIcon && onAction && (
           <button
             onClick={(e) => { e.stopPropagation(); onAction() }}
-            className="w-4 h-4 flex items-center justify-center rounded hover:bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-[var(--mc-bg-tertiary)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors flex-shrink-0 opacity-0 group-hover/section:opacity-100"
           >
             {actionIcon}
           </button>
         )}
       </div>
 
-      {/* Collapsible content using grid trick for smooth animation */}
+      {/* Collapsible content with smooth animation */}
       <div
         className="grid transition-all duration-200 ease-in-out"
         style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}

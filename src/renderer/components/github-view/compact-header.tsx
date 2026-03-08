@@ -27,7 +27,7 @@ export function CompactHeader({
   onPush
 }: CompactHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-3 h-9 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)] flex-shrink-0">
+    <div className="flex items-center justify-between px-2.5 h-8 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)] flex-shrink-0 gap-2">
       {/* Branch selector */}
       <BranchSelector
         currentBranch={currentBranch}
@@ -39,8 +39,9 @@ export function CompactHeader({
 
       {/* Remote action icons */}
       {hasRemote && (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <IconButton onClick={onFetch} disabled={syncing} title="Fetch">
+            {/* Download/fetch icon */}
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
@@ -78,7 +79,7 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="w-6 h-6 flex items-center justify-center rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-tertiary)] transition-colors disabled:opacity-40"
+      className="w-6 h-6 flex items-center justify-center rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors disabled:opacity-30"
     >
       {children}
     </button>

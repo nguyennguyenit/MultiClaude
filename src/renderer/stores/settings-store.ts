@@ -1,7 +1,15 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, ActivityBarState } from '@shared/types'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, AppFontId, ActivityBarState } from '@shared/types'
+import { DEFAULT_SETTINGS, APP_FONTS } from '@shared/constants'
 import { useToastStore } from './toast-store'
+
+/** Apply app/UI font immediately to DOM (both CSS variable and body inline style) */
+function applyAppFont(fontId: AppFontId): void {
+  const font = APP_FONTS.find(f => f.id === fontId)
+  if (!font) return
+  document.documentElement.style.setProperty('--modern-font', font.family)
+  document.body.style.fontFamily = font.family
+}
 
 /**
  * Settings store for app-wide preferences with explicit Save/Cancel flow.
@@ -46,7 +54,7 @@ interface SettingsState {
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setWindowsShell: (shell: WindowsShell) => void
   setUiStyle: (style: UiStyle) => void
-  setModernFontFamily: (fontId: TerminalFontId) => void
+  setModernFontFamily: (fontId: AppFontId) => void
   setTerminalFontFamily: (fontId: TerminalFontId) => void
   setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
   setActivityBarState: (state: ActivityBarState) => void
@@ -185,6 +193,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
     })
+    // Apply immediately to DOM so preview is instant and independent of React render cycle
+    applyAppFont(fontId)
   },
 
   setTerminalFontFamily: (fontId) => {
@@ -247,12 +257,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     try {
       const settings = await window.electron.settings.get()
-      console.log('[settings] Loaded from disk:', settings)
       set({
         savedSettings: settings,
         pendingSettings: settings,
         hasUnsavedChanges: false
       })
+
+      // Apply saved app font to DOM on initial load
+      if (settings.modernFontFamily) {
+        applyAppFont(settings.modernFontFamily)
+      }
 
       // One-time migration from localStorage (only try once per session)
       if (!migrationAttempted) {

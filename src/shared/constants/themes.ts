@@ -1,4 +1,4 @@
-import type { ColorThemeDefinition, AppSettings, TerminalColorPreset, TerminalFontId } from '../types'
+import type { ColorThemeDefinition, AppSettings, TerminalColorPreset, TerminalFontId, AppFontId } from '../types'
 
 // ============================================
 // VibeTerminal Theme System
@@ -143,6 +143,24 @@ export interface TerminalFontConfig {
   name: string
   family: string
 }
+
+// App/UI (non-terminal) font configuration
+export interface AppFontConfig {
+  id: AppFontId
+  name: string
+  family: string
+}
+
+// App/UI font options - sans-serif fonts for the main interface
+export const APP_FONTS: readonly AppFontConfig[] = [
+  { id: 'system', name: 'System Default', family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif" },
+  { id: 'inter', name: 'Inter', family: "'Inter', sans-serif" },
+  { id: 'geist', name: 'Geist', family: "'Geist', sans-serif" },
+  { id: 'plus-jakarta-sans', name: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans', sans-serif" },
+  { id: 'roboto', name: 'Roboto', family: "'Roboto', sans-serif" },
+  { id: 'ubuntu', name: 'Ubuntu', family: "'Ubuntu', sans-serif" },
+  { id: 'segoe-ui', name: 'Segoe UI', family: "'Segoe UI', sans-serif" },
+] as const
 
 // Terminal UI font options
 export const TERMINAL_FONTS: readonly TerminalFontConfig[] = [

@@ -9,7 +9,7 @@ import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { THEMES, TERMINAL_FONTS } from '@shared/constants'
+import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
 import type { WindowsShell, Project } from '@shared/types'
 
 function App() {
@@ -309,7 +309,16 @@ function App() {
     if (termFont) {
       root.style.setProperty('--terminal-font', `${termFont.family}, Menlo, Monaco, Consolas, monospace`)
     }
-  }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily])
+
+    // Set app/UI font from settings - apply to both CSS variable and directly to body
+    // to ensure all elements (including fixed-position modals) pick up the change
+    const appFontId = pendingSettings.modernFontFamily ?? 'system'
+    const appFont = APP_FONTS.find(f => f.id === appFontId)
+    if (appFont) {
+      root.style.setProperty('--modern-font', appFont.family)
+      document.body.style.fontFamily = appFont.family
+    }
+  }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily, pendingSettings.modernFontFamily])
 
   // Load saved projects on mount and validate folder existence
   useEffect(() => {

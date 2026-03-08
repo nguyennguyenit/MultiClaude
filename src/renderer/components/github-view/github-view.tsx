@@ -108,28 +108,10 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
       />
 
       {/* Quick actions toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-0.5 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)]/30">
-        <button
-          onClick={gitPanel.stageAll}
-          title="Stage All"
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors"
-        >
-          <PlusAllIcon />
-        </button>
-        <button
-          onClick={() => Promise.all(stagedFiles.map(f => gitPanel.unstageFile(f.path)))}
-          title="Unstage All"
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors"
-        >
-          <MinusAllIcon />
-        </button>
-        <button
-          onClick={handleFetch}
-          title="Refresh"
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--mc-bg-hover)] text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] transition-colors"
-        >
-          <RefreshIcon />
-        </button>
+      <div className="flex items-center gap-0.5 px-2 py-[3px] border-b border-[var(--mc-border)]/60 bg-[var(--mc-bg-secondary)]/20">
+        <ToolbarButton onClick={gitPanel.stageAll} title="Stage All"><PlusAllIcon /></ToolbarButton>
+        <ToolbarButton onClick={() => Promise.all(stagedFiles.map(f => gitPanel.unstageFile(f.path)))} title="Unstage All"><MinusAllIcon /></ToolbarButton>
+        <ToolbarButton onClick={handleFetch} title="Refresh"><RefreshIcon /></ToolbarButton>
       </div>
 
       {/* Scrollable sections */}
@@ -278,6 +260,18 @@ function RefreshIcon() {
     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
+  )
+}
+
+function ToolbarButton({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="w-6 h-6 flex items-center justify-center rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors"
+    >
+      {children}
+    </button>
   )
 }
 

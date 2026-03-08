@@ -18,7 +18,7 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 72) + 'px'
+    el.style.height = Math.min(el.scrollHeight, 64) + 'px'
   }, [])
 
   // Close dropdown on outside click
@@ -66,16 +66,36 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
     }
   }
 
-  const buttonBase = `
-    flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all
-    ${canCommit
-      ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90'
-      : 'bg-[var(--mc-bg-secondary)] text-[var(--mc-text-muted)] opacity-50 cursor-not-allowed'
-    }
-  `
-
   return (
-    <div className="px-3 py-1.5 border-b border-[var(--mc-border)] bg-[var(--mc-bg-secondary)]/50">
+    <div style={{
+      padding: '6px 10px',
+      borderBottom: '1px solid var(--mc-border)',
+      flexShrink: 0,
+    }}>
+      {/* Staged file count hint */}
+      {stagedCount > 0 && (
+        <div className="flex items-center gap-1 mb-1">
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontSize: 10,
+            fontWeight: 500,
+            background: 'rgba(34,197,94,0.15)',
+            color: '#4ade80',
+            border: '1px solid rgba(34,197,94,0.2)',
+          }}>
+            <svg style={{ width: 10, height: 10 }} fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            {stagedCount} staged
+          </span>
+        </div>
+      )}
+
+      {/* Commit message textarea */}
       <textarea
         ref={textareaRef}
         value={message}
@@ -83,30 +103,72 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
         onKeyDown={handleKeyDown}
         placeholder="Commit message..."
         rows={1}
-        style={{ minHeight: 24, overflow: 'hidden' }}
-        className="w-full px-2 py-1 text-[11px] bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded resize-none focus:outline-none focus:border-[var(--mc-accent)] placeholder-[var(--mc-text-muted)] mb-1.5"
+        style={{
+          width: '100%',
+          padding: '2px 8px',
+          fontSize: 11,
+          lineHeight: 1.625,
+          background: 'var(--mc-bg-primary)',
+          border: '1px solid var(--mc-border)',
+          borderRadius: 6,
+          resize: 'none',
+          outline: 'none',
+          color: 'inherit',
+          fontFamily: 'inherit',
+          marginBottom: 6,
+          minHeight: 24,
+          overflow: 'hidden',
+        }}
         disabled={isCommitting}
       />
 
-      {/* Split commit button */}
+      {/* Commit button row */}
       <div className="relative flex" ref={dropdownRef}>
         {/* Main commit button */}
         <button
           onClick={handleCommit}
           disabled={!canCommit}
-          className={`${buttonBase} flex-1 rounded-l`}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            padding: '2px 12px',
+            fontSize: 10,
+            fontWeight: 600,
+            borderRadius: '6px 0 0 6px',
+            transition: 'all 0.15s ease',
+            border: '1px solid',
+            borderRight: 'none',
+            cursor: canCommit ? 'pointer' : 'not-allowed',
+            ...(canCommit
+              ? {
+                  background: 'var(--mc-accent)',
+                  color: 'var(--mc-bg-primary)',
+                  borderColor: 'transparent',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                }
+              : {
+                  background: 'var(--mc-bg-secondary)',
+                  color: 'var(--mc-text-muted)',
+                  opacity: 0.4,
+                  borderColor: 'var(--mc-border)',
+                }
+            ),
+          }}
         >
           {isCommitting ? (
-            <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            <svg className="animate-spin" style={{ width: 10, height: 10 }} fill="none" viewBox="0 0 24 24">
+              <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           ) : (
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <svg style={{ width: 10, height: 10 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
           )}
-          Commit {stagedCount > 0 ? `(${stagedCount})` : ''}
+          {isCommitting ? 'Committing…' : 'Commit'}
         </button>
 
         {/* Dropdown chevron */}
@@ -114,10 +176,33 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
           <button
             onClick={() => canCommit && setDropdownOpen(prev => !prev)}
             disabled={!canCommit}
-            className={`${buttonBase} px-2 border-l border-[var(--mc-bg-primary)]/30 rounded-r`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 6px',
+              borderRadius: '0 6px 6px 0',
+              transition: 'all 0.15s ease',
+              border: '1px solid',
+              cursor: canCommit ? 'pointer' : 'not-allowed',
+              ...(canCommit
+                ? {
+                    background: 'var(--mc-accent)',
+                    color: 'var(--mc-bg-primary)',
+                    borderColor: 'transparent',
+                    borderLeft: '1px solid rgba(255,255,255,0.2)',
+                  }
+                : {
+                    background: 'var(--mc-bg-secondary)',
+                    color: 'var(--mc-text-muted)',
+                    opacity: 0.4,
+                    borderColor: 'var(--mc-border)',
+                  }
+              ),
+            }}
             title="More commit options"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg style={{ width: 10, height: 10 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
@@ -125,15 +210,43 @@ export function CommitForm({ stagedCount, onCommit, onCommitAndPush }: CommitFor
 
         {/* Dropdown menu */}
         {dropdownOpen && (
-          <div className="absolute bottom-full right-0 mb-1 w-40 bg-[var(--mc-bg-secondary)] border border-[var(--mc-border)] rounded shadow-lg z-10">
+          <div style={{
+            position: 'absolute',
+            bottom: '100%',
+            right: 0,
+            marginBottom: 4,
+            width: 176,
+            background: 'var(--mc-bg-secondary)',
+            border: '1px solid var(--mc-border)',
+            borderRadius: 6,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            zIndex: 10,
+            overflow: 'hidden',
+          }}>
             <button
               onClick={handleCommitAndPush}
-              className="w-full px-3 py-2 text-xs text-left hover:bg-[var(--mc-bg-hover)] flex items-center gap-2"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                fontSize: 12,
+                textAlign: 'left',
+                background: 'transparent',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                transition: 'background 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--mc-bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg style={{ width: 12, height: 12, color: 'var(--mc-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
               </svg>
-              Commit &amp; Push
+              <span>Commit &amp; Push</span>
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--mc-text-muted)', fontFamily: 'var(--mc-terminal-font)' }}>⇧⌘↵</span>
             </button>
           </div>
         )}

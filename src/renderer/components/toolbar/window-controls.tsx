@@ -15,9 +15,9 @@ export function WindowControls() {
 
   return (
     <div className="window-controls">
-      <button 
-        type="button" 
-        className="window-control-btn window-control-minimize" 
+      <button
+        type="button"
+        className="window-control-btn window-control-minimize"
         onClick={handleMinimize}
         title="Minimize"
       >
@@ -25,10 +25,10 @@ export function WindowControls() {
           <line x1="2" y1="6" x2="10" y2="6" strokeLinecap="round" />
         </svg>
       </button>
-      
-      <button 
-        type="button" 
-        className="window-control-btn window-control-maximize" 
+
+      <button
+        type="button"
+        className="window-control-btn window-control-maximize"
         onClick={handleMaximize}
         title="Maximize"
       >
@@ -37,9 +37,9 @@ export function WindowControls() {
         </svg>
       </button>
 
-      <button 
-        type="button" 
-        className="window-control-btn window-control-close" 
+      <button
+        type="button"
+        className="window-control-btn window-control-close"
         onClick={handleClose}
         title="Close"
       >
