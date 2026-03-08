@@ -119,10 +119,10 @@ export function UpdateSettings() {
             onClick={checkForUpdates}
             disabled={status === 'checking' || status === 'downloading'}
             className={`
-              px-4 py-2 text-sm rounded-md flex items-center gap-2 transition-all border
+              px-4 py-2 text-sm rounded-md flex items-center gap-2 transition-all border bg-[var(--mc-bg-hover)]
               ${status === 'checking' || status === 'downloading'
                 ? 'border-[var(--mc-border)] text-[var(--mc-text-muted)] cursor-not-allowed'
-                : 'border-[var(--mc-border)] text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-hover)]'
+                : 'border-[var(--mc-border)] text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-active)]'
               }
             `}
           >
