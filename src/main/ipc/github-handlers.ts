@@ -10,6 +10,10 @@ const VALID_ISSUE_STATES = ['open', 'closed', 'all'] as const
 const VALID_PR_STATES = ['open', 'closed', 'merged', 'all'] as const
 
 export function registerGitHubHandlers(ipcMain: IpcMain) {
+  // Remove existing handlers to prevent duplicate registration on macOS reopen
+  ipcMain.removeHandler(IPC_CHANNELS.GITHUB_ISSUES_LIST)
+  ipcMain.removeHandler(IPC_CHANNELS.GITHUB_PRS_LIST)
+
   // List GitHub issues
   ipcMain.handle(IPC_CHANNELS.GITHUB_ISSUES_LIST, async (_, projectPath: string, state = 'open') => {
     // Validate state to prevent command injection

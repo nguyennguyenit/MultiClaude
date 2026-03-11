@@ -12,6 +12,8 @@ export function GitHubAccountSection({ currentBranch, hasRemote }: GitHubAccount
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [loggingIn, setLoggingIn] = useState(false)
+  const [deviceCode, setDeviceCode] = useState<string | null>(null)
+  const [loginError, setLoginError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(true)
 
   // Inline edit state
@@ -19,6 +21,7 @@ export function GitHubAccountSection({ currentBranch, hasRemote }: GitHubAccount
   const [editName, setEditName] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const nameInputRef = useRef<HTMLInputElement>(null)
 
@@ -56,12 +59,33 @@ export function GitHubAccountSection({ currentBranch, hasRemote }: GitHubAccount
 
   const handleLogin = async () => {
     setLoggingIn(true)
+    setLoginError(null)
+    setDeviceCode(null)
     try {
-      await window.electron.github.login()
-      await fetchAll()
-    } finally {
-      setLoggingIn(false)
+      const result = await window.electron.github.login() as { success: boolean; deviceCode?: string; verificationUri?: string; error?: string }
+      if (!result.success && result.error) {
+        setLoginError(result.error)
+      } else if (result.deviceCode) {
+        // Show device code while waiting for user to complete auth in browser
+        setDeviceCode(result.deviceCode)
+        // Poll until authenticated
+        const poll = setInterval(async () => {
+          const authRes = await window.electron.github.authStatus()
+          if (authRes.isAuthenticated) {
+            clearInterval(poll)
+            setDeviceCode(null)
+            setLoggingIn(false)
+            await fetchAll()
+          }
+        }, 3000)
+        return // keep loggingIn = true until poll succeeds
+      } else {
+        await fetchAll()
+      }
+    } catch {
+      setLoginError('Login failed')
     }
+    setLoggingIn(false)
   }
 
   const handleLogout = async () => {
@@ -75,12 +99,20 @@ export function GitHubAccountSection({ currentBranch, hasRemote }: GitHubAccount
     setEditingIdentity(true)
   }
 
-  const cancelEditIdentity = () => setEditingIdentity(false)
+  const cancelEditIdentity = () => {
+    setEditingIdentity(false)
+    setSaveError(null)
+  }
 
   const saveIdentity = async () => {
     setSaving(true)
+    setSaveError(null)
     try {
-      await window.electron.git.configSet({ userName: editName, userEmail: editEmail })
+      const result = await window.electron.git.configSet({ userName: editName, userEmail: editEmail })
+      if (!result.success) {
+        setSaveError(result.error ?? 'Failed to save')
+        return
+      }
       const configRes = await window.electron.git.configGet()
       setConfig(configRes)
       setEditingIdentity(false)
@@ -207,6 +239,48 @@ export function GitHubAccountSection({ currentBranch, hasRemote }: GitHubAccount
                   </div>
                 </div>
 
+                {deviceCode && (
+                  <div style={{
+                    background: 'rgba(88,166,255,0.08)',
+                    border: '1px solid rgba(88,166,255,0.3)',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}>
+                    <span style={{ fontSize: 10, color: 'var(--mc-text-muted, #6e7681)' }}>
+                      Enter this code in your browser:
+                    </span>
+                    <span style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: '0.15em',
+                      color: 'var(--mc-accent, #58a6ff)',
+                      fontFamily: 'monospace',
+                      textAlign: 'center',
+                    }}>
+                      {deviceCode}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--mc-text-muted, #6e7681)', textAlign: 'center' }}>
+                      Waiting for authorization…
+                    </span>
+                  </div>
+                )}
+
+                {loginError && (
+                  <div style={{
+                    fontSize: 10,
+                    color: '#f85149',
+                    background: 'rgba(248,81,73,0.1)',
+                    border: '1px solid rgba(248,81,73,0.3)',
+                    borderRadius: 4,
+                    padding: '4px 8px',
+                  }}>
+                    {loginError}
+                  </div>
+                )}
+
                 {/* Branch + remote indicators */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {currentBranch && <BranchBadge branch={currentBranch} />}
@@ -253,6 +327,9 @@ export function GitHubAccountSection({ currentBranch, hasRemote }: GitHubAccount
                       placeholder="you@example.com"
                       style={inputStyle}
                     />
+                    {saveError && (
+                      <div style={{ fontSize: 10, color: '#f85149' }}>{saveError}</div>
+                    )}
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                       <TextBtn onClick={cancelEditIdentity} disabled={saving} secondary>Cancel</TextBtn>
                       <TextBtn onClick={saveIdentity} disabled={saving}>
