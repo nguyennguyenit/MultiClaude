@@ -5,6 +5,7 @@ interface KeyboardShortcutsOptions {
   onAddTerminal: () => void
   onCloseTerminal: () => void
   onSelectProject?: (id: string) => void
+  onToggleGitPanel?: () => void
 }
 
 /**
@@ -12,12 +13,13 @@ interface KeyboardShortcutsOptions {
  * - Alt+1~9: Switch to project by index
  * - Ctrl+N/T: Create new terminal
  * - Ctrl+W: Close active terminal
- * - Ctrl+B: Cycle Activity Bar state (collapsed → expanded → hidden)
+ * - Ctrl+B: Toggle Git panel
  */
 export function useKeyboardShortcuts({
   onAddTerminal,
   onCloseTerminal,
-  onSelectProject
+  onSelectProject,
+  onToggleGitPanel
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -58,15 +60,15 @@ export function useKeyboardShortcuts({
         return
       }
 
-      // Ctrl+B: Cycle Activity Bar state (Cmd+B on Mac)
+      // Ctrl+B: Toggle Git panel (Cmd+B on Mac)
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault()
-        useAppStore.getState().cycleActivityBarState()
+        onToggleGitPanel?.()
         return
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onAddTerminal, onCloseTerminal, onSelectProject])
+  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitPanel])
 }

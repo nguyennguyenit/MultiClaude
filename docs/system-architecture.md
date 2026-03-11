@@ -63,52 +63,46 @@ src/main/
 
 ```
 src/renderer/
-├── App.tsx                   # Root component, layout, theme system, handlers
+├── App.tsx                   # Root component, theme system, layout, handlers
 ├── main.tsx                  # React entry point
 ├── components/
-│   ├── terminal/
-│   │   ├── terminal-grid.tsx      # Auto-split grid layout
-│   │   ├── terminal-pane.tsx      # Pane wrapper with header
+│   ├── toolbar/              # Compact 32px header (VibeTerminal)
+│   │   ├── toolbar.tsx            # Main toolbar container
+│   │   ├── toolbar-button.tsx     # Reusable icon button
+│   │   ├── project-dropdown.tsx   # Project selector/creator
+│   │   └── index.ts
+│   ├── terminal/             # Terminal workspace
+│   │   ├── terminal-grid.tsx      # Auto-flex grid layout (no resize handles)
+│   │   ├── terminal-pane.tsx      # Pane with bottom tab bar + actions
 │   │   ├── terminal-view.tsx      # xterm.js renderer
-│   │   ├── terminal-action-bar.tsx
 │   │   ├── shell-selector-dropdown.tsx  # WSL shell context menu
 │   │   └── index.ts
-│   ├── sidebar/
-│   │   ├── sidebar.tsx            # Navigation + tools
-│   │   ├── sidebar-header.tsx     # Logo + collapse toggle
-│   │   ├── navigation-item.tsx    # Menu item component
-│   │   ├── user-account-card.tsx  # GitHub account display
-│   │   └── index.ts
-│   ├── project-tabs/
-│   │   ├── project-tabs.tsx       # Tab bar with shortcuts
-│   │   └── index.ts
-│   ├── settings/
-│   │   ├── settings-modal.tsx     # Modal container
-│   │   ├── settings-panel.tsx     # Tabbed settings
-│   │   ├── settings-sidebar.tsx   # Settings navigation
-│   │   ├── theme-selector.tsx     # Theme picker
-│   │   ├── terminal-settings.tsx  # Terminal rendering modes
-│   │   ├── notification-settings.tsx
-│   │   ├── update-settings.tsx
-│   │   ├── telegram-config-modal.tsx
-│   │   ├── discord-config-modal.tsx
-│   │   └── index.ts
-│   ├── git-panel/
-│   │   ├── git-panel.tsx          # Main git UI
-│   │   ├── changes-list.tsx       # Staged/unstaged files
-│   │   ├── commit-form.tsx        # Commit message input
+│   ├── git-panel/            # Git panel components (single-column collapsible sections)
+│   │   ├── git-panel.tsx          # Main container (not actively used; replaced by github-view)
+│   │   ├── changes-list.tsx       # File list with status indicators
+│   │   ├── commit-form.tsx        # Commit message input + action buttons
 │   │   ├── diff-viewer.tsx        # File diff display
-│   │   ├── branch-selector.tsx    # Branch dropdown
-│   │   ├── branches-tab.tsx       # Branch management
-│   │   ├── history-tab.tsx        # Commit log
-│   │   ├── stash-tab.tsx          # Stash operations
+│   │   ├── diff-modal.tsx         # Modal for viewing file diffs
+│   │   ├── history-tab.tsx        # Commit log with details
+│   │   ├── stash-tab.tsx          # Stash operations (save/apply/pop/drop)
+│   │   ├── collapsible-section.tsx # Reusable header with collapse/expand toggle
+│   │   ├── git-file-utils.ts      # Utilities: getStatusColor(), getStatusLabel(), groupByDir()
 │   │   └── index.ts
-│   ├── github-view/
-│   │   ├── github-view.tsx        # Issues/PRs container
-│   │   ├── github-action-bar.tsx  # Actions toolbar
-│   │   ├── repo-info-header.tsx   # Repo metadata
+│   ├── github-view/          # GitHub slide panel (right/bottom, single-column redesign)
+│   │   ├── github-view.tsx        # Main view: CommitForm, StashTab, HistoryTab, Branch Comparison, Issues/PRs
+│   │   ├── compact-header.tsx      # Branch selector + fetch/pull/push controls
+│   │   ├── branch-diff-file-list.tsx  # Single-column scrollable diff file listing
 │   │   ├── issues-tab.tsx         # Issue list
 │   │   ├── prs-tab.tsx            # PR list
+│   │   └── index.ts
+│   ├── settings/             # Settings slide panel (right/bottom)
+│   │   ├── settings-panel.tsx     # Tabbed settings container
+│   │   ├── theme-selector.tsx     # VibeTheme picker (5 themes)
+│   │   ├── terminal-settings.tsx  # Terminal rendering modes
+│   │   ├── notification-settings.tsx  # Telegram/Discord config
+│   │   ├── update-settings.tsx    # Update checker UI
+│   │   ├── telegram-config-modal.tsx
+│   │   ├── discord-config-modal.tsx
 │   │   └── index.ts
 │   ├── toast-container.tsx        # Toast notifications
 │   └── welcome-screen.tsx         # First-run screen
@@ -205,13 +199,13 @@ Terminal UI Style Integration (App.tsx):
 
 ## IPC Channel Architecture
 
-### Channel Categories (84 total)
+### Channel Categories (86 total)
 
 | Category | Count | Purpose |
 |----------|-------|---------|
 | Terminal | 9 | PTY lifecycle, I/O, WSL detection |
-| Project | 6 | CRUD, folder ops |
-| Git | 35 | Full git workflow |
+| Project | 7 | CRUD, folder ops |
+| Git | 38 | Full git workflow + branch comparison + diff-against-branch |
 | GitHub | 5 | Auth, repo, issues/PRs |
 | Session | 2 | Save/restore |
 | App | 2 | Paths, updates |
@@ -221,6 +215,7 @@ Terminal UI Style Integration (App.tsx):
 | File Picker | 1 | Folder selection |
 | Update | 5 | Auto-update system |
 | Settings | 3 | App preferences persistence |
+| Window | 3 | Window controls |
 
 ### IPC Type Safety
 

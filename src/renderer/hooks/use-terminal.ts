@@ -10,7 +10,6 @@ import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINA
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab switching
-const WEBGL_FOCUS_BUFFER = 10  // Extra buffer after WebGL toggle to ensure focus works
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
@@ -93,6 +92,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
+  const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
   const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
@@ -107,6 +107,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   // If xterm updates break this, fallback is safe - manual refresh button still works.
   const attachContextLostListener = useCallback((addon: WebglAddon) => {
     // Access WebGL canvas via internal renderer API
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing xterm internal API
     const canvas = (addon as any)._renderer?._renderLayers?.[0]?._canvas as HTMLCanvasElement | undefined
     if (!canvas) return
 
@@ -142,8 +143,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
     const terminal = new XTerm({
       cursorBlink: true,
-      cursorStyle: 'block',
-      cursorInactiveStyle: 'block',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
+      cursorStyle: 'bar',
+      cursorInactiveStyle: 'bar',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
       fontSize: 14,
       fontFamily: getTerminalFontFamily(),
       theme: getCurrentTerminalTheme(),
@@ -181,6 +182,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       const atBottom = linesFromBottom <= SCROLL_THRESHOLD
       isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
       setIsAtBottom(atBottom)  // With threshold for UI button visibility
+      setHasScrollback(buffer.baseY > 0)  // Track if any scrollback content exists
       // Note: Scroll position is saved in visibility effect when terminal becomes hidden
     }
 
@@ -376,9 +378,39 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       return false
     })
 
-    // Handle input
+    // Fix Vietnamese IME on macOS: The IME uses backspace mode (no composition API)
+    // and sends Backspace count based on its internal NFD buffer length.
+    // macOS NFD: "à" = U+0061 + U+0300 (2 code points) → IME sends 2 DELs.
+    // But we send NFC to PTY: "à" = U+00E0 (1 code point) → shell needs 1 DEL.
+    // Track the NFC/NFD length difference as "debt" and swallow extra DELs.
+    // Debt resets when regular (non-NFD) text is typed.
+    let imeDelDebt = 0
+
     terminal.onData((data) => {
-      window.electron.terminal.write(terminalId, data)
+      // Single DEL: swallow if debt > 0 (extra DEL from IME NFD mismatch)
+      if (data === '\x7f') {
+        if (imeDelDebt > 0) {
+          imeDelDebt--
+          return
+        }
+        window.electron.terminal.write(terminalId, data)
+        return
+      }
+
+      // Normalize to NFC and track debt
+      const nfcData = data.normalize('NFC')
+      const origLen = [...data].length
+      const nfcLen = [...nfcData].length
+
+      if (origLen > nfcLen) {
+        // NFD text (has combining marks): accumulate debt
+        imeDelDebt += origLen - nfcLen
+      } else {
+        // Regular text: reset debt (IME replacement cycle complete)
+        imeDelDebt = 0
+      }
+
+      window.electron.terminal.write(terminalId, nfcData)
     })
 
     // Handle resize
@@ -411,7 +443,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     if (!terminalRef.current || !fitAddonRef.current) return
     try {
       fitAddonRef.current.fit()
-    } catch (e) {
+    } catch {
       // Terminal not ready yet - dimensions not available
       // This can happen during initialization race conditions
     }
@@ -778,6 +810,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     clear,
     scrollToBottom,
     isAtBottom,
+    hasScrollback,
     refresh,
     terminalRef  // Return ref instead of snapshot for live access
   }

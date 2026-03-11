@@ -98,13 +98,13 @@ describe('ProjectStore', () => {
     })
 
     it('saves and retrieves session', () => {
-      const session = { terminals: [], activeTerminalId: null }
-      store.saveSession(session as any)
+      const session = { terminals: [], activeTerminalId: null } as Parameters<typeof store.saveSession>[0]
+      store.saveSession(session)
       expect(store.getSession()).toEqual(session)
     })
 
     it('clears session', () => {
-      store.saveSession({ terminals: [] } as any)
+      store.saveSession({ terminals: [] } as unknown as Parameters<typeof store.saveSession>[0])
       store.clearSession()
       expect(store.getSession()).toBeNull()
     })
@@ -112,8 +112,8 @@ describe('ProjectStore', () => {
 
   describe('Terminal Layouts', () => {
     it('saves and loads terminal layout', () => {
-      const layout = { terminals: [{ id: 't1', title: 'Term 1' }] }
-      store.saveTerminalLayout('proj-1', layout as any)
+      const layout = { terminals: [{ id: 't1', title: 'Term 1' }] } as unknown as Parameters<typeof store.saveTerminalLayout>[1]
+      store.saveTerminalLayout('proj-1', layout)
       expect(store.loadTerminalLayout('proj-1')).toEqual(layout)
     })
 
@@ -122,14 +122,14 @@ describe('ProjectStore', () => {
     })
 
     it('deletes terminal layout', () => {
-      store.saveTerminalLayout('proj-1', { terminals: [] } as any)
+      store.saveTerminalLayout('proj-1', { terminals: [] } as unknown as Parameters<typeof store.saveTerminalLayout>[1])
       store.deleteTerminalLayout('proj-1')
       expect(store.loadTerminalLayout('proj-1')).toBeNull()
     })
 
     it('gets all terminal layouts', () => {
-      store.saveTerminalLayout('proj-1', { terminals: [] } as any)
-      store.saveTerminalLayout('proj-2', { terminals: [] } as any)
+      store.saveTerminalLayout('proj-1', { terminals: [] } as unknown as Parameters<typeof store.saveTerminalLayout>[1])
+      store.saveTerminalLayout('proj-2', { terminals: [] } as unknown as Parameters<typeof store.saveTerminalLayout>[1])
       const layouts = store.getAllTerminalLayouts()
       expect(Object.keys(layouts)).toHaveLength(2)
     })

@@ -1,6 +1,6 @@
 {
   "name": "multiclaude",
-  "version": "2.0.1",
+  "version": "3.0.0-beta.2",
   "description": "Multi-agent terminal manager for Claude Code",
   "main": "dist/main/index.js",
   "type": "module",
@@ -73,10 +73,15 @@
   },
   "dependencies": {
     "@fontsource/fira-code": "^5.2.7",
+    "@fontsource/geist": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "@fontsource/roboto": "^5.2.10",
     "@fontsource/source-code-pro": "^5.2.7",
     "@fontsource/space-mono": "^5.2.9",
+    "@fontsource/ubuntu": "^5.2.8",
     "@lydell/node-pty": "^1.0.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -86,7 +91,6 @@
     "electron-updater": "^6.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-resizable-panels": "^4.1.1",
     "simple-git": "^3.27.0",
     "zustand": "^5.0.2"
   },

@@ -9,18 +9,18 @@ interface SettingsTitleProps {
 export function SettingsTitle({ children, description }: SettingsTitleProps) {
   return (
     <div>
-      <h3 className="text-lg font-medium text-[var(--mc-text-primary)]">{children}</h3>
+      <h3 className="text-xl font-semibold text-[var(--mc-text-primary)]">{children}</h3>
       {description && (
-        <p className="text-sm text-[var(--mc-text-muted)]">{description}</p>
+        <p className="text-sm text-[var(--mc-text-muted)] mt-1">{description}</p>
       )}
-      <hr className="my-4 border-[var(--mc-border)]" />
+      <hr className="my-5 border-[var(--mc-border)]" />
     </div>
   )
 }
 
 export function SettingsSubheading({ children }: { children: ReactNode }) {
   return (
-    <h4 className="text-xs font-medium uppercase text-[var(--mc-text-muted)] mb-2 tracking-wide">
+    <h4 className="text-xs font-semibold uppercase text-[var(--mc-text-muted)] mb-5 tracking-wider">
       {children}
     </h4>
   )

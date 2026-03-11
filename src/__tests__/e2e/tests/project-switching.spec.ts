@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test, expect, injectMockProject, WAIT_TIMES } from '../fixtures'
 import { mockProjects } from '../fixtures/test-data'
 

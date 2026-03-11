@@ -99,6 +99,22 @@ export interface GitFileStatus {
   status: 'staged' | 'modified' | 'untracked' | 'deleted' | 'renamed' | 'copied'
   staged: boolean
   oldPath?: string
+  additions?: number
+  deletions?: number
+}
+
+export interface GitBranchDiffFile {
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  additions: number
+  deletions: number
+}
+
+export interface GitBranchDiff {
+  baseBranch: string
+  files: GitBranchDiffFile[]
+  aheadBy: number
+  behindBy: number
 }
 
 export interface GitCommitResult {
@@ -146,7 +162,11 @@ export interface GitOperationResult {
 
 // Theme types
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type ColorTheme = 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest' | 'neon-cyber' | 'pro-dark' | 'vibrant'
+export type ColorTheme =
+  // Legacy themes (kept for backward compat - map to new themes on save)
+  | 'default' | 'dusk' | 'lime' | 'ocean' | 'retro' | 'neo' | 'forest' | 'neon-cyber' | 'vibrant'
+  // New VibeTerminal themes
+  | 'tokyo-night' | 'catppuccin' | 'dracula' | 'rose-pine' | 'pro-dark'
 
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
@@ -155,6 +175,8 @@ export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
 export type UiStyle = 'modern' | 'terminal'
 export type TerminalColorPreset = 'green' | 'blue' | 'white'
 export type TerminalFontId = 'system' | 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
+// App/UI font (non-terminal) - sans-serif fonts for the main interface
+export type AppFontId = 'system' | 'inter' | 'geist' | 'plus-jakarta-sans' | 'roboto' | 'ubuntu' | 'segoe-ui'
 
 export interface TerminalStyleOptions {
   colorPreset: TerminalColorPreset
@@ -204,22 +226,23 @@ export interface ColorThemeDefinition {
 }
 
 export interface AppSettings {
-  themeMode: ThemeMode
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   glassmorphismEnabled: boolean
-  // UI style: modern (default) or terminal/TUI mode
-  uiStyle: UiStyle
-  terminalStyleOptions: TerminalStyleOptions
-  // Modern style font family
-  modernFontFamily: TerminalFontId
   // Terminal content font family (xterm)
   terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
-  // Activity Bar state: collapsed (default), expanded, or hidden
-  activityBarState: ActivityBarState
+  // Legacy fields - kept optional for backward compat with saved settings + hook
+  themeMode?: ThemeMode
+  // Main app/UI font family (non-terminal)
+  modernFontFamily?: AppFontId
+  // Legacy: UI style (terminal/modern toggle - removed in VibeTerminal reskin)
+  uiStyle?: UiStyle
+  terminalStyleOptions?: TerminalStyleOptions
+  // Legacy: Activity Bar state (removed in VibeTerminal reskin)
+  activityBarState?: ActivityBarState
 }
 
 // GitHub Issues/PRs types

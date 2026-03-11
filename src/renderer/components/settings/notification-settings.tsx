@@ -4,7 +4,7 @@ import { TelegramConfigModal } from './telegram-config-modal'
 import { DiscordConfigModal } from './discord-config-modal'
 import { SOUND_PRESETS } from '@shared/constants'
 import type { SoundPreset, OutputMode } from '@shared/types'
-import { SettingsTitle, SettingsSubheading } from './settings-typography'
+import { SettingsTitle } from './settings-typography'
 
 export function NotificationSettings() {
   const { settings, loadSettings, updateSettings } = useNotificationStore()
@@ -36,169 +36,149 @@ export function NotificationSettings() {
   }
 
   return (
-    <div className="space-y-8 pb-4 max-w-2xl">
+    <div className="flex flex-col gap-8 pb-16 max-w-2xl">
       <SettingsTitle description="Manage how and when you receive notifications">
         Notifications
       </SettingsTitle>
 
-      <div className="space-y-6">
-        {/* Events Block */}
-        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-          <SettingsSubheading>Trigger Events</SettingsSubheading>
-          <div className="space-y-4 mt-3">
-            <ToggleRow
-              label="On Task Complete"
-              description="Notify when a long-running task finishes successfully"
-              checked={settings.onTaskComplete}
-              onChange={(v) => updateSettings({ onTaskComplete: v })}
-            />
-            <ToggleRow
-              label="On Task Failed"
-              description="Notify when a task encounters an error"
-              checked={settings.onTaskFailed}
-              onChange={(v) => updateSettings({ onTaskFailed: v })}
-            />
-            <ToggleRow
-              label="On Review Needed"
-              description="Notify when a task requires manual confirmation"
-              checked={settings.onReviewNeeded}
-              onChange={(v) => updateSettings({ onReviewNeeded: v })}
-            />
-          </div>
-        </div>
+      {/* Trigger Events card */}
+      <div className="settings-card rounded-xl flex flex-col gap-4">
+        <ToggleRow
+          label="On Task Complete"
+          description="Notify when a long-running task finishes successfully"
+          checked={settings.onTaskComplete}
+          onChange={(v) => updateSettings({ onTaskComplete: v })}
+        />
+        <ToggleRow
+          label="On Task Failed"
+          description="Notify when a task encounters an error"
+          checked={settings.onTaskFailed}
+          onChange={(v) => updateSettings({ onTaskFailed: v })}
+        />
+        <ToggleRow
+          label="On Review Needed"
+          description="Notify when a task requires manual confirmation"
+          checked={settings.onReviewNeeded}
+          onChange={(v) => updateSettings({ onReviewNeeded: v })}
+        />
+      </div>
 
-        {/* Behavior Block */}
-        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-          <SettingsSubheading>Behavior & Sound</SettingsSubheading>
-          <div className="space-y-4 mt-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-sm font-medium text-[var(--mc-text-primary)]">Detection Mode</span>
-                <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">How the app detects completion</p>
-              </div>
+      {/* Behavior card */}
+      <div className="settings-card rounded-xl flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-base font-semibold text-[var(--mc-text-primary)]">Detection Mode</p>
+            <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">How the app detects completion</p>
+          </div>
+          <select
+            value={settings.outputMode}
+            onChange={(e) => updateSettings({ outputMode: e.target.value as OutputMode })}
+            className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px] text-[var(--mc-text-primary)]"
+          >
+            <option value="auto">Auto (Recommended)</option>
+            <option value="stream-json">JSON Stream</option>
+            <option value="plain-text">Plain Text</option>
+          </select>
+        </div>
+        <ToggleRow
+          label="Only When Background"
+          description="Skip notifications if the terminal is focused"
+          checked={settings.notifyOnlyBackground}
+          onChange={(v) => updateSettings({ notifyOnlyBackground: v })}
+        />
+        <ToggleRow
+          label="Include Task Summary"
+          description="Show command output summary in the notification"
+          checked={settings.includeTaskSummary}
+          onChange={(v) => updateSettings({ includeTaskSummary: v })}
+        />
+        <div className="flex flex-col gap-3">
+          <ToggleRow
+            label="Enable Sound"
+            checked={settings.soundEnabled}
+            onChange={(v) => updateSettings({ soundEnabled: v })}
+          />
+          {settings.soundEnabled && (
+            <div className="flex items-center justify-between pl-1">
+              <p className="text-sm text-[var(--mc-text-secondary)]">Sound Preset</p>
               <select
-                value={settings.outputMode}
-                onChange={(e) => updateSettings({ outputMode: e.target.value as OutputMode })}
-                className="text-xs bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px]"
+                value={settings.soundPreset}
+                onChange={(e) => updateSettings({ soundPreset: e.target.value as SoundPreset })}
+                className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px] text-[var(--mc-text-primary)]"
               >
-                <option value="auto">Auto (Recommended)</option>
-                <option value="stream-json">JSON Stream</option>
-                <option value="plain-text">Plain Text</option>
+                {SOUND_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>{preset.name}</option>
+                ))}
               </select>
             </div>
-
-            <ToggleRow
-              label="Only When Background"
-              description="Skip notifications if the terminal is focused"
-              checked={settings.notifyOnlyBackground}
-              onChange={(v) => updateSettings({ notifyOnlyBackground: v })}
-            />
-
-            <ToggleRow
-              label="Include Task Summary"
-              description="Show command output summary in the notification"
-              checked={settings.includeTaskSummary}
-              onChange={(v) => updateSettings({ includeTaskSummary: v })}
-            />
-
-            <div className="pt-2 border-t border-[var(--mc-border)]/50">
-              <ToggleRow
-                label="Enable Sound"
-                checked={settings.soundEnabled}
-                onChange={(v) => updateSettings({ soundEnabled: v })}
-              />
-              {settings.soundEnabled && (
-                <div className="flex items-center justify-between mt-3 pl-2">
-                  <span className="text-xs text-[var(--mc-text-secondary)]">Sound Preset</span>
-                  <select
-                    value={settings.soundPreset}
-                    onChange={(e) => updateSettings({ soundPreset: e.target.value as SoundPreset })}
-                    className="text-xs bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px]"
-                  >
-                    {SOUND_PRESETS.map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Integrations Block */}
-        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-          <SettingsSubheading>Integrations</SettingsSubheading>
-          <div className="space-y-4 mt-3">
-            {/* Telegram */}
-            <div className="flex items-center justify-between p-2 rounded hover:bg-[var(--mc-bg-primary)]/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center bg-[#26A5E4]/10 rounded-lg">
-                  <TelegramIcon />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[var(--mc-text-primary)]">Telegram</span>
-                    {settings.telegramConfigured && (
-                      <span className="text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[var(--mc-text-muted)]">Send notifications to a Telegram chat</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Toggle
-                  checked={settings.telegramEnabled}
-                  onChange={(v) => updateSettings({ telegramEnabled: v })}
-                  disabled={!settings.telegramConfigured}
-                />
-                <button
-                  onClick={() => setTelegramModalOpen(true)}
-                  className="text-xs px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors"
-                >
-                  Configure
-                </button>
-              </div>
-            </div>
-
-            {/* Discord */}
-            <div className="flex items-center justify-between p-2 rounded hover:bg-[var(--mc-bg-primary)]/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center bg-[#5865F2]/10 rounded-lg">
-                  <DiscordIcon />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[var(--mc-text-primary)]">Discord</span>
-                    {settings.discordConfigured && (
-                      <span className="text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[var(--mc-text-muted)]">Send notifications to a Discord channel</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Toggle
-                  checked={settings.discordEnabled}
-                  onChange={(v) => updateSettings({ discordEnabled: v })}
-                  disabled={!settings.discordConfigured}
-                />
-                <button
-                  onClick={() => setDiscordModalOpen(true)}
-                  className="text-xs px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors"
-                >
-                  Configure
-                </button>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
+
+      {/* Integrations card */}
+      <div className="settings-card rounded-xl flex flex-col gap-4">
+        {/* Telegram */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 flex items-center justify-center bg-[#26A5E4]/10 rounded-lg flex-shrink-0">
+              <TelegramIcon />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-base font-semibold text-[var(--mc-text-primary)]">Telegram</p>
+                {settings.telegramConfigured && (
+                  <span className="text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">Active</span>
+                )}
+              </div>
+              <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">Send notifications to a Telegram chat</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Toggle
+              checked={settings.telegramEnabled}
+              onChange={(v) => updateSettings({ telegramEnabled: v })}
+              disabled={!settings.telegramConfigured}
+            />
+            <button
+              onClick={() => setTelegramModalOpen(true)}
+              className="text-sm px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors text-[var(--mc-text-primary)]"
+            >
+              Configure
+            </button>
+          </div>
+        </div>
+
+        {/* Discord */}
+        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 flex items-center justify-center bg-[#5865F2]/10 rounded-lg flex-shrink-0">
+            <DiscordIcon />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-base font-semibold text-[var(--mc-text-primary)]">Discord</p>
+              {settings.discordConfigured && (
+                <span className="text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">Active</span>
+              )}
+            </div>
+            <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">Send notifications to a Discord channel</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <Toggle
+            checked={settings.discordEnabled}
+            onChange={(v) => updateSettings({ discordEnabled: v })}
+            disabled={!settings.discordConfigured}
+          />
+          <button
+            onClick={() => setDiscordModalOpen(true)}
+            className="text-sm px-3 py-1.5 bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded hover:bg-[var(--mc-bg-hover)] transition-colors text-[var(--mc-text-primary)]"
+          >
+            Configure
+            </button>
+          </div>
+        </div>
+      </div>{/* end Integrations card */}
 
       <TelegramConfigModal
         isOpen={telegramModalOpen}
@@ -231,17 +211,27 @@ function Toggle({
     <button
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
+      aria-checked={checked}
+      role="switch"
+      style={{ backgroundColor: checked ? 'var(--mc-accent)' : 'var(--mc-bg-tertiary)' }}
       className={`
-        relative w-9 h-5 rounded-full transition-colors overflow-hidden flex-shrink-0
-        ${checked ? 'bg-[var(--mc-accent)]' : 'bg-[var(--mc-bg-muted)]'}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 outline-none border-0
+        focus-visible:ring-2 focus-visible:ring-[var(--mc-accent)] focus-visible:ring-offset-1
+        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
       `}
     >
       <span
-        className={`
-          absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform
-          ${checked ? 'translate-x-4' : 'translate-x-0'}
-        `}
+        className="absolute rounded-full bg-white"
+        style={{
+          top: '50%',
+          left: '3px',
+          width: '18px',
+          height: '18px',
+          transform: checked ? 'translateY(-50%) translateX(20px)' : 'translateY(-50%)',
+          transition: 'transform 200ms',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+          pointerEvents: 'none'
+        }}
       />
     </button>
   )
@@ -261,9 +251,9 @@ function ToggleRow({
   return (
     <div className="flex items-center justify-between">
       <div>
-        <span className="text-sm font-medium text-[var(--mc-text-primary)]">{label}</span>
+        <p className="text-base font-semibold text-[var(--mc-text-primary)]">{label}</p>
         {description && (
-          <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">{description}</p>
+          <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">{description}</p>
         )}
       </div>
       <Toggle checked={checked} onChange={onChange} />

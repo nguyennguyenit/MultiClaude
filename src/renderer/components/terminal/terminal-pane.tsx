@@ -18,7 +18,7 @@ interface TerminalPaneProps {
   onInsertFilePath?: (paths: string[]) => void
 }
 
-/** Wrapper for TerminalView with header bar, resize handling, and focus indicator */
+/** Wrapper for TerminalView with bottom tab bar, resize handling, and focus indicator */
 export const TerminalPane = memo(function TerminalPane({
   terminalId,
   title,
@@ -35,7 +35,7 @@ export const TerminalPane = memo(function TerminalPane({
   const resizeTimeoutRef = useRef<number | undefined>(undefined)
   const terminalFitRef = useRef<(() => void) | null>(null)
   const terminalRefreshRef = useRef<(() => void) | null>(null)
-  const lastOutputTimeRef = useRef<number>(0)  // Track last output time for streaming detection
+  const lastOutputTimeRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
 
@@ -61,13 +61,9 @@ export const TerminalPane = memo(function TerminalPane({
     lastOutputTimeRef.current = Date.now()
   }, [])
 
-  // Handle refresh button click
-  const handleRefreshClick = useCallback(() => {
-    terminalRefreshRef.current?.()
-  }, [])
-
   // File picker handler
-  const handleInsertFilePath = useCallback(async () => {
+  const handleInsertFilePath = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
     const paths = await window.electron.filePicker.open()
     if (paths && paths.length > 0) {
       onInsertFilePath?.(paths)
@@ -77,17 +73,17 @@ export const TerminalPane = memo(function TerminalPane({
   // Keyboard shortcut for file picker (Ctrl+Shift+I)
   useEffect(() => {
     if (!isActive) return
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'I') {
         e.preventDefault()
-        handleInsertFilePath()
+        window.electron.filePicker.open().then(paths => {
+          if (paths && paths.length > 0) onInsertFilePath?.(paths)
+        })
       }
     }
-
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isActive, handleInsertFilePath])
+  }, [isActive, onInsertFilePath])
 
   // Debounced fit on container resize - defers during streaming to avoid reflow duplicates
   useEffect(() => {
@@ -95,23 +91,15 @@ export const TerminalPane = memo(function TerminalPane({
     if (!container) return
 
     const resizeObserver = new ResizeObserver(() => {
-      // Clear any pending fit
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current)
-      }
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
 
-      // Check if terminal is actively streaming output
       const timeSinceLastOutput = Date.now() - lastOutputTimeRef.current
       const isStreaming = timeSinceLastOutput < STREAMING_IDLE_THRESHOLD
-
-      // Use longer delay during streaming to avoid reflow duplicates
       const delay = isStreaming ? STREAMING_FIT_DELAY : 100
 
       resizeTimeoutRef.current = window.setTimeout(() => {
-        // Re-check streaming state before fit
         const currentTimeSinceOutput = Date.now() - lastOutputTimeRef.current
         if (currentTimeSinceOutput < STREAMING_IDLE_THRESHOLD) {
-          // Still streaming, defer again
           resizeTimeoutRef.current = window.setTimeout(() => {
             terminalFitRef.current?.()
           }, STREAMING_FIT_DELAY)
@@ -122,134 +110,119 @@ export const TerminalPane = memo(function TerminalPane({
     })
 
     resizeObserver.observe(container)
-
     return () => {
       resizeObserver.disconnect()
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current)
-      }
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
     }
   }, [])
+
+  const commitTitle = useCallback(() => {
+    setIsEditing(false)
+    if (editTitle !== title) {
+      onTitleChange?.(editTitle)
+    }
+  }, [editTitle, title, onTitleChange])
 
   return (
     <div
       ref={containerRef}
       onClick={onActivate}
-      className={`terminal-pane h-full w-full flex flex-col ${isActive ? 'terminal-pane-active' : ''}`}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
     >
-      {/* Header bar */}
-      <div className="flex items-center h-6 px-2 bg-[var(--mc-bg-tertiary)] border-b border-[var(--mc-border)] flex-shrink-0">
-        {/* Title - editable on double-click or edit button */}
-        {isEditing ? (
-          <input
-            type="text"
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            onBlur={() => {
-              setIsEditing(false)
-              if (editTitle !== title) {
-                onTitleChange?.(editTitle)
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                setIsEditing(false)
-                if (editTitle !== title) {
-                  onTitleChange?.(editTitle)
+      {/* Top tab bar */}
+      <div className={`pane-tab-bar${isActive ? ' active' : ''}`}>
+        <div className={`pane-tab${isActive ? ' active' : ''}`}>
+          {/* Claude mode badge */}
+          {isClaudeMode && <span className="pane-tab-claude">AI</span>}
+
+          {/* Title - editable on double-click */}
+          {isEditing ? (
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitTitle()
+                else if (e.key === 'Escape') {
+                  setEditTitle(title)
+                  setIsEditing(false)
                 }
-              } else if (e.key === 'Escape') {
-                setEditTitle(title) // Reset to original
-                setIsEditing(false)
-              }
-            }}
-            autoFocus
-            className="flex-1 text-xs bg-transparent border-none outline-none text-[var(--mc-text-primary)]"
-          />
-        ) : (
-          <>
+                e.stopPropagation()
+              }}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+              className="pane-tab-name"
+              style={{ cursor: 'text' }}
+            />
+          ) : (
             <span
-              className="flex-1 text-xs truncate text-[var(--mc-text-secondary)] cursor-default"
-              onDoubleClick={() => setIsEditing(true)}
+              className="pane-tab-name"
+              onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
               title="Double-click to rename"
             >
               {title}
             </span>
-            {/* Rename button */}
+          )}
+
+          {/* Rename terminal button */}
+          {!isEditing && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                setIsEditing(true)
-              }}
-              className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+              onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+              className="pane-tab-action"
               title="Rename terminal"
               aria-label="Rename terminal"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </button>
-          </>
-        )}
+          )}
 
-        {/* Claude mode indicator */}
-        {isClaudeMode && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] mr-1">
-            Claude
-          </span>
-        )}
+          {/* Insert file path button */}
+          <button
+            type="button"
+            onClick={handleInsertFilePath}
+            className="pane-tab-action"
+            title="Insert file path (Ctrl+Shift+I)"
+            aria-label="Insert file path"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </button>
 
-        {/* Insert file path button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            handleInsertFilePath()
-          }}
-          className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
-          title="Insert file path (Ctrl+Shift+I)"
-          aria-label="Insert file path"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </button>
+          {/* Refresh terminal display button */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); terminalRefreshRef.current?.() }}
+            className="pane-tab-action"
+            title="Refresh terminal display"
+            aria-label="Refresh terminal display"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
 
-        {/* Refresh terminal display button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            handleRefreshClick()
-          }}
-          className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
-          title="Refresh terminal display"
-          aria-label="Refresh terminal display"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
-
-        {/* Close button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onClose()
-          }}
-          className="p-0.5 hover:bg-[var(--mc-bg-hover)] rounded text-[var(--mc-text-muted)] hover:text-red-500 ml-1"
-          title="Close terminal"
-          aria-label="Close terminal"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onClose() }}
+            className="pane-tab-close"
+            title="Close terminal"
+            aria-label="Close terminal"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Terminal content */}
-      <div className="flex-1 min-h-0">
+      {/* Terminal content - takes remaining space */}
+      <div style={{ flex: 1, minHeight: 0 }}>
         <TerminalView
           terminalId={terminalId}
           isActive={isActive}

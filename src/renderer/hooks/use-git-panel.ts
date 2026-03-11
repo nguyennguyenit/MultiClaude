@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { GitFileStatus, GitBranch, GitLogEntry, GitStashEntry, GitStatus } from '@shared/types'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { GitFileStatus, GitBranch, GitLogEntry, GitStashEntry, GitStatus, GitBranchDiff } from '@shared/types'
 
 interface UseGitPanelOptions {
   projectPath: string | undefined
@@ -17,6 +17,10 @@ interface UseGitPanelReturn {
   // Branches
   branches: GitBranch[]
   currentBranch: string | undefined
+  // Branch diff
+  branchDiff: GitBranchDiff | null
+  baseBranch: string
+  setBaseBranch: (branch: string) => void
   // History
   logEntries: GitLogEntry[]
   // Stash
@@ -55,6 +59,10 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
   const [branches, setBranches] = useState<GitBranch[]>([])
   const [logEntries, setLogEntries] = useState<GitLogEntry[]>([])
   const [stashEntries, setStashEntries] = useState<GitStashEntry[]>([])
+  const [branchDiff, setBranchDiff] = useState<GitBranchDiff | null>(null)
+  const [baseBranch, setBaseBranch] = useState<string>('main')
+  const baseBranchRef = useRef(baseBranch)
+  baseBranchRef.current = baseBranch
 
   const currentBranch = gitStatus?.branch
 
@@ -74,23 +82,29 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
     }
   }, [projectPath, enabled])
 
-  // Refresh all data (branches, log, stash)
+  // Refresh all data (branches, log, stash, branch diff)
   const refreshAll = useCallback(async () => {
     if (!projectPath || !enabled) return
     setIsLoading(true)
     try {
-      const [status, fileStatus, branchList, log, stash] = await Promise.all([
+      const [status, fileStatus, branchList, log, stash, diff] = await Promise.all([
         window.electron.git.status(projectPath),
         window.electron.git.fileStatus(projectPath),
         window.electron.git.branches(projectPath),
         window.electron.git.log(projectPath, 50),
-        window.electron.git.stashList(projectPath)
+        window.electron.git.stashList(projectPath),
+        window.electron.git.diffBranch(projectPath, baseBranchRef.current)
       ])
       setGitStatus(status)
       setFiles(fileStatus)
       setBranches(branchList)
       setLogEntries(log)
       setStashEntries(stash)
+      setBranchDiff(diff)
+      // Sync baseBranch from auto-detected value
+      if (diff.baseBranch && diff.baseBranch !== baseBranchRef.current) {
+        setBaseBranch(diff.baseBranch)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -239,6 +253,9 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
     isLoading,
     branches,
     currentBranch,
+    branchDiff,
+    baseBranch,
+    setBaseBranch,
     logEntries,
     stashEntries,
     refresh,

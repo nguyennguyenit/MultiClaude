@@ -49,26 +49,28 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       {/* Backdrop - dark mode: black 80%, light mode: white 80% - starts below titlebar */}
       <div
         data-testid="settings-backdrop"
-        className="absolute inset-0 bg-[var(--mc-backdrop)]"
+        className="absolute inset-0"
+        style={{ background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }}
         onClick={handleCancel}
         aria-hidden="true"
       />
 
-      {/* Modal */}
-      <div data-testid="settings-modal" className="relative bg-[var(--mc-bg-primary)] rounded-lg shadow-xl w-[calc(100%-32px)] h-[calc(100%-80px)] flex flex-col border border-[var(--mc-border)] mx-4 mb-10">
+      {/* Modal - centered with max dimensions */}
+      <div data-testid="settings-modal" className="relative bg-[var(--mc-bg-primary)] shadow-xl flex flex-col overflow-hidden rounded-xl" style={{ border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))', width: 'calc(100% - 80px)', height: 'calc(100% - 60px)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--mc-border)]">
+        <div className="flex items-center justify-between" style={{ padding: '25px 40px 25px 32px', borderBottom: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <SettingsIcon />
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <span style={{ color: 'var(--mc-accent)' }}><SettingsIcon /></span>
               Settings
             </h2>
-            <p className="text-sm text-[var(--mc-text-muted)]">App Settings</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--mc-accent)', opacity: 0.7 }}>App Settings & Project Settings</p>
           </div>
           <button
             data-testid="settings-close-button"
             onClick={handleCancel}
-            className="p-1.5 hover:bg-[var(--mc-bg-hover)] rounded transition-colors"
+            className="p-1.5 rounded transition-colors hover:bg-[var(--mc-bg-hover)]"
+            style={{ color: 'var(--mc-accent)', border: 'none', background: 'transparent', cursor: 'pointer' }}
             title="Close"
           >
             <CloseIcon />
@@ -78,7 +80,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
           <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-          <div className="flex-1 p-4 overflow-auto">
+          <div className="flex-1 overflow-y-scroll text-left" style={{ padding: '32px 40px', scrollbarGutter: 'stable' }}>
             {activeTab === 'appearance' && <ThemeSelector />}
             {activeTab === 'terminals' && <TerminalSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
@@ -87,11 +89,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 p-4 border-t border-[var(--mc-border)]">
+        <div className="flex justify-end gap-4" style={{ padding: '25px 40px 25px 32px', borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <button
             data-testid="settings-cancel-button"
             onClick={handleCancel}
-            className="px-4 py-2 rounded text-sm bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] transition-colors"
+            className="rounded-lg text-base font-semibold transition-all"
+            style={{ padding: '10px 28px', background: 'transparent', border: '2px solid var(--mc-text-secondary)', color: 'var(--mc-text-primary)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-primary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--mc-bg-hover)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
           >
             Cancel
           </button>
@@ -99,12 +104,99 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             data-testid="settings-save-button"
             onClick={handleSave}
             disabled={!hasUnsavedChanges || isSaving}
-            className="px-4 py-2 rounded text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
           >
             <SaveIcon />
             {isSaving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+interface SettingsPanelContentProps {
+  onClose: () => void
+}
+
+/** Settings content for use inside a SlidePanel container */
+export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  const [isSaving, setIsSaving] = useState(false)
+  const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
+
+  const handleCancel = useCallback(() => {
+    cancelSettings()
+    onClose()
+  }, [cancelSettings, onClose])
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await saveSettings()
+      onClose()
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* Horizontal tab bar */}
+      <div data-testid="settings-sidebar" className="flex border-b border-[var(--mc-border)] flex-shrink-0">
+        {(['appearance', 'terminals', 'notifications', 'updates'] as SettingsTab[]).map(tab => (
+          <button
+            key={tab}
+            data-testid={`settings-tab-${tab}`}
+            onClick={() => setActiveTab(tab)}
+            className="px-3 py-2 text-xs capitalize"
+            style={{
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'color var(--transition-fast)',
+              fontFamily: 'inherit'
+            }}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-auto min-h-0" style={{ padding: '32px 40px' }}>
+        {activeTab === 'appearance' && <ThemeSelector />}
+        {activeTab === 'terminals' && <TerminalSettings />}
+        {activeTab === 'notifications' && <NotificationSettings />}
+        {activeTab === 'updates' && <UpdateSettings />}
+      </div>
+
+      {/* Footer: save/cancel */}
+      <div className="flex justify-end gap-4 flex-shrink-0" style={{ padding: '16px 24px', borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
+        <button
+          data-testid="settings-cancel-button"
+          onClick={handleCancel}
+          className="rounded-lg text-base font-semibold transition-all"
+          style={{ padding: '8px 20px', background: 'transparent', border: '2px solid var(--mc-text-secondary)', color: 'var(--mc-text-primary)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-primary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--mc-bg-hover)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+        >
+          Cancel
+        </button>
+        <button
+          data-testid="settings-save-button"
+          onClick={handleSave}
+          disabled={!hasUnsavedChanges || isSaving}
+          className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          style={{ padding: '8px 20px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
+        >
+          {isSaving ? 'Saving...' : 'Save Settings'}
+        </button>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
-import { Fragment, memo, useEffect, useMemo, useState } from 'react'
-import { Group, Panel, Separator } from 'react-resizable-panels'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { TerminalPane } from './terminal-pane'
+import { ResizeHandle } from './terminal-resize-handle'
+import { useTerminalResize } from '../../hooks/use-terminal-resize'
 import type { Terminal } from '@shared/types'
 
 interface TerminalWithOutput extends Terminal {
@@ -10,6 +11,7 @@ interface TerminalWithOutput extends Terminal {
 interface TerminalGridProps {
   terminals: TerminalWithOutput[]
   activeProjectId: string | null
+  activeProjectPath?: string
   activeTerminalId: string | null
   onTerminalClick: (id: string) => void
   onAddTerminal?: () => void
@@ -51,6 +53,7 @@ function splitIntoRows<T>(items: T[], cols: number): T[][] {
 export const TerminalGrid = memo(function TerminalGrid({
   terminals,
   activeProjectId,
+  activeProjectPath,
   activeTerminalId,
   onTerminalClick,
   onAddTerminal,
@@ -71,14 +74,9 @@ export const TerminalGrid = memo(function TerminalGrid({
 
   /**
    * Groups terminals by project for stable rendering (single-parent pattern).
-   * All project grids are rendered simultaneously in a single parent hierarchy,
-   * with inactive projects hidden via CSS `display: none`.
-   *
-   * This prevents React reconciliation from unmounting terminals when switching
-   * projects, preserving cursor position, buffer content, and WebGL state.
-   *
-   * Note: Memory impact is proportional to total terminals across all projects.
-   * Consider implementing cleanup for long-inactive projects if memory becomes a concern.
+   * All project grids are rendered simultaneously with inactive projects hidden via CSS.
+   * This prevents React from unmounting terminals when switching projects,
+   * preserving cursor position, buffer content, and WebGL state.
    */
   const projectGroups = useMemo(() => {
     const groups = new Map<string, TerminalWithOutput[]>()
@@ -95,66 +93,61 @@ export const TerminalGrid = memo(function TerminalGrid({
     }))
   }, [terminals, activeProjectId])
 
-  // Get active project's terminals for empty state check
+  // Get active project's terminals for grid layout calculation
   const activeGroup = projectGroups.find(g => g.isActive)
   const visibleTerminalCount = activeGroup?.terminals.length ?? 0
 
-  // Empty state - Agent Terminals welcome screen (based on visible terminals)
+  // Compute resize grid shape based on active project
+  const activeGrid = activeGroup
+    ? calculateGrid(activeGroup.terminals.length, isPortrait)
+    : { rows: 1, cols: 1 }
+
+  const activeRows = activeGroup ? splitIntoRows(activeGroup.terminals, activeGrid.cols) : []
+  const numColsPerRow = activeRows.map(row => row.length)
+
+  // Resize state: flex values for rows and per-row columns
+  const gridContainerRef = useRef<HTMLDivElement>(null)
+  const { getRowFlex, getColFlex, startRowResize, startColResize } = useTerminalResize(
+    activeRows.length,
+    numColsPerRow,
+    gridContainerRef
+  )
+
+  // Empty state
   if (visibleTerminalCount === 0) {
     return (
-      <div className="flex items-center justify-center h-full bg-[var(--mc-bg-primary)] relative overflow-hidden">
-        {/* Background Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[var(--mc-accent)]/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="text-center relative z-10 p-8">
-          {/* Grid Icon */}
-          <div className="w-20 h-20 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-[var(--mc-bg-tertiary)] to-[var(--mc-bg-secondary)] border border-[var(--mc-border)] flex items-center justify-center shadow-lg group">
-            <svg className="w-10 h-10 text-[var(--mc-accent)] transition-transform duration-500 group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <div className="welcome-screen">
+        <svg className="welcome-terminal-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="4 17 10 11 4 5" />
+          <line x1="12" y1="19" x2="20" y2="19" />
+        </svg>
+        <h2 className="welcome-title" style={{ fontSize: '24px' }}>Multi Terminals</h2>
+        <p className="welcome-hint" style={{ margin: 0 }}>
+          Spawn multiple terminals to run agents in parallel.
+          <br />
+          Press <kbd>Ctrl+T</kbd> to create a new terminal.
+        </p>
+        {onAddTerminal && (
+          <button type="button" onClick={() => onAddTerminal()} className="welcome-btn">
+            + New Terminal
+          </button>
+        )}
+        {activeProjectPath && (
+          <p className="welcome-project-path" title={activeProjectPath}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
             </svg>
-          </div>
-
-          {/* Title */}
-          <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-[var(--mc-text-primary)] to-[var(--mc-text-secondary)] bg-clip-text text-transparent">
-            Multi Terminals
-          </h2>
-
-          {/* Description */}
-          <p className="text-[var(--mc-text-secondary)] mb-8 max-w-md mx-auto text-base leading-relaxed">
-            Spawn multiple terminals to run agents in parallel.
-            <br />
-            Use{' '}
-            <kbd className="px-2 py-0.5 bg-[var(--mc-bg-tertiary)] border border-[var(--mc-border)] rounded-md text-sm font-mono text-[var(--mc-text-primary)] shadow-sm">
-              Ctrl+T
-            </kbd>{' '}
-            to create a new terminal.
+            {activeProjectPath}
           </p>
-
-          {/* New Terminal Button */}
-          {onAddTerminal && (
-            <button
-              type="button"
-              onClick={() => onAddTerminal()}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] font-semibold rounded-xl hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[var(--mc-accent)]/20"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              New Terminal
-            </button>
-          )}
-        </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="h-full relative">
-      {/* All project grids rendered in single parent - inactive hidden with visibility:hidden */}
-      {/* Using visibility:hidden instead of display:none preserves xterm.js scroll/cursor state */}
+    <div style={{ height: '100%', position: 'relative' }}>
+      {/* All project grids rendered in single parent - inactive hidden with visibility:hidden.
+          visibility:hidden preserves xterm.js scroll/cursor state unlike display:none */}
       {projectGroups.map(group => {
         const { cols } = calculateGrid(group.terminals.length, isPortrait)
         const rows = splitIntoRows(group.terminals, cols)
@@ -162,68 +155,68 @@ export const TerminalGrid = memo(function TerminalGrid({
         return (
           <div
             key={group.projectId}
+            ref={group.isActive ? gridContainerRef : undefined}
             role="region"
             aria-label={`Terminal grid for project ${group.projectId}`}
+            aria-hidden={!group.isActive}
             style={{
-              // Use visibility:hidden instead of display:none to prevent xterm.js from resetting
-              // scroll position and cursor state when terminals are hidden
               visibility: group.isActive ? 'visible' : 'hidden',
               position: group.isActive ? 'relative' : 'absolute',
               pointerEvents: group.isActive ? 'auto' : 'none',
-              flexDirection: 'column',
               width: '100%',
               height: '100%',
               top: 0,
               left: 0
             }}
-            aria-hidden={!group.isActive}
           >
-            <Group orientation="vertical" className="h-full">
-              {rows.map((rowTerminals, rowIndex) => {
-                const cellCount = rowTerminals.length
+            <div className="terminal-grid">
+              {rows.map((rowTerminals, rowIndex) => (
+                <div key={`row-${rowIndex}`} style={{ display: 'contents' }}>
+                  {/* Horizontal resize handle between rows */}
+                  {rowIndex > 0 && group.isActive && (
+                    <ResizeHandle
+                      direction="horizontal"
+                      onResizeStart={(y) => startRowResize(rowIndex - 1, y)}
+                    />
+                  )}
 
-                return (
-                  <Fragment key={`row-${rowIndex}`}>
-                    <Panel defaultSize={100 / rows.length}>
-                      <Group orientation="horizontal" className="h-full">
-                        {rowTerminals.map((terminal, colIndex) => (
-                          <Fragment key={terminal.id}>
-                            <Panel defaultSize={100 / cellCount}>
-                              {/*
-                                Hidden when:
-                                1. Project is inactive (!group.isActive), OR
-                                2. Terminal is not the active terminal (terminal.id !== activeTerminalId)
-                                This triggers viewport save/restore in use-terminal.ts for scroll preservation
-                              */}
-                              <TerminalPane
-                                terminalId={terminal.id}
-                                title={terminal.title}
-                                isActive={terminal.id === activeTerminalId}
-                                hidden={!group.isActive || terminal.id !== activeTerminalId}
-                                isClaudeMode={terminal.isClaudeMode}
-                                initialOutput={terminal.output}
-                                onActivate={() => onTerminalClick(terminal.id)}
-                                onClose={() => onCloseTerminal?.(terminal.id)}
-                                onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
-                                onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
-                              />
-                            </Panel>
-                            {/* Resize handle between columns */}
-                            {colIndex < rowTerminals.length - 1 && (
-                              <Separator className="terminal-resize-handle terminal-resize-handle-horizontal" />
-                            )}
-                          </Fragment>
-                        ))}
-                      </Group>
-                    </Panel>
-                    {/* Resize handle between rows (not after last) */}
-                    {rowIndex < rows.length - 1 && (
-                      <Separator className="terminal-resize-handle terminal-resize-handle-vertical" />
-                    )}
-                  </Fragment>
-                )
-              })}
-            </Group>
+                  <div
+                    className="terminal-row"
+                    style={{ flex: group.isActive ? getRowFlex(rowIndex) : 1 }}
+                  >
+                    {rowTerminals.map((terminal, colIndex) => (
+                      <div key={terminal.id} style={{ display: 'contents' }}>
+                        {/* Vertical resize handle between columns */}
+                        {colIndex > 0 && group.isActive && (
+                          <ResizeHandle
+                            direction="vertical"
+                            onResizeStart={(x) => startColResize(rowIndex, colIndex - 1, x)}
+                          />
+                        )}
+
+                        <div
+                          className={`terminal-cell${terminal.id === activeTerminalId ? ' active' : ''}`}
+                          style={{ flex: group.isActive ? getColFlex(rowIndex, colIndex) : 1 }}
+                        >
+                          <TerminalPane
+                            terminalId={terminal.id}
+                            title={terminal.title}
+                            isActive={terminal.id === activeTerminalId}
+                            hidden={!group.isActive || terminal.id !== activeTerminalId}
+                            isClaudeMode={terminal.isClaudeMode}
+                            initialOutput={terminal.output}
+                            onActivate={() => onTerminalClick(terminal.id)}
+                            onClose={() => onCloseTerminal?.(terminal.id)}
+                            onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
+                            onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )
       })}

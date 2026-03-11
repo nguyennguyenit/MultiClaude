@@ -33,7 +33,6 @@ function writePathToActiveTerminal(filePath: string): void {
   }
 
   const formatted = formatPath(filePath)
-  console.log('[FileDropHandler] Writing to terminal:', activeTerminalId, formatted)
   window.electron.terminal.write(activeTerminalId, formatted)
 }
 
@@ -48,11 +47,8 @@ export function initFileDropHandler(): void {
   if (initialized) return
   initialized = true
 
-  console.log('[FileDropHandler] Initializing...')
-
   // Track if DOM events are working (they fire on dragenter)
   document.addEventListener('dragenter', () => {
-    console.log('[FileDropHandler] dragenter - DOM events working')
     domEventsWorking = true
   })
 
@@ -72,7 +68,6 @@ export function initFileDropHandler(): void {
     if (!domEventsWorking) return
 
     e.preventDefault()
-    console.log('[FileDropHandler] drop event')
 
     const files = e.dataTransfer?.files
     if (!files || files.length === 0) return
@@ -101,9 +96,6 @@ export function initFileDropHandler(): void {
   // IPC fallback - always register
   // Main process intercepts will-navigate for file:// URLs
   window.electron.onFileDrop((filePath) => {
-    console.log('[FileDropHandler] IPC file drop:', filePath)
     writePathToActiveTerminal(filePath)
   })
-
-  console.log('[FileDropHandler] Initialized - DOM events will be detected on first drag')
 }

@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
-import { getShellKey, getFontFamily } from '../../utils'
-import { TERMINAL_FONTS } from '@shared/constants'
-import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell, TerminalFontId } from '@shared/types'
-import { SettingsTitle, SettingsSubheading } from './settings-typography'
+import { getShellKey } from '../../utils'
+import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
+import { SettingsTitle } from './settings-typography'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 2, label: '2' },
@@ -11,6 +10,13 @@ const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 9, label: '9' },
   { value: 'custom', label: 'Custom' }
 ]
+
+// Icons for render modes
+const RENDER_MODE_ICONS: Record<string, string> = {
+  performance: '⚡',
+  balanced: '⚖️',
+  quality: '✨'
+}
 
 // Render mode definitions for UI display
 const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string }[] = [
@@ -20,7 +26,7 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
 ]
 
 export function TerminalSettings() {
-  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell, setTerminalFontFamily } = useSettingsStore()
+  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
   const { terminalLimit } = pendingSettings
 
   const [customValue, setCustomValue] = useState(
@@ -77,172 +83,135 @@ export function TerminalSettings() {
   const currentShellKey = getShellKey(pendingSettings.windowsShell || { type: 'cmd' })
 
   return (
-
-    <div className="space-y-8 pb-4 max-w-2xl">
-      {/* Section Header */}
+    <div className="flex flex-col gap-6 pb-16 max-w-2xl">
       <SettingsTitle description="Configure terminal behavior and limits">
         Terminals
       </SettingsTitle>
 
-      <div className="space-y-6">
-        {/* Terminal Limit Section */}
-        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-          <SettingsSubheading>General</SettingsSubheading>
-          <div className="space-y-3 mt-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-sm font-medium text-[var(--mc-text-primary)]">Max Terminals per Project</span>
-                <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-                  Limits the number of terminals per project
-                </p>
-              </div>
-            </div>
+      {/* Max Terminals per Project */}
+      <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
+              Max Terminals per Project
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-1">Limits the number of terminals per project</p>
+          </div>
+          {/* Show current value badge */}
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30">
+            {terminalLimit.preset === 'custom' ? `${customValue} max` : `${terminalLimit.preset} max`}
+          </span>
+        </div>
 
-            <div className="flex items-center gap-2">
-              {PRESET_OPTIONS.map((option) => (
+        <div className="flex items-center gap-2">
+          {PRESET_OPTIONS.map((option) => {
+            const isSelected = terminalLimit.preset === option.value
+            return (
+              <button
+                key={option.value}
+                onClick={() => handlePresetChange(option.value)}
+                className={`
+                  relative flex items-center justify-center px-5 py-2.5 rounded-lg text-sm font-semibold min-w-[4rem]
+                  transition-all duration-200
+                  ${isSelected
+                    ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] shadow-lg shadow-[var(--mc-accent)]/30 scale-105'
+                    : 'bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)] border border-transparent hover:border-[var(--mc-accent)]/30'}
+                `}
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {terminalLimit.preset === 'custom' && (
+          <div className="flex items-center gap-3 pt-1">
+            <span className="text-xs text-[var(--mc-text-muted)] uppercase tracking-wide">Custom limit</span>
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={customValue}
+              onChange={(e) => handleCustomValueChange(e.target.value)}
+              className="w-20 px-3 py-1.5 text-sm rounded-lg
+                bg-[var(--mc-bg-primary)] border border-[var(--mc-accent)]/40
+                text-[var(--mc-text-primary)] font-semibold
+                focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50 focus:border-[var(--mc-accent)]"
+              placeholder="1-99"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Default Shell - Windows only */}
+      {showShellSettings && (
+        <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
+          <div>
+            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">Shell for New Terminals</p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-1">Select the default shell when creating new terminals</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {shellOptions.map((option) => {
+              const optionKey = getShellKey(option.value)
+              const isSelected = optionKey === currentShellKey
+              return (
                 <button
-                  key={option.value}
-                  onClick={() => handlePresetChange(option.value)}
+                  key={optionKey}
+                  onClick={() => setWindowsShell(option.value)}
                   className={`
-                    flex items-center justify-center gap-1.5 px-4 py-2 rounded text-sm min-w-[3rem]
-                    transition-colors duration-150
-                    ${terminalLimit.preset === option.value
-                      ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)]'
-                      : 'bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] text-[var(--mc-text-primary)]'}
+                    px-4 py-2 rounded-lg text-sm font-semibold
+                    transition-all duration-200
+                    ${isSelected
+                      ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] shadow-lg shadow-[var(--mc-accent)]/30'
+                      : 'bg-[var(--mc-bg-hover)] border border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50 text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]'}
                   `}
                 >
                   {option.label}
-                  {terminalLimit.preset === option.value && <span>✓</span>}
                 </button>
-              ))}
-            </div>
-
-            {/* Custom value input */}
-            {terminalLimit.preset === 'custom' && (
-              <div className="flex items-center gap-3 pt-2">
-                <span className="text-sm text-[var(--mc-text-secondary)]">Custom limit:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={99}
-                  value={customValue}
-                  onChange={(e) => handleCustomValueChange(e.target.value)}
-                  className="w-20 px-3 py-1.5 text-sm rounded
-                    bg-[var(--mc-bg-primary)] border border-[var(--mc-border)]
-                    text-[var(--mc-text-primary)]
-                    focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
-                  placeholder="1-99"
-                />
-              </div>
-            )}
+              )
+            })}
           </div>
         </div>
+      )}
 
-        {/* Default Shell Section - Windows only, WSL available */}
-        {showShellSettings && (
-          <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-            <SettingsSubheading>Default Shell</SettingsSubheading>
-            <div className="space-y-3 mt-3">
-              <div>
-                <span className="text-sm font-medium text-[var(--mc-text-primary)]">Shell for New Terminals</span>
-                <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-                  Select the default shell when creating new terminals
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {shellOptions.map((option) => {
-                  const optionKey = getShellKey(option.value)
-                  const isSelected = optionKey === currentShellKey
-
-                  return (
-                    <button
-                      key={optionKey}
-                      onClick={() => setWindowsShell(option.value)}
-                      className={`
-                        px-4 py-2 rounded-lg border-2 text-sm
-                        transition-all duration-150
-                        ${isSelected
-                          ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
-                          : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
-                      `}
-                    >
-                      <span className="flex items-center gap-2">
-                        {option.label}
-                        {isSelected && <span className="text-[var(--mc-accent)]">✓</span>}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+      {/* Rendering Mode */}
+      <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">Rendering Mode</p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-1">Optimize terminal performance vs visual quality</p>
           </div>
-        )}
-
-        {/* Terminal Rendering Mode */}
-        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-          <SettingsSubheading>Rendering</SettingsSubheading>
-          <div className="space-y-3 mt-3">
-            <div>
-              <span className="text-sm font-medium text-[var(--mc-text-primary)]">Rendering Mode</span>
-              <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-                Optimize terminal performance vs visual quality
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {RENDER_MODES.map((mode) => (
-                <button
-                  key={mode.id}
-                  onClick={() => setTerminalRenderMode(mode.id)}
-                  className={`
-                    flex flex-col px-4 py-3 rounded-lg border-2 w-[140px]
-                    transition-all duration-150
-                    ${pendingSettings.terminalRenderMode === mode.id
-                      ? 'border-[var(--mc-accent)] bg-[var(--mc-bg-active)]'
-                      : 'border-[var(--mc-border)] hover:border-[var(--mc-accent)]/50'}
-                  `}
-                >
-                  <span className="text-sm font-medium flex items-center gap-1">
-                    {mode.name}
-                    {pendingSettings.terminalRenderMode === mode.id && <span className="text-[var(--mc-accent)]">✓</span>}
-                  </span>
-                  <span className="text-xs text-[var(--mc-text-muted)] mt-1 text-left">{mode.description}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30 capitalize">
+            {pendingSettings.terminalRenderMode}
+          </span>
         </div>
 
-        {/* Terminal Font */}
-        <div className="p-4 rounded-lg bg-[var(--mc-bg-secondary)]/30 border border-[var(--mc-border)]">
-          <SettingsSubheading>Terminal Font</SettingsSubheading>
-          <div className="space-y-3 mt-3">
-            <div>
-              <span className="text-sm font-medium text-[var(--mc-text-primary)]">Font Family</span>
-              <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-                Font used inside terminal content
-              </p>
-            </div>
-            <label htmlFor="terminal-content-font-select" className="sr-only">
-              Select terminal font
-            </label>
-            <select
-              id="terminal-content-font-select"
-              value={pendingSettings.terminalFontFamily ?? 'jetbrains-mono'}
-              onChange={(e) => setTerminalFontFamily(e.target.value as TerminalFontId)}
-              className="w-full p-2.5 text-sm border border-[var(--mc-border)] bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)] rounded-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50"
-            >
-              {TERMINAL_FONTS.map((font) => (
-                <option key={font.id} value={font.id} style={{ fontFamily: font.family }}>
-                  {font.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-[var(--mc-text-muted)]">
-              Preview: <span style={{ fontFamily: getFontFamily(pendingSettings.terminalFontFamily) }}>$ echo "Hello World"</span>
-            </p>
-          </div>
+        <div className="grid grid-cols-3 gap-2">
+          {RENDER_MODES.map((mode) => {
+            const isSelected = pendingSettings.terminalRenderMode === mode.id
+            return (
+              <button
+                key={mode.id}
+                onClick={() => setTerminalRenderMode(mode.id)}
+                className={`
+                  flex flex-col items-start px-4 py-3.5 rounded-xl
+                  transition-all duration-200
+                  ${isSelected
+                    ? 'bg-[var(--mc-bg-active)] border-2 border-[var(--mc-accent)] shadow-md shadow-[var(--mc-accent)]/20'
+                    : 'bg-[var(--mc-bg-hover)] border-2 border-transparent hover:border-[var(--mc-accent)]/30 hover:bg-[var(--mc-bg-active)]'}
+                `}
+              >
+                <span className={`flex items-center gap-1.5 text-sm font-semibold ${isSelected ? 'text-[var(--mc-accent)]' : 'text-[var(--mc-text-primary)]'}`}>
+                  <span className="text-base leading-none">{RENDER_MODE_ICONS[mode.id]}</span>
+                  {mode.name}
+                </span>
+                <span className="text-xs text-[var(--mc-text-muted)] mt-0.5 text-left leading-relaxed">{mode.description}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
+
     </div>
   )
 }

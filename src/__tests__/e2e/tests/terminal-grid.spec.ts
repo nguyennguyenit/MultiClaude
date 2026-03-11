@@ -136,11 +136,11 @@ test.describe('Terminal Grid Layout', () => {
     expect(uniqueXs.length).toBe(2) // 2 columns
   })
 
-  test.skip('9 terminals in 3x3 grid', async ({ window }) => {
+  test.skip('9 terminals in 3x3 grid', async ({ window: _window }) => {
     // Skip: Takes too long with session restoration issues
   })
 
-  test.skip('12 terminals in 3x4 grid', async ({ window }) => {
+  test.skip('12 terminals in 3x4 grid', async ({ window: _window }) => {
     // Skip: Takes too long and max terminals may be limited
   })
 

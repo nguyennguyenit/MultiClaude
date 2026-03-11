@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode, UiStyle, TerminalColorPreset, TerminalFontId } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode, UiStyle, TerminalColorPreset, TerminalFontId, AppFontId } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/constants'
 
 interface StoreSchema {
@@ -14,6 +14,7 @@ const VALID_TERMINAL_PRESETS = [2, 4, 9, 'custom'] as const
 const VALID_UI_STYLES: UiStyle[] = ['modern', 'terminal']
 const VALID_TERMINAL_COLOR_PRESETS: TerminalColorPreset[] = ['green', 'blue', 'white']
 const VALID_TERMINAL_FONT_IDS: TerminalFontId[] = ['jetbrains-mono', 'source-code-pro', 'fira-code', 'vt323', 'ibm-plex-mono', 'space-mono']
+const VALID_APP_FONT_IDS: AppFontId[] = ['system', 'inter', 'geist', 'plus-jakarta-sans', 'roboto', 'ubuntu', 'segoe-ui']
 
 /**
  * Validate and sanitize incoming settings to prevent data corruption.
@@ -81,6 +82,13 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
         validated.windowsShell = { type: 'wsl', distro: shell.distro }
       }
     }
+  }
+
+  // Validate modernFontFamily
+  if (settings.modernFontFamily !== undefined) {
+    validated.modernFontFamily = VALID_APP_FONT_IDS.includes(settings.modernFontFamily as AppFontId)
+      ? settings.modernFontFamily as AppFontId
+      : defaults.modernFontFamily
   }
 
   // Validate uiStyle

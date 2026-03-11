@@ -1,5 +1,5 @@
 import simpleGit, { SimpleGit, StatusResult, LogResult, DefaultLogFields } from 'simple-git'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import { resolve, relative } from 'path'
 import type {
   GitStatus,
@@ -11,11 +11,31 @@ import type {
   GitBranch,
   GitLogEntry,
   GitStashEntry,
-  GitOperationResult
+  GitOperationResult,
+  GitBranchDiff,
+  GitBranchDiffFile
 } from '@shared/types'
 
 // Valid branch name pattern (alphanumeric, -, _, /, .)
 const VALID_BRANCH_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/
+
+// Resolve gh CLI path — Electron doesn't inherit shell PATH on macOS
+function resolveGhPath(): string {
+  const candidates = [
+    '/opt/homebrew/bin/gh', // Apple Silicon Homebrew
+    '/usr/local/bin/gh',    // Intel Homebrew
+    '/usr/bin/gh',
+  ]
+  for (const p of candidates) {
+    try {
+      execSync(`"${p}" --version`, { stdio: 'ignore' })
+      return p
+    } catch {
+      // not found at this path
+    }
+  }
+  return 'gh' // fallback, will fail with clear error
+}
 
 export class GitManager {
   private getGit(cwd: string): SimpleGit {
@@ -71,7 +91,7 @@ export class GitManager {
         unstaged: status.modified.length + status.deleted.length,
         untracked: status.not_added.length
       }
-    } catch (error) {
+    } catch {
       return {
         isRepo: false,
         hasRemote: false,
@@ -158,7 +178,7 @@ export class GitManager {
   // GitHub CLI integration
   async getGitHubAuthStatus(): Promise<GitHubAuth> {
     return new Promise((resolve) => {
-      const proc = spawn('gh', ['auth', 'status'])
+      const proc = spawn(resolveGhPath(), ['auth', 'status'])
       let output = ''
 
       proc.stdout.on('data', (data) => {
@@ -190,15 +210,13 @@ export class GitManager {
 
   async loginGitHub(): Promise<{ success: boolean; deviceCode?: string; verificationUri?: string }> {
     return new Promise((resolve) => {
-      const proc = spawn('gh', ['auth', 'login', '--web', '-h', 'github.com'])
+      const proc = spawn(resolveGhPath(), ['auth', 'login', '--web', '-h', 'github.com'])
       let output = ''
 
-      proc.stdout.on('data', (data) => {
-        output += data.toString()
-        // Parse device code and URL
-        const codeMatch = output.match(/code:\s+(\S+)/)
+      const checkOutput = () => {
+        // gh auth login --web outputs device code and URL to stderr (not stdout)
+        const codeMatch = output.match(/code:\s+(\S+)/i)
         const urlMatch = output.match(/(https:\/\/github\.com\/login\/device)/)
-
         if (codeMatch && urlMatch) {
           resolve({
             success: true,
@@ -206,22 +224,29 @@ export class GitManager {
             verificationUri: urlMatch[1]
           })
         }
+      }
+
+      proc.stdout.on('data', (data) => {
+        output += data.toString()
+        checkOutput()
       })
 
       proc.stderr.on('data', (data) => {
         output += data.toString()
+        checkOutput()
       })
 
       proc.on('close', (code) => {
         if (code === 0) {
           resolve({ success: true })
         } else {
-          resolve({ success: false })
+          resolve({ success: false, error: output || 'gh auth login failed' } as { success: boolean; error?: string })
         }
       })
 
-      proc.on('error', () => {
-        resolve({ success: false })
+      proc.on('error', (err) => {
+        const isNotFound = (err as NodeJS.ErrnoException).code === 'ENOENT'
+        resolve({ success: false, error: isNotFound ? 'GitHub CLI (gh) not found. Install it with: brew install gh' : err.message } as { success: boolean; error?: string })
       })
     })
   }
@@ -260,7 +285,7 @@ export class GitManager {
         args.push('--push')
       }
 
-      const proc = spawn('gh', args, { cwd: workDir })
+      const proc = spawn(resolveGhPath(), args, { cwd: workDir })
       let stdout = ''
       let stderr = ''
 
@@ -327,9 +352,102 @@ export class GitManager {
         files.push({ path: file, status: 'untracked', staged: false })
       }
 
+      // Enrich with line stats via --numstat
+      try {
+        const [unstagedNumstat, stagedNumstat] = await Promise.all([
+          git.diff(['--numstat']),
+          git.diff(['--numstat', '--cached'])
+        ])
+        const parseNumstat = (output: string): Map<string, { additions: number; deletions: number }> => {
+          const map = new Map<string, { additions: number; deletions: number }>()
+          for (const line of output.split('\n')) {
+            const parts = line.split('\t')
+            if (parts.length >= 3) {
+              const additions = parseInt(parts[0], 10) || 0
+              const deletions = parseInt(parts[1], 10) || 0
+              const filePath = parts[2].trim()
+              if (filePath) map.set(filePath, { additions, deletions })
+            }
+          }
+          return map
+        }
+        const unstagedStats = parseNumstat(unstagedNumstat)
+        const stagedStats = parseNumstat(stagedNumstat)
+        for (const f of files) {
+          const stats = f.staged ? stagedStats.get(f.path) : unstagedStats.get(f.path)
+          if (stats) {
+            f.additions = stats.additions
+            f.deletions = stats.deletions
+          }
+        }
+      } catch {
+        // Line stats are optional — silently ignore failures
+      }
+
       return files
     } catch {
       return []
+    }
+  }
+
+  async diffBranch(cwd: string, baseBranch?: string): Promise<GitBranchDiff> {
+    const git = this.getGit(cwd)
+    try {
+      // Auto-detect base branch if not specified
+      if (!baseBranch) {
+        const branches = await git.branchLocal()
+        baseBranch = branches.all.includes('main') ? 'main'
+          : branches.all.includes('master') ? 'master'
+          : branches.all[0]
+      }
+
+      const status = await git.status()
+      const current = status.current
+      if (!current || current === baseBranch) {
+        return { baseBranch: baseBranch || 'main', files: [], aheadBy: 0, behindBy: 0 }
+      }
+
+      // Get accurate file statuses via --name-status
+      // Renames are output as: R100\told-path\tnew-path (two tab-separated paths)
+      const nameStatusRaw = await git.raw(['diff', '--name-status', `${baseBranch}...${current}`])
+      const statusMap = new Map<string, string>()
+      for (const line of nameStatusRaw.split('\n')) {
+        const renameMatch = line.match(/^R\d*\t(.+)\t(.+)$/)
+        if (renameMatch) { statusMap.set(renameMatch[2], 'R'); continue }
+        const match = line.match(/^([ADM])\t(.+)$/)
+        if (match) statusMap.set(match[2], match[1])
+      }
+
+      // Get line stats via diffSummary
+      const summary = await git.diffSummary([`${baseBranch}...${current}`])
+      const files: GitBranchDiffFile[] = summary.files.map(f => {
+        const rawStatus = statusMap.get(f.file) || 'M'
+        const fileStatus: GitBranchDiffFile['status'] =
+          rawStatus === 'A' ? 'added' :
+          rawStatus === 'D' ? 'deleted' :
+          rawStatus === 'R' ? 'renamed' : 'modified'
+        return {
+          path: f.file,
+          status: fileStatus,
+          additions: ('insertions' in f ? f.insertions : 0) || 0,
+          deletions: ('deletions' in f ? f.deletions : 0) || 0
+        }
+      })
+
+      // Get ahead/behind counts
+      const [aheadLog, behindLog] = await Promise.all([
+        git.log([`${baseBranch}..${current}`, '--oneline']),
+        git.log([`${current}..${baseBranch}`, '--oneline'])
+      ])
+
+      return {
+        baseBranch,
+        files,
+        aheadBy: aheadLog.total,
+        behindBy: behindLog.total
+      }
+    } catch {
+      return { baseBranch: baseBranch || 'main', files: [], aheadBy: 0, behindBy: 0 }
     }
   }
 
@@ -390,6 +508,22 @@ export class GitManager {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Diff failed'
+      }
+    }
+  }
+
+  /** Get diff of a file against a base branch (three-dot merge-base diff) */
+  async getDiffAgainstBranch(cwd: string, file: string, baseBranch: string): Promise<GitDiffResult> {
+    if (!this.isValidFilePath(cwd, file)) return { success: false, error: 'Invalid file path' }
+    if (!this.isValidBranchName(baseBranch)) return { success: false, error: 'Invalid branch name' }
+    const git = this.getGit(cwd)
+    try {
+      const diff = await git.diff([`${baseBranch}...HEAD`, '--', file])
+      return { success: true, diff }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Branch diff failed'
       }
     }
   }
@@ -639,7 +773,7 @@ export class GitManager {
 
   async logoutGitHub(): Promise<GitOperationResult> {
     return new Promise((resolve) => {
-      const proc = spawn('gh', ['auth', 'logout', '-h', 'github.com'])
+      const proc = spawn(resolveGhPath(), ['auth', 'logout', '-h', 'github.com'])
 
       proc.stdin.write('Y\n')
       proc.stdin.end()
@@ -689,33 +823,29 @@ export class GitManager {
   }
 
   async setGitConfig(config: GitConfig): Promise<GitOperationResult> {
+    const runGitConfig = (key: string, value: string): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const args = value
+          ? ['config', '--global', key, value]
+          : ['config', '--global', '--unset', key]
+        const proc = spawn('git', args)
+        let stderr = ''
+        proc.stderr.on('data', (d) => { stderr += d.toString() })
+        proc.on('close', (code) => {
+          // exit code 5 = key not found when unsetting (ok to ignore)
+          if (code === 0 || (code === 5 && !value)) resolve()
+          else reject(new Error(stderr.trim() || `git config exited with code ${code}`))
+        })
+        proc.on('error', (err) => reject(new Error(`git not found: ${err.message}`)))
+      })
+
     try {
-      const promises: Promise<void>[] = []
-
-      if (config.userName !== undefined) {
-        promises.push(
-          new Promise((resolve, reject) => {
-            const proc = spawn('git', ['config', '--global', 'user.name', config.userName || ''])
-            proc.on('close', (code) => (code === 0 ? resolve() : reject()))
-            proc.on('error', reject)
-          })
-        )
-      }
-
-      if (config.userEmail !== undefined) {
-        promises.push(
-          new Promise((resolve, reject) => {
-            const proc = spawn('git', ['config', '--global', 'user.email', config.userEmail || ''])
-            proc.on('close', (code) => (code === 0 ? resolve() : reject()))
-            proc.on('error', reject)
-          })
-        )
-      }
-
-      await Promise.all(promises)
+      // Run sequentially — parallel git config commands conflict on ~/.gitconfig lock
+      if (config.userName !== undefined) await runGitConfig('user.name', config.userName)
+      if (config.userEmail !== undefined) await runGitConfig('user.email', config.userEmail)
       return { success: true, message: 'Git config updated' }
-    } catch {
-      return { success: false, error: 'Failed to update git config' }
+    } catch (err) {
+      return { success: false, error: (err as Error).message }
     }
   }
 }

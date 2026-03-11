@@ -27,8 +27,54 @@ interface Managers {
 // Matches: "Switched to branch 'xxx'", "Switched to a new branch 'xxx'", "Already on 'xxx'"
 const GIT_BRANCH_CHANGE_PATTERN = /Switched to (?:a new )?branch '|Already on '/
 
+// All channels registered via ipcMain.handle (must be removed before re-registering)
+const HANDLE_CHANNELS = [
+  IPC_CHANNELS.TERMINAL_CREATE, IPC_CHANNELS.TERMINAL_DESTROY, IPC_CHANNELS.TERMINAL_LIST,
+  IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, IPC_CHANNELS.TERMINAL_DETECT_WSL,
+  IPC_CHANNELS.PROJECT_LIST, IPC_CHANNELS.PROJECT_CREATE, IPC_CHANNELS.PROJECT_UPDATE,
+  IPC_CHANNELS.PROJECT_DELETE, IPC_CHANNELS.PROJECT_SET_ACTIVE, IPC_CHANNELS.PROJECT_OPEN_FOLDER,
+  IPC_CHANNELS.PROJECT_CHECK_FOLDER,
+  IPC_CHANNELS.GIT_STATUS, IPC_CHANNELS.GIT_WATCH_PROJECT, IPC_CHANNELS.GIT_UNWATCH_PROJECT,
+  IPC_CHANNELS.GIT_INIT, IPC_CHANNELS.GIT_ADD_REMOTE, IPC_CHANNELS.GIT_PUSH,
+  IPC_CHANNELS.GIT_FILE_STATUS, IPC_CHANNELS.GIT_STAGE_FILE, IPC_CHANNELS.GIT_UNSTAGE_FILE,
+  IPC_CHANNELS.GIT_STAGE_ALL, IPC_CHANNELS.GIT_COMMIT, IPC_CHANNELS.GIT_DIFF,
+  IPC_CHANNELS.GIT_DISCARD, IPC_CHANNELS.GIT_PULL, IPC_CHANNELS.GIT_FETCH,
+  IPC_CHANNELS.GIT_BRANCHES, IPC_CHANNELS.GIT_CREATE_BRANCH, IPC_CHANNELS.GIT_CHECKOUT_BRANCH,
+  IPC_CHANNELS.GIT_DELETE_BRANCH, IPC_CHANNELS.GIT_MERGE, IPC_CHANNELS.GIT_LOG,
+  IPC_CHANNELS.GIT_STASH_LIST, IPC_CHANNELS.GIT_STASH_SAVE, IPC_CHANNELS.GIT_STASH_APPLY,
+  IPC_CHANNELS.GIT_STASH_POP, IPC_CHANNELS.GIT_STASH_DROP, IPC_CHANNELS.GIT_CONFIG_GET,
+  IPC_CHANNELS.GIT_CONFIG_SET, IPC_CHANNELS.GIT_DIFF_BRANCH, IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH,
+  IPC_CHANNELS.GITHUB_AUTH_STATUS, IPC_CHANNELS.GITHUB_LOGIN, IPC_CHANNELS.GITHUB_LOGOUT,
+  IPC_CHANNELS.GITHUB_CREATE_REPO,
+  IPC_CHANNELS.SESSION_SAVE, IPC_CHANNELS.SESSION_RESTORE,
+  IPC_CHANNELS.APP_GET_PATH, IPC_CHANNELS.APP_CHECK_FOR_UPDATES,
+  IPC_CHANNELS.NOTIFICATION_GET_SETTINGS, IPC_CHANNELS.NOTIFICATION_SET_SETTINGS,
+  IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, IPC_CHANNELS.NOTIFICATION_SET_DISCORD,
+  IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, IPC_CHANNELS.NOTIFICATION_GET_DISCORD_STATUS,
+  IPC_CHANNELS.NOTIFICATION_TEST_TELEGRAM, IPC_CHANNELS.NOTIFICATION_TEST_DISCORD,
+  IPC_CHANNELS.NOTIFICATION_CLEAR_TELEGRAM, IPC_CHANNELS.NOTIFICATION_CLEAR_DISCORD,
+  IPC_CHANNELS.YOLO_MODE_GET, IPC_CHANNELS.YOLO_MODE_SET,
+  IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE,
+  IPC_CHANNELS.IMAGE_OPEN, IPC_CHANNELS.IMAGE_DELETE, IPC_CHANNELS.IMAGE_READ_BASE64,
+  IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, IPC_CHANNELS.FILE_PICKER_OPEN,
+  IPC_CHANNELS.UPDATE_GET_STATE, IPC_CHANNELS.UPDATE_CHECK, IPC_CHANNELS.UPDATE_DOWNLOAD,
+  IPC_CHANNELS.UPDATE_INSTALL,
+  IPC_CHANNELS.SETTINGS_GET, IPC_CHANNELS.SETTINGS_SET, IPC_CHANNELS.SETTINGS_RESET,
+  IPC_CHANNELS.WINDOW_MINIMIZE, IPC_CHANNELS.WINDOW_MAXIMIZE, IPC_CHANNELS.WINDOW_CLOSE
+] as const
+
+// Channels registered via ipcMain.on (must be cleared before re-registering)
+const ON_CHANNELS = [
+  IPC_CHANNELS.TERMINAL_INPUT, IPC_CHANNELS.TERMINAL_RESIZE,
+  IPC_CHANNELS.APP_OPEN_EXTERNAL, IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL
+] as const
+
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   const { terminalManager, gitManager, gitHeadWatcher, projectStore, settingsStore, notificationManager } = managers
+
+  // Remove existing handlers/listeners to prevent duplicate registration on macOS reopen
+  for (const channel of HANDLE_CHANNELS) ipcMain.removeHandler(channel)
+  for (const channel of ON_CHANNELS) ipcMain.removeAllListeners(channel)
 
   // Register git head watcher callback to emit branch changes from external terminals
   gitHeadWatcher.onBranchChange((projectPath) => {
@@ -298,6 +344,14 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.getGitConfig()
   })
 
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_BRANCH, async (_, { cwd, baseBranch }: { cwd: string; baseBranch?: string }) => {
+    return gitManager.diffBranch(cwd, baseBranch)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, async (_, { cwd, file, baseBranch }: { cwd: string; file: string; baseBranch: string }) => {
+    return gitManager.getDiffAgainstBranch(cwd, file, baseBranch)
+  })
+
   ipcMain.handle(IPC_CHANNELS.GIT_CONFIG_SET, async (_, config: { userName?: string; userEmail?: string }) => {
     return gitManager.setGitConfig(config)
   })
@@ -340,7 +394,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // App handlers
   ipcMain.handle(IPC_CHANNELS.APP_GET_PATH, async (_, name: string) => {
-    return app.getPath(name as any)
+    return app.getPath(name as Parameters<typeof app.getPath>[0])
   })
 
   ipcMain.handle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, async () => {
@@ -594,6 +648,29 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     } catch (error) {
       console.error('[handlers] Failed to reset settings:', error)
       throw error
+    }
+  })
+
+  // Window handlers
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
+    if (window && !window.isDestroyed()) {
+      window.minimize()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, () => {
+    if (window && !window.isDestroyed()) {
+      if (window.isMaximized()) {
+        window.unmaximize()
+      } else {
+        window.maximize()
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, () => {
+    if (window && !window.isDestroyed()) {
+      window.close()
     }
   })
 }

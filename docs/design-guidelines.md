@@ -1,30 +1,64 @@
 # Design Guidelines
 
-## Terminal Mode Styling
+## VibeTerminal Theme System
 
-The application supports a "Terminal Mode" which applies a retro terminal aesthetic. This mode overrides many standard styles, particularly border-radius.
+MultiClaude v1.2 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and 5 curated dark themes.
 
-### Border Radius Handling
+### Color Architecture
 
-In Terminal Mode (`.ui-terminal` class on body), most elements have their `border-radius` reset to `0` to maintain a blocky, terminal-like appearance.
+**CSS Variables** (defined in `src/renderer/styles/globals.css`):
+- Layout: `--toolbar-height` (32px), `--tab-height` (28px), `--panel-width` (340px)
+- Typography: `--terminal-font`, `--modern-font`
+- Colors: `--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--text-primary`, `--text-secondary`, `--text-muted`, `--accent`, `--border`, `--hover`, `--tab-bg`, `--tab-active-bg`, `--cursor`, `--selection-bg`
+- Transitions: `--transition-fast` (0.15s ease)
 
-**Exceptions:**
-- Circular elements (avatars, status indicators, badges) should retain their circular shape.
-- Use the utility class `.rounded-full` for these elements.
-- The global CSS ensures `.rounded-full` is preserved even in terminal mode:
+**Theme Definitions** (in `src/shared/constants/themes.ts`):
+- VibeTheme interface includes UI colors + full ANSI 16-color palette for xterm
+- 5 themes: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
+- Themes applied dynamically in App.tsx via `setTheme(themeId)`
 
-```css
-/* Preserve rounded-full in terminal mode */
-.ui-terminal .rounded-full {
-  border-radius: 9999px !important;
-}
-```
+### Layout Architecture
 
-### Avatars
-- User avatars should always be circular (`rounded-full`).
-- Size should be appropriate for context (e.g., `w-7 h-7` or `w-8 h-8` in sidebar).
-- Fallback for missing avatar image is a circular container with initials.
+**Toolbar** (32px compact header):
+- Left: Add Terminal button + Project dropdown
+- Right: Git panel (Ctrl+B), GitHub panel, Settings, Update indicator
+- No activity bar or traditional sidebar header
+- macOS-aware: Adds 72px padding for traffic light buttons
 
-### Status Indicators
-- Status dots (online/offline/syncing) should be circular.
-- Use `rounded-full` for these indicators.
+**Slide Panels** (modal dialogs replaced):
+- Git Panel: Right edge on landscape, bottom on portrait
+- GitHub Panel: Right edge on landscape, bottom on portrait
+- Settings Panel: Right edge on landscape, bottom on portrait
+- Each toggleable via toolbar buttons or keyboard shortcuts
+- 340px wide on landscape, full height container on portrait
+
+**Terminal Grid**:
+- Auto-flex layout replacing react-resizable-panels
+- Equal splits for all panes
+- Per-pane bottom tab bar (not top bar)
+- Grid adapts: 1x1 → 3x4 based on terminal count
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| Alt+1-9 | Switch to project |
+| Ctrl+N/T | New terminal |
+| Ctrl+W | Close active terminal |
+| Ctrl+B | Toggle Git panel |
+
+### Element Styling Guidelines
+
+**Circular Elements** (avatars, status indicators):
+- Use `.rounded-full` class to preserve circular shape
+- Necessary in terminal-first aesthetic with blocky default styling
+
+**Spacing**:
+- Use CSS variables for consistency (`--transition-fast` for animations)
+- Toolbar items: 15x15px icons, 2px gaps between button groups
+- Panel containers: 340px width (4:3 aspect design)
+
+**Typography**:
+- UI text: System font stack (macOS/Segoe UI/Roboto)
+- Terminal content: JetBrains Mono monospace
+- Font sizing: Default system sizes, no custom scaling needed

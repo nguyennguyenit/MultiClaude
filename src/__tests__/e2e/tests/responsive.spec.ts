@@ -300,8 +300,6 @@ test.describe('Layout Consistency', () => {
     await window.waitForTimeout(200)
 
     const sidebar = window.locator('[data-testid="sidebar"]')
-    const largeViewportWidth = (await getElementDimensions(sidebar))?.width ?? 0
-
     // Resize to small viewport
     await window.setViewportSize({ width: 800, height: 600 })
     await window.waitForTimeout(300)

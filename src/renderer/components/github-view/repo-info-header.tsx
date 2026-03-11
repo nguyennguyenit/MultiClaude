@@ -12,7 +12,7 @@ interface RepoInfoHeaderProps {
 }
 
 export function RepoInfoHeader({
-  repoName,
+  repoName: _repoName,
   currentBranch,
   changesCount,
   branches,

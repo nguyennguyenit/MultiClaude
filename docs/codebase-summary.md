@@ -15,7 +15,7 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 
 ### Key Components
 
-#### Terminal Management
+#### Terminal Management (VibeTerminal v1.2)
 - **TerminalManager**: Spawns/destroys PTY processes via node-pty
   - **Async Destruction**: `destroyAsync(id)` with graceful exit + 3s timeout + platform-specific force kill fallback
     - Guard flag (`destroying`) prevents duplicate destroy calls
@@ -28,8 +28,8 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - **Test Coverage**: 6 async tests covering graceful exit, timeout, force kill, invalid IDs, batch destruction
 - **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
 - **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
-- **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting)
-- **TerminalGrid**: Auto-split layout (1x1 → 3x4 based on terminal count), add-cell placeholder when <9 terminals
+- **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting) + VibeTheme color palette
+- **TerminalGrid**: Auto-flex layout (equal splits, no react-resizable-panels), adapts 1x1 → 3x4 based on terminal count
   - **Single-Parent Pattern** (Phase 1 of Terminal Cursor Fix)
     - All project grids render simultaneously in single parent hierarchy
     - Inactive projects hidden via CSS `display: none` (not React unmount)
@@ -39,13 +39,15 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
     - `getProjectId(terminal)` helper with DEFAULT_PROJECT_ID fallback
     - Accessibility: role="region", aria-label for each project grid
     - Memory proportional to total terminals; cleanup for inactive projects TBD
-- **TerminalPane**: Resizable wrapper with header bar containing editable title, refresh button (WebGL recovery), Claude button, close button
-  - **Active Terminal Styling** (`globals.css`): Visual distinction via glow + opacity
-    - `--terminal-active-glow`: CSS var for active pane outer glow (`color-mix()` animated)
-    - `--terminal-transition`: Unified 0.25s ease timing for opacity/glow transitions
-    - Active pane: animated glow effect; Inactive: 0.85 opacity
+- **TerminalPane**: Flex item with bottom tab bar (not header bar) containing editable title, action buttons
+  - **Bottom Tab Bar**: Shows terminal title, Claude badge, Start Claude button, Close button
+  - **Active Terminal Styling**: Visual distinction via glow effect on active pane
+    - `--terminal-active-glow`: CSS var for active pane outer glow (animated via color-mix)
+    - `--terminal-transition`: Unified 0.15s ease timing for opacity/glow transitions
+    - Active pane: animated glow; Inactive: 0.85 opacity
     - `will-change: opacity, box-shadow` for GPU-optimized transitions
   - **Hidden Prop**: `hidden` prop disables WebGL for GPU optimization when terminal not visible
+  - **Add Cell Placeholder**: "+" button cell when terminals < 9, positioned in next grid row
 - **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
   - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
   - 5-line threshold reduces button flicker on minor scroll changes
@@ -75,15 +77,19 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - Auto-recovery on WebGL context lost events with toast notification
   - `use-terminal.ts` exposes `refresh()` callback via `onRefreshReady` prop
 
-#### Sidebar & UI Components
-- **Sidebar**: Left-side navigation with collapsible layout (240px expanded / 60px collapsed)
-  - **sidebar-header.tsx**: Logo display + collapse/expand toggle button
-  - **navigation-item.tsx**: Reusable navigation menu item with active/hover states
-  - **user-account-card.tsx**: GitHub account card showing username, connection status, and current branch
-  - Features: Git status display/initialization and GitHub authentication/repo creation
-  - Tools: New Terminal, Start Claude, Kill All with terminal counting
-  - Settings toggle at bottom
-- **ProjectTabs**: Top tab bar for switching between projects with keyboard shortcuts (Alt+1-9)
+#### Toolbar & UI Components (VibeTerminal v1.2)
+- **Toolbar** (32px compact header replacing activity bar + project tabs):
+  - **toolbar.tsx**: Main toolbar with left (add terminal + project dropdown) and right (Git, GitHub, Settings, Update) groups
+  - **toolbar-button.tsx**: Reusable icon button with optional badge/highlight
+  - **project-dropdown.tsx**: Project selector dropdown with add project button
+  - Features: macOS traffic light padding (72px left), drag region behind buttons
+  - Keyboard shortcuts: Ctrl+T (new terminal), Ctrl+B (toggle Git panel)
+- **Slide Panels** (modal dialogs replaced with side panels):
+  - Position: Right edge on landscape (340px wide), bottom edge on portrait
+  - Git Panel: Accessed via Ctrl+B, toggles git-panel.tsx content
+  - GitHub Panel: Accessed via toolbar, toggles github-view.tsx content
+  - Settings Panel: Accessed via toolbar, toggles settings-panel.tsx content
+  - Each panel has close button and can be toggled via toolbar or keyboard
 - **App.tsx State Cleanup** (Phase 2 of Terminal Cursor Fix)
   - Removed `projectSwitching` state - no longer needed with single-parent pattern
   - Removed `sidebarOpen` unused state variable
@@ -107,7 +113,7 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
 - **GitHubAuth**: OAuth flow using GitHub CLI (gh command)
 - Channels: status, init, add-remote, push
 
-#### Settings
+#### Settings & VibeTerminal Themes
 - **SettingsStore** (Main Process): electron-store based persistence for app-wide preferences
   - Storage path: `%APPDATA%/multiclaude/multiclaude-settings.json` (Windows), `~/.config/multiclaude/multiclaude-settings.json` (Linux), `~/Library/Application Support/multiclaude/multiclaude-settings.json` (macOS)
   - Validation: Enum validation for themeMode/colorTheme/terminalRenderMode, range checks for terminalLimit, object structure checks for windowsShell
@@ -118,13 +124,18 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - Save/Cancel: Changes preview immediately, persist only on Save button
   - localStorage migration: One-time automatic migration of old data on first load
   - Optimized equality check: Field-by-field comparison instead of JSON.stringify
-- **SettingsPanel**: Tabbed settings UI (Appearance, Notifications, Updates) with Save/Cancel buttons
-- **ThemeSelector**: Color theme and dark/light mode selection
+- **SettingsPanel**: Tabbed settings UI (Appearance, Terminals, Notifications, Updates) with Save/Cancel buttons
+- **ThemeSelector**: VibeTheme picker with 5 curated dark themes
+- **VibeTerminal Theme System** (v1.2):
+  - **VibeTheme Interface**: Unified theme with UI colors + full ANSI 16-color palette
+  - **5 Themes**: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
+  - **CSS Variables**: `--bg-primary`, `--text-primary`, `--accent`, `--border`, `--hover`, `--tab-bg`, `--cursor`, `--selection-bg`, `--toolbar-height` (32px), `--panel-width` (340px)
+  - **Dynamic Application**: Themes applied via `setTheme(themeId)` in App.tsx, CSS vars update in globals.css
+  - **xterm Integration**: Theme colors passed to TerminalView for terminal color palette
 - **Terminal Rendering Mode**: WebGL optimization for xterm.js (Settings > Appearance > Terminal Rendering)
   - **Performance**: No WebGL, best for many terminals (lower GPU usage)
   - **Balanced** (default): WebGL only for active terminal
   - **Quality**: WebGL always enabled, best visual quality
-- Themes: 7 color themes + light/dark/system mode
 
 #### Notifications
 **Phase 1 - Completed: Types & Constants**
@@ -273,18 +284,18 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (84 total)
+## IPC Channels (85 total)
 
 ### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
 - `terminal:resize`, `terminal:list`, `terminal:invoke-claude`, `terminal:title-change`
 - `terminal:detect-wsl`
 
-### Project (6 channels)
-- `project:list`, `project:create`, `project:delete`, `project:set-active`
+### Project (7 channels)
+- `project:list`, `project:create`, `project:update`, `project:delete`, `project:set-active`
 - `project:open-folder`, `project:check-folder`
 
-### Git (35 channels)
+### Git (38 channels)
 **Basic**: `git:status`, `git:init`, `git:add-remote`, `git:push`
 **File Operations**: `git:file-status`, `git:stage-file`, `git:unstage-file`, `git:stage-all`, `git:discard`, `git:diff`
 **Commit**: `git:commit`
@@ -293,6 +304,7 @@ src/
 **History**: `git:log`
 **Stash**: `git:stash-list`, `git:stash-save`, `git:stash-apply`, `git:stash-pop`, `git:stash-drop`
 **Config**: `git:config-get`, `git:config-set`
+**Branch Diff**: `git:diff-branch`, `git:diff-against-branch`
 **Watcher**: `git:branch-changed`, `git:watch-project`, `git:unwatch-project`
 
 ### GitHub (5 channels)
@@ -619,6 +631,56 @@ interface ProjectTerminal {
   - `getAllTerminalLayouts()`: Bulk retrieval for app initialization
 - **Deleted Components**: Removed terminal-tabs.tsx (consolidated into ProjectTabs)
 - **Feature Complete**: Project tabs redesign fully integrated with persistence layer
+
+## GitHub Panel Redesign Implementation
+
+**Status**: Completed (2026-03-08)
+
+**Architecture Shift**: From tabbed layout to single-column scrollable container with collapsible sections.
+
+**Components & Layout**:
+- **github-view.tsx**: Main container rendering sections in single-column scrollable layout
+  - Compact header (branch selector + sync buttons)
+  - Commit form (stage/commit/push workflow)
+  - Changes list (staged/unstaged files with grouping)
+  - History tab (commit log)
+  - Stash tab (stash operations)
+  - Branch diff section (comparison against base branch)
+  - Issues and PRs tabs (GitHub integration)
+
+**New Components**:
+- **CompactHeader**: Branch dropdown with fetch/pull/push controls (compact 32px design)
+- **BranchDiffFileList**: Single-column scrollable file list showing changes vs base branch
+  - Displays path, status icon (A/M/D/R), and addition/deletion counts
+  - Grouped by directory using `groupByDir()` utility
+  - Click to open diff modal
+
+**New Module - git-file-utils.ts**:
+- `getStatusColor(status)`: Maps file status (A/M/D/R) to CSS color class
+- `getStatusLabel(status)`: Maps file status to human-readable label
+- `groupByDir(files)`: Groups files by parent directory for organized listing
+
+**New IPC Method - git:diff-against-branch**:
+- Handler in git-manager.ts: `getDiffAgainstBranch(cwd, file, baseBranch)`
+- Shows diff of a file compared to base branch (not working tree)
+- Used by `openBranchFileDiff()` callback to populate diff modal
+- Accurate file status detection via `git diff --name-status`
+
+**Hook Enhancement - use-git-panel.ts**:
+- Added `branchDiff` state for holding branch comparison results
+- Added `baseBranch` state with `setBaseBranch()` setter (default: 'main')
+- Added `baseBranchRef` (useRef) to avoid double-fetch on branch changes
+- Integrates with useEffect hook for fetching branch diffs when baseBranch updates
+
+**DiffModal Integration**:
+- Unified modal for both working-tree and branch-comparison diffs
+- `fileStatus`, `additions`, `deletions` display (empty for branch diffs without stats)
+- Diff content rendering via `diff-modal.tsx`
+
+**Collapsible Sections**:
+- **collapsible-section.tsx**: Reusable header with expand/collapse toggle
+- Used for: Commit Form, Staged Changes, Unstaged Changes, History, Stash, Branch Diff, Issues, PRs
+- State managed locally per section (no global collapse state)
 
 ## In-App Update Settings Implementation
 

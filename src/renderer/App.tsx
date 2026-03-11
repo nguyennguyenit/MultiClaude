@@ -1,20 +1,16 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
-import { ActivityBar } from './components/activity-bar'
-import { ProjectTabs } from './components/project-tabs'
-import { TitlebarLogo } from './components/titlebar'
+import { Toolbar, ProjectBar } from './components/toolbar'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
-import { GitHubView } from './components/github-view'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
+import { SlidePanel } from './components/slide-panel'
+import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { COLOR_THEMES, TERMINAL_FONTS, TERMINAL_COLOR_PRESETS } from '@shared/constants'
+import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
 import type { WindowsShell, Project } from '@shared/types'
-
-// Detect macOS for title bar layout (traffic lights on left)
-const isMac = navigator.platform.toLowerCase().includes('mac')
 
 function App() {
   const {
@@ -30,13 +26,17 @@ function App() {
     setProjects,
     setActiveProject,
     setActiveTerminal,
-    switchToProject,
-    activityBarState,
-    setActivityBarState,
-    activeView
+    switchToProject
   } = useAppStore()
 
-  const { pendingSettings, loadSettings, detectWsl, getTerminalLimitValue, settingsModalOpen, setSettingsModalOpen } = useSettingsStore()
+  // Active slide panel: 'git' | 'github' | 'settings' | null (Phase 4 adds actual panels)
+  const [activePanel, setActivePanel] = useState<string | null>(null)
+
+  const togglePanel = useCallback((panel: string) => {
+    setActivePanel(prev => prev === panel ? null : panel)
+  }, [])
+
+  const { pendingSettings, loadSettings, detectWsl, getTerminalLimitValue } = useSettingsStore()
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -121,7 +121,7 @@ function App() {
     // Atomic project switch - updates project + terminal in single state update
     switchToProject(id)
     prevProjectIdRef.current = id
-  }, [projects, switchToProject, removeProject])
+  }, [projects, switchToProject, removeProject, setActiveProject, setActiveTerminal])
 
   // Handler: Add new terminal in active project
   const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
@@ -145,12 +145,17 @@ function App() {
     // Use savedSettings (persisted to disk) instead of pendingSettings to ensure consistency
     const effectiveShell = shell ?? useSettingsStore.getState().savedSettings.windowsShell
 
-    const terminal = await window.electron.terminal.create({
-      cwd: activeProject?.path,
-      projectId: activeProject?.id,
-      shell: effectiveShell
-    })
-    addTerminal(terminal)
+    try {
+      const terminal = await window.electron.terminal.create({
+        cwd: activeProject?.path,
+        projectId: activeProject?.id,
+        shell: effectiveShell
+      })
+      addTerminal(terminal)
+    } catch (err) {
+      console.error('[handleAddTerminal] Failed to create terminal:', err)
+      useToastStore.getState().addToast('Failed to create terminal. Please try again.', 'error')
+    }
   }, [activeProject, activeProjectId, addTerminal])
 
   // Handler: Close terminal by id (or active terminal if no id provided)
@@ -239,29 +244,17 @@ function App() {
   useKeyboardShortcuts({
     onAddTerminal: handleAddTerminal,
     onCloseTerminal: handleCloseTerminal,
-    onSelectProject: handleSelectProject
+    onSelectProject: handleSelectProject,
+    onToggleGitPanel: () => togglePanel('github')
   })
 
 
   // Load settings and detect WSL on mount
   useEffect(() => {
-    loadSettings().then(() => {
-      // Sync activity bar state from settings to app store
-      const settings = useSettingsStore.getState().savedSettings
-      if (settings.activityBarState) {
-        setActivityBarState(settings.activityBarState)
-      }
-    })
+    loadSettings()
     detectWsl()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Persist activity bar state changes to settings
-  useEffect(() => {
-    const settingsState = useSettingsStore.getState()
-    if (settingsState.savedSettings.activityBarState !== activityBarState) {
-      window.electron.settings.set({ ...settingsState.savedSettings, activityBarState })
-    }
-  }, [activityBarState])
 
   // Load YOLO status when project changes
   useEffect(() => {
@@ -289,78 +282,43 @@ function App() {
     window.electron.notification.setActiveTerminal(activeTerminalId)
   }, [activeTerminalId])
 
-  // Apply theme classes to document
+  // Apply VibeTerminal theme via CSS variables
   useEffect(() => {
     const root = document.documentElement
+    // Find theme by id, fall back to first (handles legacy theme IDs gracefully)
+    const theme = THEMES.find(t => t.id === pendingSettings.colorTheme) ?? THEMES[0]
 
-    // Determine actual mode
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const isDark = pendingSettings.themeMode === 'dark' ||
-      (pendingSettings.themeMode === 'system' && prefersDark)
+    // Set new CSS variable system
+    root.style.setProperty('--bg-primary', theme.background)
+    root.style.setProperty('--bg-secondary', theme.tabBg)
+    root.style.setProperty('--bg-tertiary', theme.border)
+    root.style.setProperty('--text-primary', theme.foreground)
+    root.style.setProperty('--text-secondary', `${theme.foreground}99`)
+    root.style.setProperty('--text-muted', `${theme.foreground}66`)
+    root.style.setProperty('--accent', theme.accent)
+    root.style.setProperty('--border', theme.border)
+    root.style.setProperty('--hover', theme.hover)
+    root.style.setProperty('--tab-bg', theme.tabBg)
+    root.style.setProperty('--tab-active-bg', theme.tabActiveBg)
+    root.style.setProperty('--cursor', theme.cursor)
+    root.style.setProperty('--selection-bg', theme.selectionBg)
 
-    // Remove old classes
-    root.classList.remove('light', 'dark')
-    COLOR_THEMES.forEach(t => root.classList.remove(`theme-${t.id}`))
-
-    // Apply new classes
-    root.classList.add(isDark ? 'dark' : 'light')
-    root.classList.add(`theme-${pendingSettings.colorTheme}`)
-
-    // ===== TERMINAL STYLE LOGIC =====
-    // Remove all terminal classes (derived from TERMINAL_COLOR_PRESETS for DRY)
-    const presetClasses = Object.keys(TERMINAL_COLOR_PRESETS).map(k => `terminal-preset-${k}`)
-    root.classList.remove('ui-terminal', ...presetClasses, 'use-border-chars')
-
-    const terminalOpts = pendingSettings.terminalStyleOptions ?? {
-      colorPreset: 'green',
-      fontFamily: 'jetbrains-mono',
-      useBorderChars: false
+    // Set terminal font from settings (xterm uses this via use-terminal hook)
+    const termFontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
+    const termFont = TERMINAL_FONTS.find(f => f.id === termFontId)
+    if (termFont) {
+      root.style.setProperty('--terminal-font', `${termFont.family}, Menlo, Monaco, Consolas, monospace`)
     }
 
-    if (pendingSettings.uiStyle === 'terminal') {
-      root.classList.add('ui-terminal')
-      root.classList.add(`terminal-preset-${terminalOpts.colorPreset}`)
-
-      if (terminalOpts.useBorderChars) {
-        root.classList.add('use-border-chars')
-      }
-
-      // Set font variable
-      const font = TERMINAL_FONTS.find(f => f.id === terminalOpts.fontFamily)
-      root.style.setProperty('--mc-terminal-font', font?.family || "'JetBrains Mono', monospace")
-    } else {
-      root.style.removeProperty('--mc-terminal-font')
-
-      // Set modern font variable
-      const modernFontId = pendingSettings.modernFontFamily ?? 'jetbrains-mono'
-      const modernFont = TERMINAL_FONTS.find(f => f.id === modernFontId)
-      root.style.setProperty('--mc-modern-font', modernFont?.family || "'JetBrains Mono', monospace")
+    // Set app/UI font from settings - apply to both CSS variable and directly to body
+    // to ensure all elements (including fixed-position modals) pick up the change
+    const appFontId = pendingSettings.modernFontFamily ?? 'system'
+    const appFont = APP_FONTS.find(f => f.id === appFontId)
+    if (appFont) {
+      root.style.setProperty('--modern-font', appFont.family)
+      document.body.style.fontFamily = appFont.family
     }
-
-    // Update title bar overlay to match theme
-    let bgColor: string
-    let symbolColor: string
-
-    if (pendingSettings.uiStyle === 'terminal') {
-      // Use terminal preset colors for title bar
-      const preset = TERMINAL_COLOR_PRESETS[terminalOpts.colorPreset] ?? TERMINAL_COLOR_PRESETS.green
-      bgColor = preset.bg
-      symbolColor = preset.text
-    } else {
-      // Default theme colors
-      bgColor = isDark ? '#2d2d2d' : '#ebebeb'
-      symbolColor = isDark ? '#d4d4d4' : '#1e1e1e'
-    }
-    window.electron.window.updateTitleBarOverlay({ color: bgColor, symbolColor })
-  }, [
-    pendingSettings.themeMode,
-    pendingSettings.colorTheme,
-    pendingSettings.uiStyle,
-    pendingSettings.terminalStyleOptions?.colorPreset,
-    pendingSettings.terminalStyleOptions?.fontFamily,
-    pendingSettings.terminalStyleOptions?.useBorderChars,
-    pendingSettings.modernFontFamily
-  ])
+  }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily, pendingSettings.modernFontFamily])
 
   // Load saved projects on mount and validate folder existence
   useEffect(() => {
@@ -398,6 +356,7 @@ function App() {
       setProjects(validProjects)
     }
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // NOTE: Removed auto-create terminal - now shows welcome screen instead
@@ -429,12 +388,27 @@ function App() {
   }, [])
 
   return (
-    <div className="h-screen flex flex-col bg-[var(--mc-bg-primary)] text-[var(--mc-text-primary)]">
+    <div className="app">
       {/* Toast notifications */}
       <ToastContainer />
 
-      {/* Settings Modal */}
-      <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
+      {/* Settings modal */}
+      <SettingsModal
+        isOpen={activePanel === 'settings'}
+        onClose={() => setActivePanel(null)}
+      />
+
+
+
+      {/* GitHub slide panel */}
+      <SlidePanel
+        isOpen={activePanel === 'github'}
+        onClose={() => setActivePanel(null)}
+        title=""
+        headerExtra={<GitHubHeaderExtra projectPath={activeProject?.path} />}
+      >
+        <GitHubPanelContent projectPath={activeProject?.path} />
+      </SlidePanel>
 
       {/* Git Setup Dialogs */}
       <GitInitDialog
@@ -459,91 +433,111 @@ function App() {
         }}
       />
 
-      {/* Unified Titlebar with Logo and Project Tabs */}
-      <div className={`h-10 bg-[var(--mc-bg-tertiary)] flex items-center px-3 titlebar-drag ${isMac ? 'pl-20' : ''}`}>
-        {/* Logo */}
-        <TitlebarLogo showText={activityBarState === 'expanded'} />
-
-        {/* Vertical divider */}
-        <div className="h-5 w-px bg-[var(--mc-border)] mx-3" />
-
-        {/* Project Tabs - inline after logo */}
-        <div className="flex-1 min-w-0">
-          <ProjectTabs
-            projects={projects}
-            activeProjectId={activeProjectId}
-            onSelectProject={handleSelectProject}
-            onAddProject={handleAddProject}
-            onDeleteProject={handleDeleteProject}
-          />
-        </div>
-      </div>
+      {/* Toolbar - replaces old titlebar + activity bar */}
+      <Toolbar
+        onAddTerminal={handleAddTerminal}
+        terminalCount={visibleTerminals.length}
+        terminalLimit={getTerminalLimitValue()}
+        onToggleGitHub={() => togglePanel('github')}
+        onToggleSettings={() => togglePanel('settings')}
+        activePanel={activePanel}
+      />
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="main-content">
         {activeProjectId ? (
-          <>
-            <ActivityBar />
-            <div className="flex-1 min-w-0 flex flex-col relative">
-              {/* Terminal View - always rendered, hidden via visibility to preserve xterm state */}
-              <div
-                className="flex flex-col border-t border-[var(--mc-border)]"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  visibility: activeView === 'terminals' ? 'visible' : 'hidden',
-                  pointerEvents: activeView === 'terminals' ? 'auto' : 'none',
-                  zIndex: activeView === 'terminals' ? 1 : 0
-                }}
-              >
-                <TerminalActionBar
-                  terminalCount={visibleTerminals.length}
-                  terminalLimit={getTerminalLimitValue()}
-                  yoloEnabled={yoloEnabled}
-                  onAddTerminal={handleAddTerminal}
-                  onToggleYolo={handleYoloToggle}
-                  onKillAll={handleKillAll}
-                />
-                <div data-testid="terminal-area" className="flex-1 min-h-0">
-                  <TerminalGrid
-                    terminals={terminals}
-                    activeProjectId={activeProjectId}
-                    activeTerminalId={activeTerminalId}
-                    onTerminalClick={setActiveTerminal}
-                    onAddTerminal={handleAddTerminal}
-                    onCloseTerminal={handleCloseTerminal}
-                    onInsertFilePath={handleInsertFilePath}
-                    onTitleChange={updateTerminalTitle}
-                  />
-                </div>
-              </div>
-              {/* GitHub View - always rendered, hidden via visibility to preserve state */}
-              <div
-                className="flex flex-col flex-1"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  visibility: activeView === 'github' ? 'visible' : 'hidden',
-                  pointerEvents: activeView === 'github' ? 'auto' : 'none',
-                  zIndex: activeView === 'github' ? 1 : 0
-                }}
-              >
-                <GitHubView projectPath={activeProject?.path} isActive={activeView === 'github'} />
-              </div>
+          <div className="terminal-area">
+            <TerminalActionBar
+              terminalCount={visibleTerminals.length}
+              terminalLimit={getTerminalLimitValue()}
+              yoloEnabled={yoloEnabled}
+              onAddTerminal={handleAddTerminal}
+              onToggleYolo={handleYoloToggle}
+              onKillAll={handleKillAll}
+            />
+            <div data-testid="terminal-area" style={{ flex: 1, minHeight: 0 }}>
+              <TerminalGrid
+                terminals={terminals}
+                activeProjectId={activeProjectId}
+                activeProjectPath={activeProject?.path}
+                activeTerminalId={activeTerminalId}
+                onTerminalClick={setActiveTerminal}
+                onAddTerminal={handleAddTerminal}
+                onCloseTerminal={handleCloseTerminal}
+                onInsertFilePath={handleInsertFilePath}
+                onTitleChange={updateTerminalTitle}
+              />
             </div>
-          </>
+
+          </div>
         ) : (
           <WelcomeScreen onAddProject={handleAddProject} />
         )}
       </div>
+
+      {/* Project bar - horizontal tab list below terminal */}
+      <ProjectBar
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={handleSelectProject}
+        onAddProject={handleAddProject}
+        onDeleteProject={handleDeleteProject}
+        onToggleSettings={() => togglePanel('settings')}
+        settingsActive={activePanel === 'settings'}
+      />
     </div>
   )
 }
 
 export default App
+
+/** Convert git remote URL to a clean https GitHub URL */
+function toGitHubUrl(remote: string): string | null {
+  const ssh = remote.match(/git@github\.com[:/](.+?)(?:\.git)?$/)
+  if (ssh) return `https://github.com/${ssh[1]}`
+  const https = remote.match(/(https?:\/\/github\.com\/.+?)(?:\.git)?$/)
+  if (https) return https[1]
+  return null
+}
+
+/** GitHub icon + repo link in slide panel header — fetches remoteUrl from git status */
+function GitHubHeaderExtra({ projectPath }: { projectPath?: string }) {
+  const [repoUrl, setRepoUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!projectPath) { setRepoUrl(null); return }
+    window.electron.git.status(projectPath).then(status => {
+      setRepoUrl(status.remoteUrl ? toGitHubUrl(status.remoteUrl) : null)
+    }).catch(() => setRepoUrl(null))
+  }, [projectPath])
+
+  if (!repoUrl) return null
+
+  const label = repoUrl.match(/github\.com\/(.+)/)?.[1] ?? repoUrl
+
+  return (
+    <a
+      href={repoUrl}
+      onClick={e => { e.preventDefault(); window.electron.app.openExternal(repoUrl) }}
+      title={repoUrl}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        color: 'var(--mc-text-muted, #6e7681)',
+        textDecoration: 'none',
+        fontSize: 11,
+        transition: 'color 0.15s',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--mc-accent, #58a6ff)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--mc-text-muted, #6e7681)' }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+      </svg>
+      <span style={{ whiteSpace: 'nowrap' }}>
+        {label}
+      </span>
+    </a>
+  )
+}

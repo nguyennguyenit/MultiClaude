@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants'
 import type {
   Terminal,
@@ -13,6 +13,7 @@ import type {
   GitLogEntry,
   GitStashEntry,
   GitOperationResult,
+  GitBranchDiff,
   AppSession,
   AppSettings,
   NotificationSettings,
@@ -78,6 +79,9 @@ export interface ElectronAPI {
     // Config methods
     configGet: () => Promise<GitConfig>
     configSet: (config: GitConfig) => Promise<GitOperationResult>
+    // Branch diff comparison
+    diffBranch: (cwd: string, baseBranch?: string) => Promise<GitBranchDiff>
+    diffAgainstBranch: (cwd: string, file: string, baseBranch: string) => Promise<GitDiffResult>
     // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback: (data: { projectPath: string }) => void) => () => void
     // Watch project for external git changes
@@ -154,6 +158,9 @@ export interface ElectronAPI {
   }
   window: {
     updateTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>
+    minimize: () => Promise<void>
+    maximize: () => Promise<void>
+    close: () => Promise<void>
   }
   onFileDrop: (callback: (filePath: string) => void) => () => void
 }
@@ -168,17 +175,17 @@ const api: ElectronAPI = {
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
     detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
     onOutput: (callback) => {
-      const listener = (_: any, data: any) => callback(data)
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_OUTPUT, listener)
     },
     onExit: (callback) => {
-      const listener = (_: any, data: any) => callback(data)
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on('terminal:exit', listener)
       return () => ipcRenderer.removeListener('terminal:exit', listener)
     },
     onTitleChange: (callback) => {
-      const listener = (_: any, data: any) => callback(data)
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, listener)
     }
@@ -222,6 +229,9 @@ const api: ElectronAPI = {
     // Config methods
     configGet: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_GET),
     configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config),
+    // Branch diff comparison
+    diffBranch: (cwd, baseBranch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_BRANCH, { cwd, baseBranch }),
+    diffAgainstBranch: (cwd, file, baseBranch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, { cwd, file, baseBranch }),
     // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback) => {
       const listener = (_: unknown, data: { projectPath: string }) => callback(data)
@@ -304,7 +314,10 @@ const api: ElectronAPI = {
     getFilePath: (file) => webUtils.getPathForFile(file)
   },
   window: {
-    updateTitleBarOverlay: (colors) => ipcRenderer.invoke('update-title-bar-overlay', colors)
+    updateTitleBarOverlay: (colors) => ipcRenderer.invoke('update-title-bar-overlay', colors),
+    minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
+    maximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
+    close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE)
   },
   onFileDrop: (callback) => {
     const listener = (_: unknown, data: { filePath: string }) => callback(data.filePath)
