@@ -555,16 +555,14 @@ button, input, select, textarea, optgroup, option {
 }
 
 .terminal-row {
+  /* flex value overridden inline by resize state; default 1 for inactive projects */
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-.terminal-row+.terminal-row {
-  border-top: 1px solid var(--border);
-}
-
 .terminal-cell {
+  /* flex value overridden inline by resize state; default 1 */
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -573,12 +571,36 @@ button, input, select, textarea, optgroup, option {
   position: relative;
 }
 
-.terminal-cell+.terminal-cell {
-  border-left: 1px solid var(--border);
-}
-
 .terminal-cell.active {
   z-index: 1;
+}
+
+/* Resize handle between terminal panes */
+.terminal-resize-handle {
+  flex-shrink: 0;
+  background: var(--border);
+  transition: background 0.15s;
+  position: relative;
+  z-index: 10;
+}
+
+.terminal-resize-handle:hover,
+.terminal-resize-handle:active {
+  background: var(--accent, #58a6ff);
+}
+
+/* Horizontal handle: sits between rows, drag up/down */
+.terminal-resize-handle--horizontal {
+  width: 100%;
+  height: 4px;
+  cursor: row-resize;
+}
+
+/* Vertical handle: sits between columns, drag left/right */
+.terminal-resize-handle--vertical {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
 }
 
 
