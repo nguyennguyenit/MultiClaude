@@ -115,6 +115,10 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESET: 'settings:reset',
+  // Vietnamese IME channels
+  VIETNAMESE_IME_PATCH: 'vietnamese-ime:patch',
+  VIETNAMESE_IME_STATUS: 'vietnamese-ime:status',
+
   // Windows channels
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',

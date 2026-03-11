@@ -255,5 +255,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     fontFamily: 'jetbrains-mono',
     useBorderChars: false
   },
-  activityBarState: DEFAULT_ACTIVITY_BAR_STATE
+  activityBarState: DEFAULT_ACTIVITY_BAR_STATE,
+  vietnameseImeFix: false,
+  vietnameseImeClaudeVersion: undefined,
+  vietnameseImeClaudePath: undefined
 }
