@@ -378,9 +378,39 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       return false
     })
 
-    // Handle input
+    // Fix Vietnamese IME on macOS: The IME uses backspace mode (no composition API)
+    // and sends Backspace count based on its internal NFD buffer length.
+    // macOS NFD: "à" = U+0061 + U+0300 (2 code points) → IME sends 2 DELs.
+    // But we send NFC to PTY: "à" = U+00E0 (1 code point) → shell needs 1 DEL.
+    // Track the NFC/NFD length difference as "debt" and swallow extra DELs.
+    // Debt resets when regular (non-NFD) text is typed.
+    let imeDelDebt = 0
+
     terminal.onData((data) => {
-      window.electron.terminal.write(terminalId, data)
+      // Single DEL: swallow if debt > 0 (extra DEL from IME NFD mismatch)
+      if (data === '\x7f') {
+        if (imeDelDebt > 0) {
+          imeDelDebt--
+          return
+        }
+        window.electron.terminal.write(terminalId, data)
+        return
+      }
+
+      // Normalize to NFC and track debt
+      const nfcData = data.normalize('NFC')
+      const origLen = [...data].length
+      const nfcLen = [...nfcData].length
+
+      if (origLen > nfcLen) {
+        // NFD text (has combining marks): accumulate debt
+        imeDelDebt += origLen - nfcLen
+      } else {
+        // Regular text: reset debt (IME replacement cycle complete)
+        imeDelDebt = 0
+      }
+
+      window.electron.terminal.write(terminalId, nfcData)
     })
 
     // Handle resize

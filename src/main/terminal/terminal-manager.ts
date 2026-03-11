@@ -50,6 +50,19 @@ export class TerminalManager extends EventEmitter {
     if (process.platform === 'win32') {
       return process.env.COMSPEC || 'cmd.exe'
     }
+    // On macOS, use dscl to get the actual default shell (handles chsh changes)
+    // Fall back to process.env.SHELL which may be stale if app was launched before chsh
+    if (process.platform === 'darwin') {
+      try {
+        const result = spawnSync('dscl', ['.', '-read', `/Users/${os.userInfo().username}`, 'UserShell'], {
+          encoding: 'utf8'
+        })
+        const match = result.stdout?.match(/UserShell:\s+(.+)/)
+        if (match?.[1]) return match[1].trim()
+      } catch {
+        // ignore
+      }
+    }
     return process.env.SHELL || '/bin/bash'
   }
 
@@ -59,10 +72,10 @@ export class TerminalManager extends EventEmitter {
    * Windows: supports cmd, powershell, or wsl distro
    */
   private getShellCommand(shell?: WindowsShell): { command: string; args: string[] } {
-    // Non-Windows: use default shell
+    // Non-Windows: use detected default shell (this.shell handles macOS chsh correctly)
     if (process.platform !== 'win32') {
       return {
-        command: process.env.SHELL || '/bin/bash',
+        command: this.shell,
         args: []
       }
     }

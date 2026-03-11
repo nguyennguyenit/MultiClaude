@@ -1,5 +1,7 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { TerminalPane } from './terminal-pane'
+import { ResizeHandle } from './terminal-resize-handle'
+import { useTerminalResize } from '../../hooks/use-terminal-resize'
 import type { Terminal } from '@shared/types'
 
 interface TerminalWithOutput extends Terminal {
@@ -91,9 +93,25 @@ export const TerminalGrid = memo(function TerminalGrid({
     }))
   }, [terminals, activeProjectId])
 
-  // Get active project's terminals for empty state check
+  // Get active project's terminals for grid layout calculation
   const activeGroup = projectGroups.find(g => g.isActive)
   const visibleTerminalCount = activeGroup?.terminals.length ?? 0
+
+  // Compute resize grid shape based on active project
+  const activeGrid = activeGroup
+    ? calculateGrid(activeGroup.terminals.length, isPortrait)
+    : { rows: 1, cols: 1 }
+
+  const activeRows = activeGroup ? splitIntoRows(activeGroup.terminals, activeGrid.cols) : []
+  const numColsPerRow = activeRows.map(row => row.length)
+
+  // Resize state: flex values for rows and per-row columns
+  const gridContainerRef = useRef<HTMLDivElement>(null)
+  const { getRowFlex, getColFlex, startRowResize, startColResize } = useTerminalResize(
+    activeRows.length,
+    numColsPerRow,
+    gridContainerRef
+  )
 
   // Empty state
   if (visibleTerminalCount === 0) {
@@ -137,6 +155,7 @@ export const TerminalGrid = memo(function TerminalGrid({
         return (
           <div
             key={group.projectId}
+            ref={group.isActive ? gridContainerRef : undefined}
             role="region"
             aria-label={`Terminal grid for project ${group.projectId}`}
             aria-hidden={!group.isActive}
@@ -152,26 +171,49 @@ export const TerminalGrid = memo(function TerminalGrid({
           >
             <div className="terminal-grid">
               {rows.map((rowTerminals, rowIndex) => (
-                <div key={`row-${rowIndex}`} className="terminal-row">
-                  {rowTerminals.map((terminal) => (
-                    <div
-                      key={terminal.id}
-                      className={`terminal-cell${terminal.id === activeTerminalId ? ' active' : ''}`}
-                    >
-                      <TerminalPane
-                        terminalId={terminal.id}
-                        title={terminal.title}
-                        isActive={terminal.id === activeTerminalId}
-                        hidden={!group.isActive || terminal.id !== activeTerminalId}
-                        isClaudeMode={terminal.isClaudeMode}
-                        initialOutput={terminal.output}
-                        onActivate={() => onTerminalClick(terminal.id)}
-                        onClose={() => onCloseTerminal?.(terminal.id)}
-                        onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
-                        onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
-                      />
-                    </div>
-                  ))}
+                <div key={`row-${rowIndex}`} style={{ display: 'contents' }}>
+                  {/* Horizontal resize handle between rows */}
+                  {rowIndex > 0 && group.isActive && (
+                    <ResizeHandle
+                      direction="horizontal"
+                      onResizeStart={(y) => startRowResize(rowIndex - 1, y)}
+                    />
+                  )}
+
+                  <div
+                    className="terminal-row"
+                    style={{ flex: group.isActive ? getRowFlex(rowIndex) : 1 }}
+                  >
+                    {rowTerminals.map((terminal, colIndex) => (
+                      <div key={terminal.id} style={{ display: 'contents' }}>
+                        {/* Vertical resize handle between columns */}
+                        {colIndex > 0 && group.isActive && (
+                          <ResizeHandle
+                            direction="vertical"
+                            onResizeStart={(x) => startColResize(rowIndex, colIndex - 1, x)}
+                          />
+                        )}
+
+                        <div
+                          className={`terminal-cell${terminal.id === activeTerminalId ? ' active' : ''}`}
+                          style={{ flex: group.isActive ? getColFlex(rowIndex, colIndex) : 1 }}
+                        >
+                          <TerminalPane
+                            terminalId={terminal.id}
+                            title={terminal.title}
+                            isActive={terminal.id === activeTerminalId}
+                            hidden={!group.isActive || terminal.id !== activeTerminalId}
+                            isClaudeMode={terminal.isClaudeMode}
+                            initialOutput={terminal.output}
+                            onActivate={() => onTerminalClick(terminal.id)}
+                            onClose={() => onCloseTerminal?.(terminal.id)}
+                            onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
+                            onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
