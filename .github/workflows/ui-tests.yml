@@ -18,6 +18,9 @@ on:
       - 'src/__tests__/e2e/**'
       - 'index.html'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   ui-tests:
     runs-on: ubuntu-latest
