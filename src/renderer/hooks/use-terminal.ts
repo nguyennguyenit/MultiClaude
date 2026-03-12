@@ -91,6 +91,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const isHiddenRef = useRef(isHidden)
   const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
+  const isWritingRef = useRef(false)  // Guard against scroll tracking during programmatic writes
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
@@ -176,6 +177,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
     // Helper function to check and update scroll position for smart scroll behavior
     const updateScrollPosition = () => {
+      if (isWritingRef.current) return  // Skip during programmatic writes to avoid race condition
       const buffer = terminal.buffer.active
       const linesFromBottom = buffer.baseY - buffer.viewportY
       const SCROLL_THRESHOLD = 5
@@ -422,16 +424,25 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
   // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
+    if (!terminalRef.current) return
+
     // Save scroll state BEFORE write (xterm auto-scrolls on write)
     const wasAtBottom = isAtBottomRef.current
-    const savedY = terminalRef.current?.buffer.active.viewportY ?? 0
+    const savedY = terminalRef.current.buffer.active.viewportY
 
-    terminalRef.current?.write(data)
+    // Suppress scroll tracking during write to prevent race condition
+    // where onScroll fires at intermediate state (viewportY < baseY)
+    isWritingRef.current = true
 
-    // If user was reading history (not at bottom), restore their scroll position
-    if (!wasAtBottom && terminalRef.current && savedY >= 0) {
-      terminalRef.current.scrollToLine(savedY)
-    }
+    terminalRef.current.write(data, () => {
+      // Callback fires AFTER xterm fully processes data — safe to update state
+      isWritingRef.current = false
+
+      // If user was reading history (not at bottom), restore their scroll position
+      if (!wasAtBottom && terminalRef.current && savedY >= 0) {
+        terminalRef.current.scrollToLine(savedY)
+      }
+    })
 
     // NOTE: Removed auto cursor restore - it interferes with Claude Code CLI's cursor positioning
     // Claude Code manages its own cursor via escape sequences for status line rendering
@@ -546,6 +557,9 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     return () => {
       // Set disposed flag before any cleanup to prevent race conditions
       disposedRef.current = true
+
+      // Reset writing flag on dispose
+      isWritingRef.current = false
 
       // Clear pending refresh
       if (refreshDebounceRef.current) {
