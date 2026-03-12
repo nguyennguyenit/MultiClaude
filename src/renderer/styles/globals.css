@@ -1167,6 +1167,15 @@ button, input, select, textarea, optgroup, option {
   transform: translateY(0);
 }
 
+.welcome-project-path {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 /* Keyboard shortcuts row */
 .welcome-shortcuts {
   display: flex;
