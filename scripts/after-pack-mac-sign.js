@@ -3,6 +3,9 @@
 // Root cause: Electron framework binaries have pre-existing signatures from upstream,
 // but electron-builder with identity:null doesn't re-sign the full bundle,
 // leaving inconsistent signatures that fail ShipIt validation during auto-update.
+//
+// Note: --requirements flag is NOT supported with ad-hoc signing (--sign -).
+// Squirrel.Mac signature validation failures are handled gracefully in the updater.
 
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
@@ -19,22 +22,9 @@ export default async function afterPack(context) {
   console.log(`[after-pack] Ad-hoc signing: ${appPath}`)
 
   try {
-    // Step 1: Deep-sign all nested frameworks/helpers with ad-hoc identity
+    // Deep-sign all nested frameworks/helpers with ad-hoc identity
     execSync(`codesign --force --deep --sign - "${appPath}"`, { stdio: 'inherit' })
-
-    // Step 2: Re-sign only the outer .app with a stable Designated Requirement (DR).
-    // Without this, the DR defaults to `cdhash H"<binary-hash>"` which is unique per
-    // build. ShipIt (Squirrel.Mac) validates the new update against the RUNNING app's
-    // DR — a hash-based DR always fails because the update binary has a different hash.
-    // Setting DR to `identifier "com.multiclaude.app"` makes ShipIt only check the
-    // bundle identifier, which stays constant across versions.
-    execSync(
-      `codesign --force --sign - \
-        --requirements 'designated => identifier "com.multiclaude.app"' \
-        "${appPath}"`,
-      { stdio: 'inherit' }
-    )
-    console.log('[after-pack] Ad-hoc signing with stable DR complete')
+    console.log('[after-pack] Ad-hoc signing complete')
   } catch (error) {
     console.error('[after-pack] Ad-hoc signing failed:', error.message)
     throw error
