@@ -6,6 +6,8 @@ import type { UpdateState, UpdateStatus } from '@shared/types'
 autoUpdater.logger = console
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+// Enable prerelease updates when running a beta/alpha version
+autoUpdater.allowPrerelease = true
 
 let mainWindow: BrowserWindow | null = null
 let isDevMode = false
@@ -74,6 +76,24 @@ async function fetchReleaseNotes(version: string): Promise<string> {
   }
 }
 
+async function checkWithRetry(retries: number, delayMs: number) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await autoUpdater.checkForUpdates()
+      return
+    } catch (err) {
+      const msg = (err as Error).message
+      const isTransient = msg.includes('404') || msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT')
+      if (isTransient && i < retries - 1) {
+        console.warn(`[AutoUpdater] Check failed (attempt ${i + 1}/${retries}), retrying in ${delayMs / 1000}s:`, msg)
+        await new Promise(r => setTimeout(r, delayMs))
+      } else {
+        console.error('[AutoUpdater] Check failed:', msg)
+      }
+    }
+  }
+}
+
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window
 
@@ -118,14 +138,17 @@ export function initAutoUpdater(window: BrowserWindow) {
 
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error.message)
-    setStatus('error', { error: error.message })
+    // Treat 404 (release assets not found) as "no update" instead of showing error to user
+    if (error.message.includes('404')) {
+      setStatus('idle', { error: null })
+    } else {
+      setStatus('error', { error: error.message })
+    }
   })
 
-  // Auto-check after 3s delay
+  // Auto-check after 3s delay with retry for transient failures
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error('[AutoUpdater] Check failed:', err.message)
-    })
+    checkWithRetry(3, 10000)
   }, 3000)
 }
 
