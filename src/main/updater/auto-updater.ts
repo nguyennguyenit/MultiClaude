@@ -191,8 +191,8 @@ export async function downloadUpdate(): Promise<void> {
 }
 
 export function installUpdate(): void {
-  // Use app.quit() instead of quitAndInstall() to trigger normal quit flow
-  // This ensures terminal cleanup (destroyAllAsync) runs before exit
-  // autoInstallOnAppQuit = true (line 8) handles update installation after quit
-  app.quit()
+  // quitAndInstall closes all windows (triggering window-all-closed cleanup),
+  // then installs the update. isSilent=false surfaces code signature errors
+  // via the autoUpdater 'error' event instead of failing silently.
+  autoUpdater.quitAndInstall(false, true)
 }
