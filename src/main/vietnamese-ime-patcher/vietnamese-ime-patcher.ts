@@ -248,6 +248,15 @@ export function applyVietnameseImePatch(customPath?: string): PatchResult {
     return { success: false, message: `Cannot write patched binary: ${(err as Error).message}`, claudePath }
   }
 
+  // 5.5. Re-sign binary on macOS (patching invalidates code signature)
+  if (!isJs && platform() === 'darwin') {
+    try {
+      execSync(`codesign --force --sign - "${claudePath}"`, { stdio: 'ignore' })
+    } catch (err) {
+      console.warn('[vietnamese-ime-patcher] Ad-hoc re-signing failed:', (err as Error).message)
+    }
+  }
+
   // 6. Validate: run claude --version to verify binary still works
   const version = getClaudeVersion()
   if (!version) {
