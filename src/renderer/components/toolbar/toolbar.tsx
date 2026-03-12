@@ -67,6 +67,7 @@ export function Toolbar({
           title="Settings"
           onClick={onToggleSettings}
           active={activePanel === 'settings'}
+          testId="settings-button"
         />
         {/* Only show custom window controls on non-macOS platforms since macOS has native traffic lights on the left */}
         {!isMac && <WindowControls />}
