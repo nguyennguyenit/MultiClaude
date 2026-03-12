@@ -131,6 +131,99 @@ button, input, select, textarea, optgroup, option {
   font-family: var(--modern-font);
 }
 
+/* ============================================
+   Update Banner
+   ============================================ */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  background: color-mix(in srgb, var(--mc-accent) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--mc-accent) 30%, transparent);
+  font-size: 13px;
+  color: var(--mc-text-primary);
+  flex-shrink: 0;
+}
+
+.update-banner-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.update-banner-text {
+  flex: none;
+}
+
+.update-banner-link {
+  color: var(--mc-accent);
+  text-decoration: none;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.update-banner-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.update-banner-btn {
+  background: var(--mc-accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.update-banner-btn:hover {
+  opacity: 0.85;
+}
+
+.update-banner-progress {
+  flex: 1;
+  max-width: 120px;
+  height: 4px;
+  background: color-mix(in srgb, var(--mc-accent) 25%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.update-banner-progress-fill {
+  height: 100%;
+  background: var(--mc-accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.update-banner-percent {
+  font-size: 12px;
+  color: var(--mc-text-muted);
+  min-width: 32px;
+}
+
+.update-banner-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--mc-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.7;
+}
+
+.update-banner-dismiss:hover {
+  opacity: 1;
+  color: var(--mc-text-primary);
+}
+
 .main-content {
   flex: 1;
   display: flex;

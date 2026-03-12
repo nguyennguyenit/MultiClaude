@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { Toolbar, ProjectBar } from './components/toolbar'
+import { UpdateBanner } from './components/update-banner'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
@@ -442,6 +443,7 @@ function App() {
         onToggleSettings={() => togglePanel('settings')}
         activePanel={activePanel}
       />
+      <UpdateBanner />
 
       {/* Main Content */}
       <div className="main-content">
