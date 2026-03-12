@@ -76,7 +76,7 @@ export class TerminalManager extends EventEmitter {
     if (process.platform !== 'win32') {
       return {
         command: this.shell,
-        args: []
+        args: ['-l']
       }
     }
 
