@@ -19,11 +19,22 @@ export default async function afterPack(context) {
   console.log(`[after-pack] Ad-hoc signing: ${appPath}`)
 
   try {
+    // Step 1: Deep-sign all nested frameworks/helpers with ad-hoc identity
+    execSync(`codesign --force --deep --sign - "${appPath}"`, { stdio: 'inherit' })
+
+    // Step 2: Re-sign only the outer .app with a stable Designated Requirement (DR).
+    // Without this, the DR defaults to `cdhash H"<binary-hash>"` which is unique per
+    // build. ShipIt (Squirrel.Mac) validates the new update against the RUNNING app's
+    // DR — a hash-based DR always fails because the update binary has a different hash.
+    // Setting DR to `identifier "com.multiclaude.app"` makes ShipIt only check the
+    // bundle identifier, which stays constant across versions.
     execSync(
-      `codesign --force --deep --sign - "${appPath}"`,
+      `codesign --force --sign - \
+        --requirements 'designated => identifier "com.multiclaude.app"' \
+        "${appPath}"`,
       { stdio: 'inherit' }
     )
-    console.log('[after-pack] Ad-hoc signing complete')
+    console.log('[after-pack] Ad-hoc signing with stable DR complete')
   } catch (error) {
     console.error('[after-pack] Ad-hoc signing failed:', error.message)
     throw error
