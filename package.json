@@ -129,6 +129,7 @@
       "icon": "build/icon.icns",
       "identity": null
     },
+    "afterPack": "./scripts/after-pack-mac-sign.js",
     "win": {
       "target": [
         "nsis",
