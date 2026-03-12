@@ -129,6 +129,13 @@ export function UpdateSettings() {
             <RefreshIcon spinning={status === 'checking'} />
             {status === 'checking' ? 'Checking...' : 'Check for Updates'}
           </button>
+
+          {status === 'up-to-date' && (
+            <span className="text-sm text-green-500 flex items-center gap-1.5">
+              <CheckIcon />
+              You&apos;re on the latest version
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -158,6 +165,14 @@ function InstallIcon() {
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   )
 }
