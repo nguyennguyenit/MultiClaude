@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useUpdateStore } from '../stores'
 
 const GITHUB_REPO = 'nguyennguyenit/MultiClaude'
@@ -7,13 +7,6 @@ export function UpdateBanner() {
   const { state, downloadUpdate, installUpdate } = useUpdateStore()
   const { status, latestVersion, downloadProgress } = state
   const [dismissed, setDismissed] = useState(false)
-
-  // Auto-install when download is ready
-  useEffect(() => {
-    if (status === 'ready') {
-      installUpdate()
-    }
-  }, [status, installUpdate])
 
   if (dismissed) return null
   if (status !== 'available' && status !== 'downloading' && status !== 'ready') return null
@@ -64,7 +57,13 @@ export function UpdateBanner() {
       {status === 'ready' && (
         <>
           <span className="update-banner-icon">✅</span>
-          <span className="update-banner-text">Installing...</span>
+          <span className="update-banner-text">Update ready</span>
+          <button
+            className="update-banner-btn"
+            onClick={() => installUpdate()}
+          >
+            Install and Restart
+          </button>
         </>
       )}
 
