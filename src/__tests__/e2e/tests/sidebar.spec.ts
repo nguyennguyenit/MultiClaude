@@ -4,8 +4,10 @@ import { mockProject } from '../fixtures/test-data'
 /**
  * Sidebar component E2E tests.
  * Tests sidebar expand/collapse, tooltips, and settings badge.
+ * NOTE: Sidebar was removed in favor of toolbar + project bar layout.
+ * Skipped until sidebar is re-introduced.
  */
-test.describe('Sidebar', () => {
+test.describe.skip('Sidebar', () => {
   // Inject a project to show the main layout (not welcome screen)
   test.beforeEach(async ({ window }) => {
     await injectMockProject(window, [mockProject])
