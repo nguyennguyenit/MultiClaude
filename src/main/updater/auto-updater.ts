@@ -121,7 +121,7 @@ export function initAutoUpdater(window: BrowserWindow) {
 
   autoUpdater.on('update-not-available', () => {
     console.log('[AutoUpdater] No updates available')
-    setStatus('idle', { error: null })
+    setStatus('up-to-date', { error: null })
   })
 
   autoUpdater.on('download-progress', (progress) => {
