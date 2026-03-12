@@ -482,8 +482,6 @@ function App() {
         onSelectProject={handleSelectProject}
         onAddProject={handleAddProject}
         onDeleteProject={handleDeleteProject}
-        onToggleSettings={() => togglePanel('settings')}
-        settingsActive={activePanel === 'settings'}
       />
     </div>
   )

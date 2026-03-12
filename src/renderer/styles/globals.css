@@ -516,33 +516,7 @@ button, input, select, textarea, optgroup, option {
   background: var(--hover);
 }
 
-/* Settings gear icon button at bottom-right of project bar */
-.project-bar-settings {
-  flex-shrink: 0;
-  width: 28px;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  border-left: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0.6;
-  transition: color var(--transition-fast), opacity var(--transition-fast), background var(--transition-fast);
-}
 
-.project-bar-settings:hover {
-  opacity: 1;
-  color: var(--text-primary);
-  background: var(--hover);
-}
-
-.project-bar-settings.active {
-  opacity: 1;
-  color: var(--accent);
-}
 
 /* ============================================
    Terminal Grid - Flex Pane Layout (Phase 3)
