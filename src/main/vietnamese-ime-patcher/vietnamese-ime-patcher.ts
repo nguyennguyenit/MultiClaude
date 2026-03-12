@@ -42,8 +42,20 @@ export function findClaudePath(): string | null {
     }
   }
 
-  // 2) Bun global paths
+  // 2) ~/.local/bin (curl install default on macOS/Linux)
   const home = process.env.HOME || process.env.USERPROFILE || ''
+  if (!isWin) {
+    const localBin = join(home, '.local', 'bin', 'claude')
+    if (existsSync(localBin)) {
+      try {
+        return execSync(`realpath "${localBin}"`).toString().trim()
+      } catch {
+        return localBin
+      }
+    }
+  }
+
+  // 3) Bun global paths
   const bunInstall = process.env.BUN_INSTALL || join(home, '.bun')
   const bunPaths = [
     join(bunInstall, 'bin', isWin ? 'claude.exe' : 'claude'),
@@ -53,14 +65,14 @@ export function findClaudePath(): string | null {
     if (existsSync(p)) return p
   }
 
-  // 3) npm global
+  // 4) npm global
   try {
     const npmRoot = execSync('npm root -g').toString().trim()
     const cliPath = join(npmRoot, '@anthropic-ai', 'claude-code', 'cli.js')
     if (existsSync(cliPath)) return cliPath
   } catch { /* ignore */ }
 
-  // 4) Windows-specific fallbacks
+  // 5) Windows-specific fallbacks
   if (isWin) {
     const winPaths = [
       join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
@@ -76,7 +88,12 @@ export function findClaudePath(): string | null {
 
 /** Get Claude Code version by running `claude --version` */
 export function getClaudeVersion(): string | null {
-  const output = run('claude --version')
+  // Try with PATH first, then fallback to absolute path
+  let output = run('claude --version')
+  if (!output) {
+    const claudePath = findClaudePath()
+    if (claudePath) output = run(`"${claudePath}" --version`)
+  }
   if (!output) return null
   // Extract version number (e.g. "2.1.72" from "claude 2.1.72" or just "2.1.72")
   const match = output.match(/(\d+\.\d+\.\d+)/)
