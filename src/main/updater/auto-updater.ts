@@ -139,8 +139,8 @@ export function initAutoUpdater(window: BrowserWindow) {
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error.message)
     // Treat 404 (release assets not found) as "no update" instead of showing error to user
-    if (error.message.includes('404')) {
-      setStatus('idle', { error: null })
+    if (error.message.includes('404') || error.message.includes('latest-mac.yml')) {
+      setStatus('up-to-date', { error: null })
     } else {
       setStatus('error', { error: error.message })
     }
@@ -163,7 +163,12 @@ export async function checkForUpdatesManually(): Promise<UpdateState> {
     setStatus('checking')
     await autoUpdater.checkForUpdates()
   } catch (error) {
-    setStatus('error', { error: (error as Error).message })
+    const msg = (error as Error).message
+    if (msg.includes('404') || msg.includes('latest-mac.yml')) {
+      setStatus('up-to-date', { error: null })
+    } else {
+      setStatus('error', { error: msg })
+    }
   }
   return getUpdateState()
 }
