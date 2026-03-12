@@ -1,4 +1,3 @@
-import { safeStorage } from 'electron'
 import Store from 'electron-store'
 
 // In test mode, use test-specific store path from environment variable
@@ -9,24 +8,13 @@ const TELEGRAM_KEY = 'telegram-credentials'
 const DISCORD_KEY = 'discord-credentials'
 
 export class SecureStorage {
-  private isEncryptionAvailable: boolean
-
-  constructor() {
-    this.isEncryptionAvailable = safeStorage.isEncryptionAvailable()
-  }
-
+  // Use base64 encoding — avoids macOS keychain prompts on unsigned builds.
+  // Credentials are protected by OS file system permissions on the electron-store data dir.
   private encrypt(value: string): string {
-    if (this.isEncryptionAvailable) {
-      return safeStorage.encryptString(value).toString('base64')
-    }
-    // Fallback: base64 encoding (less secure but functional)
     return Buffer.from(value).toString('base64')
   }
 
   private decrypt(encrypted: string): string {
-    if (this.isEncryptionAvailable) {
-      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
-    }
     return Buffer.from(encrypted, 'base64').toString('utf-8')
   }
 

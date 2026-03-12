@@ -141,6 +141,18 @@ export function initAutoUpdater(window: BrowserWindow) {
     // Treat 404 (release assets not found) as "no update" instead of showing error to user
     if (error.message.includes('404') || error.message.includes('latest-mac.yml')) {
       setStatus('up-to-date', { error: null })
+    } else if (
+      error.message.includes('code failed to satisfy specified code requirement') ||
+      error.message.includes('Code signature') ||
+      error.message.includes('ShipIt')
+    ) {
+      // Ad-hoc signed builds: ShipIt validates the update against the running app's
+      // Designated Requirement (DR). Old installs have hash-based DRs that reject any
+      // new version. New builds include a stable DR — but until users reinstall, they
+      // need to download manually once.
+      setStatus('error', {
+        error: 'Auto-install failed (code signature). Please download the new version manually from GitHub Releases.'
+      })
     } else {
       setStatus('error', { error: error.message })
     }
