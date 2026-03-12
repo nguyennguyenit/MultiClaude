@@ -5,11 +5,13 @@ const GITHUB_REPO = 'nguyennguyenit/MultiClaude'
 
 export function UpdateBanner() {
   const { state, downloadUpdate, installUpdate } = useUpdateStore()
-  const { status, latestVersion, downloadProgress } = state
+  const { status, latestVersion, downloadProgress, error } = state
   const [dismissed, setDismissed] = useState(false)
 
+  const isCodeSignError = status === 'error' && !!error?.includes('GitHub Releases')
+
   if (dismissed) return null
-  if (status !== 'available' && status !== 'downloading' && status !== 'ready') return null
+  if (status !== 'available' && status !== 'downloading' && status !== 'ready' && !isCodeSignError) return null
 
   const releaseUrl = latestVersion
     ? `https://github.com/${GITHUB_REPO}/releases/tag/v${latestVersion}`
@@ -64,6 +66,21 @@ export function UpdateBanner() {
           >
             Install and Restart
           </button>
+        </>
+      )}
+
+      {isCodeSignError && (
+        <>
+          <span className="update-banner-icon">⚠️</span>
+          <span className="update-banner-text">Auto-install failed (code signature)</span>
+          <a
+            className="update-banner-link"
+            href={releaseUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download from GitHub ↗
+          </a>
         </>
       )}
 

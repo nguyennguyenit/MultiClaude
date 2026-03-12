@@ -39,8 +39,19 @@ export function UpdateSettings() {
 
       {/* Error */}
       {status === 'error' && error && (
-        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-md">
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-md flex flex-col gap-2">
           <p className="text-sm text-red-500">{error}</p>
+          {error.includes('GitHub Releases') && (
+            <a
+              href={releaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-[var(--mc-accent)] hover:underline w-fit"
+            >
+              <ExternalLinkIcon />
+              Download from GitHub Releases ↗
+            </a>
+          )}
         </div>
       )}
 
