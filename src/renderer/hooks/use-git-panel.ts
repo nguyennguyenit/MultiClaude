@@ -66,9 +66,13 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
 
   const currentBranch = gitStatus?.branch
 
+  // Guard against concurrent refresh calls (prevents pile-up when git is slow)
+  const isRefreshingRef = useRef(false)
+
   // Refresh file status
   const refresh = useCallback(async () => {
-    if (!projectPath || !enabled) return
+    if (!projectPath || !enabled || isRefreshingRef.current) return
+    isRefreshingRef.current = true
     setIsLoading(true)
     try {
       const [status, fileStatus] = await Promise.all([
@@ -79,6 +83,7 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
       setFiles(fileStatus)
     } finally {
       setIsLoading(false)
+      isRefreshingRef.current = false
     }
   }, [projectPath, enabled])
 
