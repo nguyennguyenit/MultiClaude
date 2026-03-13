@@ -24,16 +24,14 @@ interface DiffModalState {
 
 interface GitHubPanelContentProps {
   projectPath: string | undefined
-  isOpen?: boolean
 }
 
-export function GitHubPanelContent({ projectPath, isOpen = true }: GitHubPanelContentProps) {
+export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
   const [syncing, setSyncing] = useState(false)
   const [diffModal, setDiffModal] = useState<DiffModalState | null>(null)
   const [showStashInput, setShowStashInput] = useState(false)
 
-  // Only poll git status when panel is visible — prevents lag with large repos
-  const gitPanel = useGitPanel({ projectPath, enabled: isOpen })
+  const gitPanel = useGitPanel({ projectPath, enabled: true })
 
   const stagedFiles = gitPanel.files.filter(f => f.staged)
   const unstagedFiles = gitPanel.files.filter(f => !f.staged)

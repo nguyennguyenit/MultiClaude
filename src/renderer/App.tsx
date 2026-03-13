@@ -408,7 +408,7 @@ function App() {
         title=""
         headerExtra={<GitHubHeaderExtra projectPath={activeProject?.path} />}
       >
-        <GitHubPanelContent projectPath={activeProject?.path} isOpen={activePanel === 'github'} />
+        {activePanel === 'github' && <GitHubPanelContent projectPath={activeProject?.path} />}
       </SlidePanel>
 
       {/* Git Setup Dialogs */}
