@@ -168,7 +168,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (result.canceled || result.filePaths.length === 0) {
       return null
     }
-    return result.filePaths[0]
+    const selectedPath = result.filePaths[0]
+    // Convert Windows WSL UNC path to Linux path
+    // e.g. \\wsl$\Ubuntu\home\user\project → /home/user/project
+    // e.g. \\wsl.localhost\Ubuntu\home\user\project → /home/user/project
+    const wslMatch = selectedPath.match(/^\\\\wsl(?:\$|\.localhost)\\([^\\]+)(.*)/)
+    if (wslMatch) {
+      // wslMatch[2] is the path after distro name, convert backslashes to forward slashes
+      return wslMatch[2].replace(/\\/g, '/') || '/'
+    }
+    return selectedPath
   })
 
   safeHandle(IPC_CHANNELS.PROJECT_CHECK_FOLDER, async (_, cwd: string) => {
