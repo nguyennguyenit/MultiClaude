@@ -149,8 +149,10 @@ for (const viewport of viewportSizes) {
  * Sidebar Responsive Behavior Tests
  *
  * Tests sidebar collapse/expand behavior at different viewport widths.
+ * NOTE: Sidebar was removed in favor of toolbar + project bar layout.
+ * These tests are skipped until sidebar is re-introduced.
  */
-test.describe('Sidebar Responsive Behavior', () => {
+test.describe.skip('Sidebar Responsive Behavior', () => {
   test('sidebar collapse toggle works at large viewport', async ({ window }) => {
     await window.setViewportSize({ width: 1920, height: 1080 })
     await injectMockProject(window, [mockProject])
@@ -278,7 +280,7 @@ test.describe('Layout Consistency', () => {
       await window.setViewportSize({ width: viewport.width, height: viewport.height })
       await window.waitForTimeout(100)
 
-      const titleBar = window.locator('.titlebar-drag')
+      const titleBar = window.locator('.toolbar')
       const dims = await getElementDimensions(titleBar)
       if (dims) {
         titleBarHeights.push(dims.height)

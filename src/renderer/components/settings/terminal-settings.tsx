@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSettingsStore } from '../../stores'
+import { useToastStore } from '../../stores/toast-store'
 import { getShellKey } from '../../utils'
 import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
 import { SettingsTitle } from './settings-typography'
+import { ToggleSwitch } from './toggle-switch'
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 2, label: '2' },
@@ -26,8 +28,40 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
 ]
 
 export function TerminalSettings() {
-  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell } = useSettingsStore()
+  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell, setVietnameseImeFix } = useSettingsStore()
+  const { addToast } = useToastStore()
   const { terminalLimit } = pendingSettings
+
+  // Vietnamese IME state
+  const [imeStatus, setImeStatus] = useState<{ claudePath: string | null; version: string | null } | null>(null)
+  const [patching, setPatching] = useState(false)
+
+  useEffect(() => {
+    window.electron.vietnameseIme.status().then(setImeStatus).catch(() => {})
+  }, [])
+
+  const handleImeFix = useCallback(async (enabled: boolean) => {
+    setVietnameseImeFix(enabled)
+    if (enabled) {
+      setPatching(true)
+      try {
+        const result = await window.electron.vietnameseIme.patch()
+        if (result.success) {
+          addToast(result.alreadyPatched ? 'Vietnamese IME already patched' : `Vietnamese IME fix applied (v${result.claudeVersion})`, 'info')
+          // Refresh status
+          window.electron.vietnameseIme.status().then(setImeStatus).catch(() => {})
+        } else {
+          addToast(result.message || 'Patch failed', 'error')
+          setVietnameseImeFix(false)
+        }
+      } catch {
+        addToast('Vietnamese IME patch failed unexpectedly', 'error')
+        setVietnameseImeFix(false)
+      } finally {
+        setPatching(false)
+      }
+    }
+  }, [setVietnameseImeFix, addToast])
 
   const [customValue, setCustomValue] = useState(
     terminalLimit.preset === 'custom' ? (terminalLimit.customValue ?? 9) : 9
@@ -210,6 +244,53 @@ export function TerminalSettings() {
             )
           })}
         </div>
+      </div>
+
+      {/* Vietnamese IME Fix */}
+      <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
+              Vietnamese IME Fix
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-1">
+              Fix input for Vietnamese keyboards (OpenKey, EVKey, Unikey, PHTV)
+            </p>
+          </div>
+          {/* Status badge */}
+          {imeStatus && (
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+              !imeStatus.claudePath
+                ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30'
+                : pendingSettings.vietnameseImeFix
+                  ? 'bg-green-500/15 text-green-400 border-green-500/30'
+                  : 'bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border-[var(--mc-accent)]/30'
+            }`}>
+              {!imeStatus.claudePath
+                ? 'Claude not found'
+                : pendingSettings.vietnameseImeFix
+                  ? `Patched${imeStatus.version ? ` v${imeStatus.version}` : ''}`
+                  : imeStatus.version ? `v${imeStatus.version}` : 'Detected'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <ToggleSwitch
+            checked={Boolean(pendingSettings.vietnameseImeFix)}
+            onChange={handleImeFix}
+            disabled={patching || !imeStatus?.claudePath}
+          />
+          <span className="text-sm text-[var(--mc-text-secondary)]">
+            {patching ? 'Patching...' : pendingSettings.vietnameseImeFix ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+
+        {!imeStatus?.claudePath && imeStatus !== null && (
+          <p className="text-xs text-yellow-400/80">
+            Claude Code CLI not found. Install it first via <code className="text-yellow-400">curl -fsSL https://claude.ai/install.sh | sh</code>
+          </p>
+        )}
       </div>
 
     </div>

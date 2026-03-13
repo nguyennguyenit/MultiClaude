@@ -131,6 +131,99 @@ button, input, select, textarea, optgroup, option {
   font-family: var(--modern-font);
 }
 
+/* ============================================
+   Update Banner
+   ============================================ */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  background: color-mix(in srgb, var(--mc-accent) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--mc-accent) 30%, transparent);
+  font-size: 13px;
+  color: var(--mc-text-primary);
+  flex-shrink: 0;
+}
+
+.update-banner-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.update-banner-text {
+  flex: none;
+}
+
+.update-banner-link {
+  color: var(--mc-accent);
+  text-decoration: none;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.update-banner-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.update-banner-btn {
+  background: var(--mc-accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.update-banner-btn:hover {
+  opacity: 0.85;
+}
+
+.update-banner-progress {
+  flex: 1;
+  max-width: 120px;
+  height: 4px;
+  background: color-mix(in srgb, var(--mc-accent) 25%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.update-banner-progress-fill {
+  height: 100%;
+  background: var(--mc-accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.update-banner-percent {
+  font-size: 12px;
+  color: var(--mc-text-muted);
+  min-width: 32px;
+}
+
+.update-banner-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--mc-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.7;
+}
+
+.update-banner-dismiss:hover {
+  opacity: 1;
+  color: var(--mc-text-primary);
+}
+
 .main-content {
   flex: 1;
   display: flex;
@@ -516,33 +609,7 @@ button, input, select, textarea, optgroup, option {
   background: var(--hover);
 }
 
-/* Settings gear icon button at bottom-right of project bar */
-.project-bar-settings {
-  flex-shrink: 0;
-  width: 28px;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  border-left: 1px solid var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0.6;
-  transition: color var(--transition-fast), opacity var(--transition-fast), background var(--transition-fast);
-}
 
-.project-bar-settings:hover {
-  opacity: 1;
-  color: var(--text-primary);
-  background: var(--hover);
-}
-
-.project-bar-settings.active {
-  opacity: 1;
-  color: var(--accent);
-}
 
 /* ============================================
    Terminal Grid - Flex Pane Layout (Phase 3)
@@ -990,6 +1057,740 @@ button, input, select, textarea, optgroup, option {
   line-height: 1.6;
 }
 
+.git-init-dialog {
+  width: 460px;
+  border-radius: 18px;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.55);
+}
+
+.git-init-dialog-header {
+  align-items: flex-start;
+  padding: 18px 20px 14px;
+  border-bottom-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent),
+    var(--bg-secondary);
+}
+
+.git-init-dialog-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-init-dialog-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.git-init-dialog-title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.git-init-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+
+.git-init-hero {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, rgba(224, 175, 104, 0.45));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    color-mix(in srgb, rgba(224, 175, 104, 0.18) 100%, transparent)
+  );
+}
+
+.git-init-hero-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #e0af68;
+  background: color-mix(in srgb, #e0af68 16%, rgba(0, 0, 0, 0.2));
+}
+
+.git-init-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.git-init-hero-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e0af68;
+}
+
+.git-init-hero-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.git-init-hero-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.git-init-project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+}
+
+.git-init-project-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.git-init-project-path {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.git-init-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.git-init-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
+}
+
+.git-init-step-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.git-init-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.git-init-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.git-init-step-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.git-init-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-init-manual-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 64%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.git-init-manual-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 52%, transparent);
+}
+
+.git-init-manual-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.git-init-manual-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.git-init-manual-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.git-init-manual-chevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.git-init-manual-toggle:hover .git-init-manual-chevron {
+  color: var(--text-primary);
+}
+
+.git-init-manual-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.git-init-code {
+  margin-top: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  color: var(--text-primary);
+}
+
+.git-init-preference {
+  padding-top: 2px;
+}
+
+.git-init-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.git-init-checkbox input {
+  flex-shrink: 0;
+}
+
+.git-init-dialog .dialog-footer {
+  padding: 14px 20px 18px;
+  border-top-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 20%, transparent);
+}
+
+.git-init-dialog .dialog-btn {
+  min-height: 38px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.git-init-dialog .dialog-btn:not(.dialog-btn-primary) {
+  background: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+}
+
+.git-init-dialog .dialog-btn-primary {
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.github-connect-dialog {
+  width: 520px;
+  border-radius: 18px;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.55);
+}
+
+.github-connect-dialog-header {
+  align-items: flex-start;
+  padding: 18px 20px 14px;
+  border-bottom-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent),
+    var(--bg-secondary);
+}
+
+.github-connect-dialog-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.github-connect-dialog-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.github-connect-dialog-title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.github-connect-dialog-body {
+  padding: 20px;
+}
+
+.github-connect-dialog-body-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.github-connect-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #f7768e;
+  background: rgba(247, 118, 142, 0.1);
+  border: 1px solid rgba(247, 118, 142, 0.3);
+  border-radius: 12px;
+}
+
+.github-connect-hero {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    color-mix(in srgb, var(--bg-primary) 28%, transparent)
+  );
+}
+
+.github-connect-hero-icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, rgba(0, 0, 0, 0.2));
+}
+
+.github-connect-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.github-connect-hero-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.github-connect-hero-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.github-connect-hero-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.github-connect-project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+}
+
+.github-connect-project-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.github-connect-project-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.github-connect-project-path {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.github-connect-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.github-connect-option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 68%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.github-connect-option-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 52%, transparent);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+.github-connect-option-icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.github-connect-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.github-connect-option-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.github-connect-option-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.github-connect-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.github-connect-secondary-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 54%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.github-connect-secondary-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 44%, transparent);
+  color: var(--text-primary);
+}
+
+.github-connect-secondary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.github-connect-preference {
+  padding-top: 2px;
+}
+
+.github-connect-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.github-connect-checkbox input {
+  flex-shrink: 0;
+}
+
+.github-connect-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin-bottom: 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.github-connect-back-btn:hover {
+  color: var(--text-primary);
+}
+
+.github-connect-form-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.github-connect-form-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 68%, transparent);
+}
+
+.github-connect-form-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.github-connect-form-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.github-connect-form-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.github-connect-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.github-connect-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.github-connect-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.github-connect-input::placeholder {
+  color: var(--text-muted);
+}
+
+.github-connect-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+.github-connect-radio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.github-connect-radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 64%, transparent);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.github-connect-radio-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 54%, transparent);
+}
+
+.github-connect-radio-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.github-connect-radio-input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.github-connect-radio-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.github-connect-radio-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.github-connect-radio-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.github-connect-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.github-connect-action-btn {
+  min-height: 40px;
+  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 54%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.github-connect-action-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 42%, transparent);
+}
+
+.github-connect-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.github-connect-action-btn-primary {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 88%, white 12%);
+  color: var(--bg-primary);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.github-connect-action-btn-primary:hover {
+  background: color-mix(in srgb, var(--accent) 92%, white 8%);
+}
+
+@media (max-width: 560px) {
+  .github-connect-option-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .github-connect-radio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .github-connect-actions {
+    justify-content: stretch;
+  }
+
+  .github-connect-action-btn {
+    width: 100%;
+  }
+}
+
 /* Kill confirm popup */
 .kill-confirm-popup {
   position: absolute;
@@ -1098,6 +1899,15 @@ button, input, select, textarea, optgroup, option {
 
 .welcome-btn:active {
   transform: translateY(0);
+}
+
+.welcome-project-path {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 /* Keyboard shortcuts row */

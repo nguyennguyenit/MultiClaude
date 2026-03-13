@@ -177,53 +177,71 @@ export function GitHubConnectDialog({
     }
   }
 
+  const isOptionsView = view === 'options'
+
   const renderContent = () => {
     switch (view) {
       case 'options':
         return (
           <>
-            {/* Options */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="github-connect-hero">
+              <div className="github-connect-hero-icon" aria-hidden="true">
+                <RepoIcon />
+              </div>
+              <div className="github-connect-hero-copy">
+                <span className="github-connect-hero-kicker">Choose a setup path</span>
+                <h3 className="github-connect-hero-title">Connect {projectName || 'this project'} to GitHub</h3>
+                <p className="github-connect-hero-text">
+                  Create a new repository or link an existing one without changing your local files.
+                </p>
+              </div>
+            </div>
+
+            <div className="github-connect-project-card">
+              <span className="github-connect-project-label">Local project</span>
+              <span className="github-connect-project-name">{projectName || 'Current project'}</span>
+              <code className="github-connect-project-path">{projectPath}</code>
+            </div>
+
+            <div className="github-connect-option-grid">
               <button
                 onClick={() => setView('create')}
-                className="p-4 border border-[var(--mc-border)] rounded-lg hover:border-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors text-left"
+                className="github-connect-option-card"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <PlusIcon />
-                  <span className="font-medium text-sm">Create New Repo</span>
+                <span className="github-connect-option-icon" aria-hidden="true"><PlusIcon /></span>
+                <div className="github-connect-option-copy">
+                  <span className="github-connect-option-title">Create New Repo</span>
+                  <p className="github-connect-option-text">
+                    Publish this folder as a brand-new GitHub repository.
+                  </p>
                 </div>
-                <p className="text-xs text-[var(--mc-text-muted)]">
-                  Create a new GitHub repository
-                </p>
               </button>
 
               <button
                 onClick={() => setView('link')}
-                className="p-4 border border-[var(--mc-border)] rounded-lg hover:border-[var(--mc-accent)] hover:bg-[var(--mc-bg-hover)] transition-colors text-left"
+                className="github-connect-option-card"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <LinkIcon />
-                  <span className="font-medium text-sm">Link Existing</span>
+                <span className="github-connect-option-icon" aria-hidden="true"><LinkIcon /></span>
+                <div className="github-connect-option-copy">
+                  <span className="github-connect-option-title">Link Existing</span>
+                  <p className="github-connect-option-text">
+                    Connect this folder to a repository that already exists on GitHub.
+                  </p>
                 </div>
-                <p className="text-xs text-[var(--mc-text-muted)]">
-                  Connect to an existing repository
-                </p>
               </button>
             </div>
 
-            {/* Secondary Actions */}
-            <div className="flex items-center gap-2 text-xs">
+            <div className="github-connect-secondary-actions">
               <button
                 onClick={handleSkip}
-                className="text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] transition-colors"
+                className="github-connect-secondary-btn"
               >
                 Skip for now
               </button>
-              <span className="text-[var(--mc-text-muted)]">•</span>
               <button
                 onClick={handleRetry}
                 disabled={isLoading}
-                className="text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] transition-colors disabled:opacity-50"
+                className="github-connect-secondary-btn"
               >
                 {isLoading ? 'Checking...' : 'Retry Detection'}
               </button>
@@ -235,16 +253,25 @@ export function GitHubConnectDialog({
         return (
           <>
             <button
+              type="button"
               onClick={() => setView('options')}
-              className="flex items-center gap-1 text-xs text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] mb-4 transition-colors"
+              className="github-connect-back-btn"
             >
               <BackIcon />
               Back to options
             </button>
 
-            <div className="space-y-3 mb-4">
-              <div>
-                <label className="text-xs text-[var(--mc-text-muted)] block mb-1">
+            <div className="github-connect-form-shell">
+              <div className="github-connect-form-intro">
+                <span className="github-connect-form-kicker">Create remote</span>
+                <h4 className="github-connect-form-title">Create a new GitHub repository for {projectName || 'this project'}</h4>
+                <p className="github-connect-form-text">
+                  We&apos;ll create a fresh repository on GitHub, then connect this local folder to it.
+                </p>
+              </div>
+
+              <div className="github-connect-field-group">
+                <label className="github-connect-field-label">
                   Repository Name
                 </label>
                 <input
@@ -252,49 +279,57 @@ export function GitHubConnectDialog({
                   value={repoName}
                   onChange={(e) => setRepoName(e.target.value)}
                   placeholder="my-project"
-                  className="w-full px-3 py-2 text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
+                  className="github-connect-input"
                 />
               </div>
 
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="github-connect-radio-grid">
+                <label className={`github-connect-radio-card${isPrivate ? ' is-selected' : ''}`}>
                   <input
                     type="radio"
                     checked={isPrivate}
                     onChange={() => setIsPrivate(true)}
-                    className="accent-[var(--mc-accent)]"
+                    className="github-connect-radio-input"
                   />
-                  <span className="text-sm flex items-center gap-1">
-                    <LockIcon />
-                    Private
+                  <span className="github-connect-radio-copy">
+                    <span className="github-connect-radio-title">
+                      <LockIcon />
+                      Private
+                    </span>
+                    <span className="github-connect-radio-text">Visible only to you and invited collaborators.</span>
                   </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className={`github-connect-radio-card${!isPrivate ? ' is-selected' : ''}`}>
                   <input
                     type="radio"
                     checked={!isPrivate}
                     onChange={() => setIsPrivate(false)}
-                    className="accent-[var(--mc-accent)]"
+                    className="github-connect-radio-input"
                   />
-                  <span className="text-sm flex items-center gap-1">
-                    <GlobeIcon />
-                    Public
+                  <span className="github-connect-radio-copy">
+                    <span className="github-connect-radio-title">
+                      <GlobeIcon />
+                      Public
+                    </span>
+                    <span className="github-connect-radio-text">Anyone can view the repository on GitHub.</span>
                   </span>
                 </label>
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end">
+            <div className="github-connect-actions">
               <button
+                type="button"
                 onClick={() => setView('options')}
-                className="px-4 py-2 text-sm bg-[var(--mc-bg-hover)] rounded hover:bg-[var(--mc-bg-active)] transition-colors"
+                className="github-connect-action-btn"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleCreateRepo}
                 disabled={isLoading || !repoName.trim()}
-                className="px-4 py-2 text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] rounded hover:opacity-90 disabled:opacity-50 flex items-center gap-2 transition-opacity"
+                className="github-connect-action-btn github-connect-action-btn-primary"
               >
                 {isLoading ? <SpinnerIcon /> : <PlusIcon />}
                 {isLoading ? 'Creating...' : 'Create Repository'}
@@ -307,16 +342,25 @@ export function GitHubConnectDialog({
         return (
           <>
             <button
+              type="button"
               onClick={() => setView('options')}
-              className="flex items-center gap-1 text-xs text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] mb-4 transition-colors"
+              className="github-connect-back-btn"
             >
               <BackIcon />
               Back to options
             </button>
 
-            <div className="space-y-3 mb-4">
-              <div>
-                <label className="text-xs text-[var(--mc-text-muted)] block mb-1">
+            <div className="github-connect-form-shell">
+              <div className="github-connect-form-intro">
+                <span className="github-connect-form-kicker">Link existing remote</span>
+                <h4 className="github-connect-form-title">Attach this project to an existing GitHub repository</h4>
+                <p className="github-connect-form-text">
+                  Paste the repository URL and we&apos;ll connect this local folder as `origin`.
+                </p>
+              </div>
+
+              <div className="github-connect-field-group">
+                <label className="github-connect-field-label">
                   Repository URL
                 </label>
                 <input
@@ -324,22 +368,24 @@ export function GitHubConnectDialog({
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
                   placeholder="https://github.com/username/repo.git"
-                  className="w-full px-3 py-2 text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
+                  className="github-connect-input"
                 />
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end">
+            <div className="github-connect-actions">
               <button
+                type="button"
                 onClick={() => setView('options')}
-                className="px-4 py-2 text-sm bg-[var(--mc-bg-hover)] rounded hover:bg-[var(--mc-bg-active)] transition-colors"
+                className="github-connect-action-btn"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleLinkRepo}
                 disabled={isLoading || !repoUrl.trim()}
-                className="px-4 py-2 text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] rounded hover:opacity-90 disabled:opacity-50 flex items-center gap-2 transition-opacity"
+                className="github-connect-action-btn github-connect-action-btn-primary"
               >
                 {isLoading ? <SpinnerIcon /> : <LinkIcon />}
                 {isLoading ? 'Linking...' : 'Link Repository'}
@@ -425,17 +471,19 @@ export function GitHubConnectDialog({
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 justify-end">
+            <div className="github-connect-actions">
               <button
+                type="button"
                 onClick={() => onComplete(pendingAction, dontAskAgain)}
-                className="px-4 py-2 text-sm bg-[var(--mc-bg-hover)] rounded hover:bg-[var(--mc-bg-active)] transition-colors"
+                className="github-connect-action-btn"
               >
                 Skip for now
               </button>
               <button
+                type="button"
                 onClick={handlePushBranch}
                 disabled={isLoading || !selectedBranch}
-                className="px-4 py-2 text-sm bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] rounded hover:opacity-90 disabled:opacity-50 flex items-center gap-2 transition-opacity"
+                className="github-connect-action-btn github-connect-action-btn-primary"
               >
                 {isLoading ? <SpinnerIcon /> : <CheckCircleIcon small />}
                 {isLoading ? 'Pushing...' : 'Complete Setup'}
@@ -448,22 +496,18 @@ export function GitHubConnectDialog({
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog" style={{ padding: '0' }}>
-        {/* Header */}
-        <div className="dialog-header">
-          <span>Connect to GitHub</span>
+      <div className="dialog github-connect-dialog" style={{ padding: '0' }}>
+        <div className="dialog-header github-connect-dialog-header">
+          <div className="github-connect-dialog-title-group">
+            <span className="github-connect-dialog-kicker">GitHub Setup</span>
+            <span className="github-connect-dialog-title">Connect to GitHub</span>
+          </div>
           <button onClick={onClose} className="slide-panel-close" title="Close">×</button>
         </div>
 
-        {/* Body */}
-        <div className="dialog-body">
-          {/* Error message */}
+        <div className={`dialog-body github-connect-dialog-body${isOptionsView ? ' github-connect-dialog-body-options' : ''}`}>
           {error && (
-            <div style={{
-              display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px',
-              background: 'rgba(247,118,142,0.1)', border: '1px solid rgba(247,118,142,0.3)',
-              marginBottom: '12px', fontSize: '13px', color: '#f7768e'
-            }}>
+            <div className="github-connect-error">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: '1px' }}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -471,20 +515,20 @@ export function GitHubConnectDialog({
             </div>
           )}
 
-          {/* Content */}
           {renderContent()}
 
-          {/* Don't ask again checkbox - only show on options view */}
-          {view === 'options' && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-muted)' }}>
-              <input
-                type="checkbox"
-                checked={dontAskAgain}
-                onChange={(e) => setDontAskAgain(e.target.checked)}
-                style={{ accentColor: 'var(--accent)' }}
-              />
-              Don&apos;t ask again for this project
-            </label>
+          {isOptionsView && (
+            <div className="github-connect-preference">
+              <label className="github-connect-checkbox">
+                <input
+                  type="checkbox"
+                  checked={dontAskAgain}
+                  onChange={(e) => setDontAskAgain(e.target.checked)}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                <span>Don&apos;t ask again for this project</span>
+              </label>
+            </div>
           )}
         </div>
       </div>

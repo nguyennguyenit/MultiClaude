@@ -5,6 +5,7 @@ import { DiscordConfigModal } from './discord-config-modal'
 import { SOUND_PRESETS } from '@shared/constants'
 import type { SoundPreset, OutputMode } from '@shared/types'
 import { SettingsTitle } from './settings-typography'
+import { ToggleSwitch } from './toggle-switch'
 
 export function NotificationSettings() {
   const { settings, loadSettings, updateSettings } = useNotificationStore()
@@ -134,7 +135,7 @@ export function NotificationSettings() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Toggle
+            <ToggleSwitch
               checked={settings.telegramEnabled}
               onChange={(v) => updateSettings({ telegramEnabled: v })}
               disabled={!settings.telegramConfigured}
@@ -165,7 +166,7 @@ export function NotificationSettings() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Toggle
+          <ToggleSwitch
             checked={settings.discordEnabled}
             onChange={(v) => updateSettings({ discordEnabled: v })}
             disabled={!settings.discordConfigured}
@@ -198,45 +199,6 @@ export function NotificationSettings() {
   )
 }
 
-function Toggle({
-  checked,
-  onChange,
-  disabled
-}: {
-  checked: boolean
-  onChange: (value: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      aria-checked={checked}
-      role="switch"
-      style={{ backgroundColor: checked ? 'var(--mc-accent)' : 'var(--mc-bg-tertiary)' }}
-      className={`
-        relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 outline-none border-0
-        focus-visible:ring-2 focus-visible:ring-[var(--mc-accent)] focus-visible:ring-offset-1
-        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-      `}
-    >
-      <span
-        className="absolute rounded-full bg-white"
-        style={{
-          top: '50%',
-          left: '3px',
-          width: '18px',
-          height: '18px',
-          transform: checked ? 'translateY(-50%) translateX(20px)' : 'translateY(-50%)',
-          transition: 'transform 200ms',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
-          pointerEvents: 'none'
-        }}
-      />
-    </button>
-  )
-}
-
 function ToggleRow({
   label,
   description,
@@ -256,7 +218,7 @@ function ToggleRow({
           <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">{description}</p>
         )}
       </div>
-      <Toggle checked={checked} onChange={onChange} />
+      <ToggleSwitch checked={checked} onChange={onChange} />
     </div>
   )
 }

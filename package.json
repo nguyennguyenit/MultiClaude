@@ -1,6 +1,6 @@
 {
   "name": "multiclaude",
-  "version": "3.0.0",
+  "version": "3.0.1-beta.13",
   "description": "Multi-agent terminal manager for Claude Code",
   "main": "dist/main/index.js",
   "type": "module",
@@ -126,8 +126,10 @@
         "dmg",
         "zip"
       ],
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "identity": null
     },
+    "afterPack": "./scripts/after-pack-mac-sign.js",
     "win": {
       "target": [
         "nsis",

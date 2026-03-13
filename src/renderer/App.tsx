@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { Toolbar, ProjectBar } from './components/toolbar'
+import { UpdateBanner } from './components/update-banner'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
@@ -407,7 +408,7 @@ function App() {
         title=""
         headerExtra={<GitHubHeaderExtra projectPath={activeProject?.path} />}
       >
-        <GitHubPanelContent projectPath={activeProject?.path} />
+        {activePanel === 'github' && <GitHubPanelContent projectPath={activeProject?.path} />}
       </SlidePanel>
 
       {/* Git Setup Dialogs */}
@@ -442,6 +443,7 @@ function App() {
         onToggleSettings={() => togglePanel('settings')}
         activePanel={activePanel}
       />
+      <UpdateBanner />
 
       {/* Main Content */}
       <div className="main-content">
@@ -482,8 +484,6 @@ function App() {
         onSelectProject={handleSelectProject}
         onAddProject={handleAddProject}
         onDeleteProject={handleDeleteProject}
-        onToggleSettings={() => togglePanel('settings')}
-        settingsActive={activePanel === 'settings'}
       />
     </div>
   )

@@ -11,6 +11,7 @@ import type { ProjectStore } from '../project/project-store'
 import type { SettingsStore } from '../settings'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
+import { applyVietnameseImePatch, findClaudePath, getClaudeVersion } from '../vietnamese-ime-patcher'
 import { detectWsl } from '../terminal/wsl-detector'
 import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
 
@@ -27,54 +28,20 @@ interface Managers {
 // Matches: "Switched to branch 'xxx'", "Switched to a new branch 'xxx'", "Already on 'xxx'"
 const GIT_BRANCH_CHANGE_PATTERN = /Switched to (?:a new )?branch '|Already on '/
 
-// All channels registered via ipcMain.handle (must be removed before re-registering)
-const HANDLE_CHANNELS = [
-  IPC_CHANNELS.TERMINAL_CREATE, IPC_CHANNELS.TERMINAL_DESTROY, IPC_CHANNELS.TERMINAL_LIST,
-  IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, IPC_CHANNELS.TERMINAL_DETECT_WSL,
-  IPC_CHANNELS.PROJECT_LIST, IPC_CHANNELS.PROJECT_CREATE, IPC_CHANNELS.PROJECT_UPDATE,
-  IPC_CHANNELS.PROJECT_DELETE, IPC_CHANNELS.PROJECT_SET_ACTIVE, IPC_CHANNELS.PROJECT_OPEN_FOLDER,
-  IPC_CHANNELS.PROJECT_CHECK_FOLDER,
-  IPC_CHANNELS.GIT_STATUS, IPC_CHANNELS.GIT_WATCH_PROJECT, IPC_CHANNELS.GIT_UNWATCH_PROJECT,
-  IPC_CHANNELS.GIT_INIT, IPC_CHANNELS.GIT_ADD_REMOTE, IPC_CHANNELS.GIT_PUSH,
-  IPC_CHANNELS.GIT_FILE_STATUS, IPC_CHANNELS.GIT_STAGE_FILE, IPC_CHANNELS.GIT_UNSTAGE_FILE,
-  IPC_CHANNELS.GIT_STAGE_ALL, IPC_CHANNELS.GIT_COMMIT, IPC_CHANNELS.GIT_DIFF,
-  IPC_CHANNELS.GIT_DISCARD, IPC_CHANNELS.GIT_PULL, IPC_CHANNELS.GIT_FETCH,
-  IPC_CHANNELS.GIT_BRANCHES, IPC_CHANNELS.GIT_CREATE_BRANCH, IPC_CHANNELS.GIT_CHECKOUT_BRANCH,
-  IPC_CHANNELS.GIT_DELETE_BRANCH, IPC_CHANNELS.GIT_MERGE, IPC_CHANNELS.GIT_LOG,
-  IPC_CHANNELS.GIT_STASH_LIST, IPC_CHANNELS.GIT_STASH_SAVE, IPC_CHANNELS.GIT_STASH_APPLY,
-  IPC_CHANNELS.GIT_STASH_POP, IPC_CHANNELS.GIT_STASH_DROP, IPC_CHANNELS.GIT_CONFIG_GET,
-  IPC_CHANNELS.GIT_CONFIG_SET, IPC_CHANNELS.GIT_DIFF_BRANCH, IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH,
-  IPC_CHANNELS.GITHUB_AUTH_STATUS, IPC_CHANNELS.GITHUB_LOGIN, IPC_CHANNELS.GITHUB_LOGOUT,
-  IPC_CHANNELS.GITHUB_CREATE_REPO,
-  IPC_CHANNELS.SESSION_SAVE, IPC_CHANNELS.SESSION_RESTORE,
-  IPC_CHANNELS.APP_GET_PATH, IPC_CHANNELS.APP_CHECK_FOR_UPDATES,
-  IPC_CHANNELS.NOTIFICATION_GET_SETTINGS, IPC_CHANNELS.NOTIFICATION_SET_SETTINGS,
-  IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, IPC_CHANNELS.NOTIFICATION_SET_DISCORD,
-  IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, IPC_CHANNELS.NOTIFICATION_GET_DISCORD_STATUS,
-  IPC_CHANNELS.NOTIFICATION_TEST_TELEGRAM, IPC_CHANNELS.NOTIFICATION_TEST_DISCORD,
-  IPC_CHANNELS.NOTIFICATION_CLEAR_TELEGRAM, IPC_CHANNELS.NOTIFICATION_CLEAR_DISCORD,
-  IPC_CHANNELS.YOLO_MODE_GET, IPC_CHANNELS.YOLO_MODE_SET,
-  IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE,
-  IPC_CHANNELS.IMAGE_OPEN, IPC_CHANNELS.IMAGE_DELETE, IPC_CHANNELS.IMAGE_READ_BASE64,
-  IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, IPC_CHANNELS.FILE_PICKER_OPEN,
-  IPC_CHANNELS.UPDATE_GET_STATE, IPC_CHANNELS.UPDATE_CHECK, IPC_CHANNELS.UPDATE_DOWNLOAD,
-  IPC_CHANNELS.UPDATE_INSTALL,
-  IPC_CHANNELS.SETTINGS_GET, IPC_CHANNELS.SETTINGS_SET, IPC_CHANNELS.SETTINGS_RESET,
-  IPC_CHANNELS.WINDOW_MINIMIZE, IPC_CHANNELS.WINDOW_MAXIMIZE, IPC_CHANNELS.WINDOW_CLOSE
-] as const
+// Safe IPC registration helpers - always remove before registering to prevent
+// "Attempted to register a second handler" errors on macOS window reopen (activate event)
+function safeHandle(channel: string, listener: Parameters<typeof ipcMain.handle>[1]) {
+  ipcMain.removeHandler(channel)
+  ipcMain.handle(channel, listener)
+}
 
-// Channels registered via ipcMain.on (must be cleared before re-registering)
-const ON_CHANNELS = [
-  IPC_CHANNELS.TERMINAL_INPUT, IPC_CHANNELS.TERMINAL_RESIZE,
-  IPC_CHANNELS.APP_OPEN_EXTERNAL, IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL
-] as const
+function safeOn(channel: string, listener: Parameters<typeof ipcMain.on>[1]) {
+  ipcMain.removeAllListeners(channel)
+  ipcMain.on(channel, listener)
+}
 
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   const { terminalManager, gitManager, gitHeadWatcher, projectStore, settingsStore, notificationManager } = managers
-
-  // Remove existing handlers/listeners to prevent duplicate registration on macOS reopen
-  for (const channel of HANDLE_CHANNELS) ipcMain.removeHandler(channel)
-  for (const channel of ON_CHANNELS) ipcMain.removeAllListeners(channel)
 
   // Register git head watcher callback to emit branch changes from external terminals
   gitHeadWatcher.onBranchChange((projectPath) => {
@@ -114,7 +81,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Terminal handlers
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
+  safeHandle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
     const terminal = terminalManager.create(options)
     // Serialize Date to ISO string for IPC cloning
     return {
@@ -123,30 +90,30 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
+  safeHandle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
     notificationManager.clearTerminal(id)
     return terminalManager.destroyAsync(id)
   })
 
-  ipcMain.on(IPC_CHANNELS.TERMINAL_INPUT, (_, { terminalId, data }) => {
+  safeOn(IPC_CHANNELS.TERMINAL_INPUT, (_, { terminalId, data }) => {
     terminalManager.write(terminalId, data)
   })
 
-  ipcMain.on(IPC_CHANNELS.TERMINAL_RESIZE, (_, { terminalId, cols, rows }) => {
+  safeOn(IPC_CHANNELS.TERMINAL_RESIZE, (_, { terminalId, cols, rows }) => {
     terminalManager.resize(terminalId, cols, rows)
   })
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, async () => {
+  safeHandle(IPC_CHANNELS.TERMINAL_LIST, async () => {
     return terminalManager.list()
   })
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, async (_, { terminalId, sessionId }) => {
+  safeHandle(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, async (_, { terminalId, sessionId }) => {
     return terminalManager.invokeClaudeCode(terminalId, sessionId)
   })
 
   // WSL detection handler (Windows only)
   // Returns null on non-Windows platforms so renderer can correctly identify platform
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_DETECT_WSL, async () => {
+  safeHandle(IPC_CHANNELS.TERMINAL_DETECT_WSL, async () => {
     if (process.platform !== 'win32') {
       return null
     }
@@ -154,7 +121,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Project handlers
-  ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async () => {
+  safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {
     const projects = projectStore.getProjects()
     // Serialize Date fields for IPC cloning
     return projects.map(p => ({
@@ -164,7 +131,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }))
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_CREATE, async (_, project) => {
+  safeHandle(IPC_CHANNELS.PROJECT_CREATE, async (_, project) => {
     const newProject = projectStore.addProject(project)
     // Serialize Date fields for IPC cloning
     return {
@@ -174,7 +141,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_UPDATE, async (_, { id, updates }: { id: string; updates: Partial<import('@shared/types').Project> }) => {
+  safeHandle(IPC_CHANNELS.PROJECT_UPDATE, async (_, { id, updates }: { id: string; updates: Partial<import('@shared/types').Project> }) => {
     const updated = projectStore.updateProject(id, updates)
     if (!updated) return null
     // Serialize Date fields for IPC cloning
@@ -185,26 +152,35 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_DELETE, async (_, id: string) => {
+  safeHandle(IPC_CHANNELS.PROJECT_DELETE, async (_, id: string) => {
     return projectStore.deleteProject(id)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_SET_ACTIVE, async (_, id: string | null) => {
+  safeHandle(IPC_CHANNELS.PROJECT_SET_ACTIVE, async (_, id: string | null) => {
     projectStore.setActiveProjectId(id)
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_OPEN_FOLDER, async () => {
+  safeHandle(IPC_CHANNELS.PROJECT_OPEN_FOLDER, async () => {
     const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory']
     })
     if (result.canceled || result.filePaths.length === 0) {
       return null
     }
-    return result.filePaths[0]
+    const selectedPath = result.filePaths[0]
+    // Convert Windows WSL UNC path to Linux path
+    // e.g. \\wsl$\Ubuntu\home\user\project → /home/user/project
+    // e.g. \\wsl.localhost\Ubuntu\home\user\project → /home/user/project
+    const wslMatch = selectedPath.match(/^\\\\wsl(?:\$|\.localhost)\\([^\\]+)(.*)/)
+    if (wslMatch) {
+      // wslMatch[2] is the path after distro name, convert backslashes to forward slashes
+      return wslMatch[2].replace(/\\/g, '/') || '/'
+    }
+    return selectedPath
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_CHECK_FOLDER, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.PROJECT_CHECK_FOLDER, async (_, cwd: string) => {
     // Check if folder exists first
     if (!existsSync(cwd)) {
       return { exists: false, isEmpty: true, isGitRepo: false, fileCount: 0 }
@@ -228,140 +204,140 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Git handlers
-  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_STATUS, async (_, cwd: string) => {
     return gitManager.getStatus(cwd)
   })
 
   // Git HEAD watcher handlers for external terminal changes
-  ipcMain.handle(IPC_CHANNELS.GIT_WATCH_PROJECT, async (_, projectPath: string) => {
+  safeHandle(IPC_CHANNELS.GIT_WATCH_PROJECT, async (_, projectPath: string) => {
     console.log(`[handlers] Received watch request for ${projectPath}`)
     const result = gitHeadWatcher.watch(projectPath)
     console.log(`[handlers] Watch result: ${result}`)
     return result
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_UNWATCH_PROJECT, async (_, projectPath: string) => {
+  safeHandle(IPC_CHANNELS.GIT_UNWATCH_PROJECT, async (_, projectPath: string) => {
     console.log(`[handlers] Unwatching ${projectPath}`)
     gitHeadWatcher.unwatch(projectPath)
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_INIT, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_INIT, async (_, cwd: string) => {
     return gitManager.init(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_ADD_REMOTE, async (_, { cwd, url, name }) => {
+  safeHandle(IPC_CHANNELS.GIT_ADD_REMOTE, async (_, { cwd, url, name }) => {
     return gitManager.addRemote(cwd, url, name)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_PUSH, async (_, { cwd, branch, setUpstream }) => {
+  safeHandle(IPC_CHANNELS.GIT_PUSH, async (_, { cwd, branch, setUpstream }) => {
     return gitManager.push(cwd, branch, setUpstream)
   })
 
   // Git commit workflow handlers
-  ipcMain.handle(IPC_CHANNELS.GIT_FILE_STATUS, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_FILE_STATUS, async (_, cwd: string) => {
     return gitManager.getFileStatus(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STAGE_FILE, async (_, { cwd, file }: { cwd: string; file: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_STAGE_FILE, async (_, { cwd, file }: { cwd: string; file: string }) => {
     return gitManager.stageFile(cwd, file)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE_FILE, async (_, { cwd, file }: { cwd: string; file: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_UNSTAGE_FILE, async (_, { cwd, file }: { cwd: string; file: string }) => {
     return gitManager.unstageFile(cwd, file)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STAGE_ALL, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_STAGE_ALL, async (_, cwd: string) => {
     return gitManager.stageAll(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_, { cwd, message }: { cwd: string; message: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_COMMIT, async (_, { cwd, message }: { cwd: string; message: string }) => {
     return gitManager.commit(cwd, message)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DIFF, async (_, { cwd, file, staged }: { cwd: string; file?: string; staged?: boolean }) => {
+  safeHandle(IPC_CHANNELS.GIT_DIFF, async (_, { cwd, file, staged }: { cwd: string; file?: string; staged?: boolean }) => {
     return gitManager.getDiff(cwd, file, staged)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DISCARD, async (_, { cwd, file }: { cwd: string; file: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_DISCARD, async (_, { cwd, file }: { cwd: string; file: string }) => {
     return gitManager.discardChanges(cwd, file)
   })
 
   // Git extended operations handlers
-  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_PULL, async (_, cwd: string) => {
     return gitManager.pull(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_FETCH, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_FETCH, async (_, cwd: string) => {
     return gitManager.fetch(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_BRANCHES, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_BRANCHES, async (_, cwd: string) => {
     return gitManager.getBranches(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_CREATE_BRANCH, async (_, { cwd, name, checkout }: { cwd: string; name: string; checkout?: boolean }) => {
+  safeHandle(IPC_CHANNELS.GIT_CREATE_BRANCH, async (_, { cwd, name, checkout }: { cwd: string; name: string; checkout?: boolean }) => {
     return gitManager.createBranch(cwd, name, checkout)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_CHECKOUT_BRANCH, async (_, { cwd, name }: { cwd: string; name: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_CHECKOUT_BRANCH, async (_, { cwd, name }: { cwd: string; name: string }) => {
     return gitManager.checkoutBranch(cwd, name)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DELETE_BRANCH, async (_, { cwd, name, force }: { cwd: string; name: string; force?: boolean }) => {
+  safeHandle(IPC_CHANNELS.GIT_DELETE_BRANCH, async (_, { cwd, name, force }: { cwd: string; name: string; force?: boolean }) => {
     return gitManager.deleteBranch(cwd, name, force)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_MERGE, async (_, { cwd, branch }: { cwd: string; branch: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_MERGE, async (_, { cwd, branch }: { cwd: string; branch: string }) => {
     return gitManager.mergeBranch(cwd, branch)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_, { cwd, maxCount }: { cwd: string; maxCount?: number }) => {
+  safeHandle(IPC_CHANNELS.GIT_LOG, async (_, { cwd, maxCount }: { cwd: string; maxCount?: number }) => {
     return gitManager.getLog(cwd, maxCount)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_LIST, async (_, cwd: string) => {
+  safeHandle(IPC_CHANNELS.GIT_STASH_LIST, async (_, cwd: string) => {
     return gitManager.getStashList(cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_SAVE, async (_, { cwd, message }: { cwd: string; message?: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_STASH_SAVE, async (_, { cwd, message }: { cwd: string; message?: string }) => {
     return gitManager.stashSave(cwd, message)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_APPLY, async (_, { cwd, index }: { cwd: string; index?: number }) => {
+  safeHandle(IPC_CHANNELS.GIT_STASH_APPLY, async (_, { cwd, index }: { cwd: string; index?: number }) => {
     return gitManager.stashApply(cwd, index)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_POP, async (_, { cwd, index }: { cwd: string; index?: number }) => {
+  safeHandle(IPC_CHANNELS.GIT_STASH_POP, async (_, { cwd, index }: { cwd: string; index?: number }) => {
     return gitManager.stashPop(cwd, index)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_DROP, async (_, { cwd, index }: { cwd: string; index?: number }) => {
+  safeHandle(IPC_CHANNELS.GIT_STASH_DROP, async (_, { cwd, index }: { cwd: string; index?: number }) => {
     return gitManager.stashDrop(cwd, index)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_CONFIG_GET, async () => {
+  safeHandle(IPC_CHANNELS.GIT_CONFIG_GET, async () => {
     return gitManager.getGitConfig()
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_BRANCH, async (_, { cwd, baseBranch }: { cwd: string; baseBranch?: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_DIFF_BRANCH, async (_, { cwd, baseBranch }: { cwd: string; baseBranch?: string }) => {
     return gitManager.diffBranch(cwd, baseBranch)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, async (_, { cwd, file, baseBranch }: { cwd: string; file: string; baseBranch: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, async (_, { cwd, file, baseBranch }: { cwd: string; file: string; baseBranch: string }) => {
     return gitManager.getDiffAgainstBranch(cwd, file, baseBranch)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_CONFIG_SET, async (_, config: { userName?: string; userEmail?: string }) => {
+  safeHandle(IPC_CHANNELS.GIT_CONFIG_SET, async (_, config: { userName?: string; userEmail?: string }) => {
     return gitManager.setGitConfig(config)
   })
 
   // GitHub handlers
-  ipcMain.handle(IPC_CHANNELS.GITHUB_AUTH_STATUS, async () => {
+  safeHandle(IPC_CHANNELS.GITHUB_AUTH_STATUS, async () => {
     return gitManager.getGitHubAuthStatus()
   })
 
-  ipcMain.handle(IPC_CHANNELS.GITHUB_LOGIN, async () => {
+  safeHandle(IPC_CHANNELS.GITHUB_LOGIN, async () => {
     const result = await gitManager.loginGitHub()
     if (result.verificationUri) {
       shell.openExternal(result.verificationUri)
@@ -369,16 +345,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return result
   })
 
-  ipcMain.handle(IPC_CHANNELS.GITHUB_LOGOUT, async () => {
+  safeHandle(IPC_CHANNELS.GITHUB_LOGOUT, async () => {
     return gitManager.logoutGitHub()
   })
 
-  ipcMain.handle(IPC_CHANNELS.GITHUB_CREATE_REPO, async (_, { name, isPrivate, cwd }) => {
+  safeHandle(IPC_CHANNELS.GITHUB_CREATE_REPO, async (_, { name, isPrivate, cwd }) => {
     return gitManager.createGitHubRepo(name, isPrivate, cwd)
   })
 
   // Session handlers
-  ipcMain.handle(IPC_CHANNELS.SESSION_SAVE, async (_, bounds) => {
+  safeHandle(IPC_CHANNELS.SESSION_SAVE, async (_, bounds) => {
     const sessions = terminalManager.getSessions()
     projectStore.saveSession({
       terminals: sessions,
@@ -388,16 +364,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_RESTORE, async () => {
+  safeHandle(IPC_CHANNELS.SESSION_RESTORE, async () => {
     return projectStore.getSession()
   })
 
   // App handlers
-  ipcMain.handle(IPC_CHANNELS.APP_GET_PATH, async (_, name: string) => {
+  safeHandle(IPC_CHANNELS.APP_GET_PATH, async (_, name: string) => {
     return app.getPath(name as Parameters<typeof app.getPath>[0])
   })
 
-  ipcMain.handle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, async () => {
+  safeHandle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, async () => {
     try {
       const result = await checkForUpdatesManually()
       return { success: true, updateState: result }
@@ -406,60 +382,60 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.on(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_, url: string) => {
+  safeOn(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_, url: string) => {
     if (isAllowedExternalUrl(url)) {
       shell.openExternal(url)
     }
   })
 
   // Notification handlers
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS, () => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS, () => {
     return notificationManager.getSettings()
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_SETTINGS, (_, settings) => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_SET_SETTINGS, (_, settings) => {
     return notificationManager.updateSettings(settings)
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, (_, { botToken, chatId }) => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, (_, { botToken, chatId }) => {
     notificationManager.setTelegram(botToken, chatId)
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_DISCORD, (_, { webhookUrl }) => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_SET_DISCORD, (_, { webhookUrl }) => {
     notificationManager.setDiscord(webhookUrl)
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, () => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, () => {
     return notificationManager.getSettings().telegramConfigured
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_DISCORD_STATUS, () => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_GET_DISCORD_STATUS, () => {
     return notificationManager.getSettings().discordConfigured
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_TEST_TELEGRAM, async (_, { botToken, chatId }) => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_TEST_TELEGRAM, async (_, { botToken, chatId }) => {
     return notificationManager.testTelegram(botToken, chatId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_TEST_DISCORD, async (_, { webhookUrl }) => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_TEST_DISCORD, async (_, { webhookUrl }) => {
     return notificationManager.testDiscord(webhookUrl)
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_TELEGRAM, () => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_CLEAR_TELEGRAM, () => {
     notificationManager.clearTelegram()
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_CLEAR_DISCORD, () => {
+  safeHandle(IPC_CHANNELS.NOTIFICATION_CLEAR_DISCORD, () => {
     notificationManager.clearDiscord()
     return true
   })
 
   // Active terminal tracking for background-only notifications
   // Uses ipcMain.on (not handle) for fire-and-forget - no response needed from renderer
-  ipcMain.on(IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL, (_, terminalId: string | null) => {
+  safeOn(IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL, (_, terminalId: string | null) => {
     notificationManager.setActiveTerminal(terminalId)
   })
 
@@ -499,12 +475,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   }
 
   // YOLO Mode handlers
-  ipcMain.handle(IPC_CHANNELS.YOLO_MODE_GET, async (_, projectPath: string) => {
+  safeHandle(IPC_CHANNELS.YOLO_MODE_GET, async (_, projectPath: string) => {
     const settingsPath = join(projectPath, '.claude', 'settings.local.json')
     return existsSync(settingsPath)
   })
 
-  ipcMain.handle(IPC_CHANNELS.YOLO_MODE_SET, async (_, { projectPath, enabled }: { projectPath: string; enabled: boolean }) => {
+  safeHandle(IPC_CHANNELS.YOLO_MODE_SET, async (_, { projectPath, enabled }: { projectPath: string; enabled: boolean }) => {
     const claudeDir = join(projectPath, '.claude')
     const settingsPath = join(claudeDir, 'settings.local.json')
 
@@ -529,12 +505,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Clipboard handlers
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, (_, base64Data: string) => {
+  safeHandle(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, (_, base64Data: string) => {
     return saveClipboardImage(base64Data)
   })
 
   // Image handlers
-  ipcMain.handle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
+  safeHandle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
     if (existsSync(filePath)) {
       shell.openPath(filePath)
       return true
@@ -542,7 +518,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return false
   })
 
-  ipcMain.handle(IPC_CHANNELS.IMAGE_DELETE, (_, filePath: string) => {
+  safeHandle(IPC_CHANNELS.IMAGE_DELETE, (_, filePath: string) => {
     // Security: only allow deleting files in multiClaude-screenshots directory
     if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
       try {
@@ -555,7 +531,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return false
   })
 
-  ipcMain.handle(IPC_CHANNELS.IMAGE_READ_BASE64, (_, filePath: string) => {
+  safeHandle(IPC_CHANNELS.IMAGE_READ_BASE64, (_, filePath: string) => {
     // Security: only allow reading files in multiClaude-screenshots directory
     if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
       try {
@@ -569,7 +545,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // List screenshot files sorted by modification time (newest first)
-  ipcMain.handle(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, () => {
+  safeHandle(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, () => {
     const screenshotDir = join(tmpdir(), 'multiClaude-screenshots')
     if (!existsSync(screenshotDir)) {
       return []
@@ -591,7 +567,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // File picker handler
-  ipcMain.handle(IPC_CHANNELS.FILE_PICKER_OPEN, async () => {
+  safeHandle(IPC_CHANNELS.FILE_PICKER_OPEN, async () => {
     const result = await dialog.showOpenDialog(window, {
       properties: ['openFile', 'multiSelections']
     })
@@ -602,24 +578,24 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Update handlers
-  ipcMain.handle(IPC_CHANNELS.UPDATE_GET_STATE, () => {
+  safeHandle(IPC_CHANNELS.UPDATE_GET_STATE, () => {
     return getUpdateState()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {
+  safeHandle(IPC_CHANNELS.UPDATE_CHECK, async () => {
     return checkForUpdatesManually()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, async () => {
+  safeHandle(IPC_CHANNELS.UPDATE_DOWNLOAD, async () => {
     await downloadUpdate()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, () => {
+  safeHandle(IPC_CHANNELS.UPDATE_INSTALL, () => {
     installUpdate()
   })
 
   // Settings handlers
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
+  safeHandle(IPC_CHANNELS.SETTINGS_GET, () => {
     try {
       return settingsStore.getSettings()
     } catch (error) {
@@ -629,7 +605,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_, settings: Partial<AppSettings>) => {
+  safeHandle(IPC_CHANNELS.SETTINGS_SET, (_, settings: Partial<AppSettings>) => {
     try {
       // Basic validation: ensure settings is a non-null object and not an array
       if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
@@ -642,7 +618,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_RESET, () => {
+  safeHandle(IPC_CHANNELS.SETTINGS_RESET, () => {
     try {
       return settingsStore.resetSettings()
     } catch (error) {
@@ -651,14 +627,26 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  // Vietnamese IME patch handlers
+  // No customPath from renderer - prevents arbitrary file write (security)
+  safeHandle(IPC_CHANNELS.VIETNAMESE_IME_PATCH, async () => {
+    return applyVietnameseImePatch()
+  })
+
+  safeHandle(IPC_CHANNELS.VIETNAMESE_IME_STATUS, async () => {
+    const claudePath = findClaudePath()
+    const version = getClaudeVersion()
+    return { claudePath, version }
+  })
+
   // Window handlers
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
+  safeHandle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
     if (window && !window.isDestroyed()) {
       window.minimize()
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, () => {
+  safeHandle(IPC_CHANNELS.WINDOW_MAXIMIZE, () => {
     if (window && !window.isDestroyed()) {
       if (window.isMaximized()) {
         window.unmaximize()
@@ -668,7 +656,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, () => {
+  safeHandle(IPC_CHANNELS.WINDOW_CLOSE, () => {
     if (window && !window.isDestroyed()) {
       window.close()
     }

@@ -58,6 +58,7 @@ interface SettingsState {
   setTerminalFontFamily: (fontId: TerminalFontId) => void
   setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
   setActivityBarState: (state: ActivityBarState) => void
+  setVietnameseImeFix: (enabled: boolean) => void
 
   // Actions
   saveSettings: () => Promise<void>      // Persist pending → saved
@@ -86,6 +87,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.modernFontFamily !== b.modernFontFamily) return false
   if (a.terminalFontFamily !== b.terminalFontFamily) return false
   if (a.activityBarState !== b.activityBarState) return false
+  if (a.vietnameseImeFix !== b.vietnameseImeFix) return false
 
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
@@ -221,6 +223,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setActivityBarState: (state) => {
     const pending = { ...get().pendingSettings, activityBarState: state }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setVietnameseImeFix: (enabled) => {
+    const pending = { ...get().pendingSettings, vietnameseImeFix: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

@@ -6,6 +6,8 @@ import type { UpdateState, UpdateStatus } from '@shared/types'
 autoUpdater.logger = console
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+// Enable prerelease updates when running a beta/alpha version
+autoUpdater.allowPrerelease = true
 
 let mainWindow: BrowserWindow | null = null
 let isDevMode = false
@@ -74,6 +76,24 @@ async function fetchReleaseNotes(version: string): Promise<string> {
   }
 }
 
+async function checkWithRetry(retries: number, delayMs: number) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await autoUpdater.checkForUpdates()
+      return
+    } catch (err) {
+      const msg = (err as Error).message
+      const isTransient = msg.includes('404') || msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT')
+      if (isTransient && i < retries - 1) {
+        console.warn(`[AutoUpdater] Check failed (attempt ${i + 1}/${retries}), retrying in ${delayMs / 1000}s:`, msg)
+        await new Promise(r => setTimeout(r, delayMs))
+      } else {
+        console.error('[AutoUpdater] Check failed:', msg)
+      }
+    }
+  }
+}
+
 export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window
 
@@ -101,7 +121,7 @@ export function initAutoUpdater(window: BrowserWindow) {
 
   autoUpdater.on('update-not-available', () => {
     console.log('[AutoUpdater] No updates available')
-    setStatus('idle', { error: null })
+    setStatus('up-to-date', { error: null })
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -118,14 +138,29 @@ export function initAutoUpdater(window: BrowserWindow) {
 
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error.message)
-    setStatus('error', { error: error.message })
+    // Treat 404 (release assets not found) as "no update" instead of showing error to user
+    if (error.message.includes('404') || error.message.includes('latest-mac.yml')) {
+      setStatus('up-to-date', { error: null })
+    } else if (
+      error.message.includes('code failed to satisfy specified code requirement') ||
+      error.message.includes('Code signature') ||
+      error.message.includes('ShipIt')
+    ) {
+      // Ad-hoc signed builds: ShipIt validates the update against the running app's
+      // Designated Requirement (DR). Old installs have hash-based DRs that reject any
+      // new version. New builds include a stable DR — but until users reinstall, they
+      // need to download manually once.
+      setStatus('error', {
+        error: 'Auto-install failed (code signature). Please download the new version manually from GitHub Releases.'
+      })
+    } else {
+      setStatus('error', { error: error.message })
+    }
   })
 
-  // Auto-check after 3s delay
+  // Auto-check after 3s delay with retry for transient failures
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error('[AutoUpdater] Check failed:', err.message)
-    })
+    checkWithRetry(3, 10000)
   }, 3000)
 }
 
@@ -140,7 +175,12 @@ export async function checkForUpdatesManually(): Promise<UpdateState> {
     setStatus('checking')
     await autoUpdater.checkForUpdates()
   } catch (error) {
-    setStatus('error', { error: (error as Error).message })
+    const msg = (error as Error).message
+    if (msg.includes('404') || msg.includes('latest-mac.yml')) {
+      setStatus('up-to-date', { error: null })
+    } else {
+      setStatus('error', { error: msg })
+    }
   }
   return getUpdateState()
 }
@@ -151,8 +191,8 @@ export async function downloadUpdate(): Promise<void> {
 }
 
 export function installUpdate(): void {
-  // Use app.quit() instead of quitAndInstall() to trigger normal quit flow
-  // This ensures terminal cleanup (destroyAllAsync) runs before exit
-  // autoInstallOnAppQuit = true (line 8) handles update installation after quit
-  app.quit()
+  // quitAndInstall closes all windows (triggering window-all-closed cleanup),
+  // then installs the update. isSilent=false surfaces code signature errors
+  // via the autoUpdater 'error' event instead of failing silently.
+  autoUpdater.quitAndInstall(false, true)
 }
