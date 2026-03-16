@@ -1,6 +1,6 @@
 {
   "name": "multiclaude",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Multi-agent terminal manager for Claude Code",
   "main": "dist/main/index.js",
   "type": "module",
