@@ -4,11 +4,23 @@ import { DEFAULT_ACTIVITY_BAR_STATE, TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT
 
 export type ActiveView = 'terminals' | 'github'
 
+const DEFAULT_PROJECT_KEY = '__default_project__'
+
+function getTerminalProjectKey(projectId?: string): string {
+  return projectId ?? DEFAULT_PROJECT_KEY
+}
+
+function getProjectTerminalIds(terminals: Terminal[], projectId: string | null): string[] {
+  if (!projectId) return []
+  return terminals.filter((terminal) => terminal.projectId === projectId).map((terminal) => terminal.id)
+}
+
 interface AppState {
   // Terminals
   terminals: Terminal[]
   terminalOutputs: Record<string, string>
   activeTerminalId: string | null
+  lastActiveTerminalByProjectId: Record<string, string>
   addTerminal: (terminal: Terminal) => void
   removeTerminal: (id: string) => void
   setActiveTerminal: (id: string | null) => void
@@ -43,6 +55,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   terminals: [],
   terminalOutputs: {},
   activeTerminalId: null,
+  lastActiveTerminalByProjectId: {},
 
   addTerminal: (terminal) =>
     set((state) => ({
@@ -51,25 +64,69 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...state.terminalOutputs,
         [terminal.id]: ''
       },
-      activeTerminalId: terminal.id
+      activeTerminalId: terminal.id,
+      lastActiveTerminalByProjectId: {
+        ...state.lastActiveTerminalByProjectId,
+        [getTerminalProjectKey(terminal.projectId)]: terminal.id
+      }
     })),
 
   removeTerminal: (id) =>
     set((state) => {
+      const removedTerminal = state.terminals.find((terminal) => terminal.id === id)
       const newTerminals = state.terminals.filter((t) => t.id !== id)
       const remainingOutputs = { ...state.terminalOutputs }
       delete remainingOutputs[id]
+
+      const nextLastActiveTerminalByProjectId = { ...state.lastActiveTerminalByProjectId }
+      if (removedTerminal) {
+        const projectKey = getTerminalProjectKey(removedTerminal.projectId)
+        if (nextLastActiveTerminalByProjectId[projectKey] === id) {
+          const replacementTerminal = [...newTerminals]
+            .reverse()
+            .find((terminal) => getTerminalProjectKey(terminal.projectId) === projectKey)
+
+          if (replacementTerminal) {
+            nextLastActiveTerminalByProjectId[projectKey] = replacementTerminal.id
+          } else {
+            delete nextLastActiveTerminalByProjectId[projectKey]
+          }
+        }
+      }
+
+      const activeProjectTerminalIds = getProjectTerminalIds(newTerminals, state.activeProjectId)
       return {
         terminals: newTerminals,
         terminalOutputs: remainingOutputs,
         activeTerminalId:
           state.activeTerminalId === id
-            ? newTerminals[newTerminals.length - 1]?.id || null
-            : state.activeTerminalId
+            ? activeProjectTerminalIds[activeProjectTerminalIds.length - 1]
+              ?? newTerminals[newTerminals.length - 1]?.id
+              ?? null
+            : state.activeTerminalId,
+        lastActiveTerminalByProjectId: nextLastActiveTerminalByProjectId
       }
     }),
 
-  setActiveTerminal: (id) => set({ activeTerminalId: id }),
+  setActiveTerminal: (id) =>
+    set((state) => {
+      if (!id) {
+        return { activeTerminalId: null }
+      }
+
+      const terminal = state.terminals.find((candidate) => candidate.id === id)
+      if (!terminal) {
+        return { activeTerminalId: state.activeTerminalId }
+      }
+
+      return {
+        activeTerminalId: id,
+        lastActiveTerminalByProjectId: {
+          ...state.lastActiveTerminalByProjectId,
+          [getTerminalProjectKey(terminal.projectId)]: id
+        }
+      }
+    }),
 
   updateTerminalTitle: (id, title) =>
     set((state) => ({
@@ -105,10 +162,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   removeProject: (id) =>
-    set((state) => ({
-      projects: state.projects.filter((p) => p.id !== id),
-      activeProjectId: state.activeProjectId === id ? null : state.activeProjectId
-    })),
+    set((state) => {
+      const nextLastActiveTerminalByProjectId = { ...state.lastActiveTerminalByProjectId }
+      delete nextLastActiveTerminalByProjectId[getTerminalProjectKey(id)]
+
+      return {
+        projects: state.projects.filter((p) => p.id !== id),
+        activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
+        activeTerminalId: state.activeProjectId === id ? null : state.activeTerminalId,
+        lastActiveTerminalByProjectId: nextLastActiveTerminalByProjectId
+      }
+    }),
 
   setActiveProject: (id) => set({ activeProjectId: id }),
 
@@ -116,10 +180,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   // terminalId param allows future use for restoring specific terminal (e.g., from saved layout)
   switchToProject: (projectId, terminalId) =>
     set((state) => {
-      const projectTerminals = state.terminals.filter(t => t.projectId === projectId)
+      const projectTerminalIds = getProjectTerminalIds(state.terminals, projectId)
+      const preferredTerminalId = terminalId ?? state.lastActiveTerminalByProjectId[getTerminalProjectKey(projectId)] ?? null
+      const activeTerminalId = preferredTerminalId && projectTerminalIds.includes(preferredTerminalId)
+        ? preferredTerminalId
+        : projectTerminalIds[0] ?? null
+
       return {
         activeProjectId: projectId,
-        activeTerminalId: terminalId ?? projectTerminals[0]?.id ?? null
+        activeTerminalId
       }
     }),
 

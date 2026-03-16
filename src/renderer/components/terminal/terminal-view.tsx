@@ -62,6 +62,7 @@ interface TerminalViewProps {
   isActive: boolean
   isDropTarget?: boolean
   hidden?: boolean
+  onInputActivity?: () => void
   initialOutput?: string
   initialViewportY?: number | null
   /** Callback to expose fit function to parent for resize handling */
@@ -77,6 +78,7 @@ export const TerminalView = memo(function TerminalView({
   isActive,
   isDropTarget = false,
   hidden = false,
+  onInputActivity,
   initialOutput,
   initialViewportY,
   onFitReady,
@@ -262,6 +264,25 @@ export const TerminalView = memo(function TerminalView({
     handleImageClick(e)
   }
 
+  const handleKeyDownCapture = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+      return
+    }
+    onInputActivity?.()
+  }, [onInputActivity])
+
+  const handleBeforeInputCapture = useCallback(() => {
+    onInputActivity?.()
+  }, [onInputActivity])
+
+  const handlePasteCapture = useCallback(() => {
+    onInputActivity?.()
+  }, [onInputActivity])
+
+  const handleCompositionStartCapture = useCallback(() => {
+    onInputActivity?.()
+  }, [onInputActivity])
+
   // Initialize terminal on mount
   useEffect(() => {
     initTerminal()
@@ -338,6 +359,10 @@ export const TerminalView = memo(function TerminalView({
       onClick={handleTerminalClick}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onKeyDownCapture={handleKeyDownCapture}
+      onBeforeInputCapture={handleBeforeInputCapture}
+      onPasteCapture={handlePasteCapture}
+      onCompositionStartCapture={handleCompositionStartCapture}
     >
       <div
         ref={containerRef}

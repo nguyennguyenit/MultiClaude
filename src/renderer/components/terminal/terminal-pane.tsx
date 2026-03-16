@@ -166,7 +166,7 @@ export const TerminalPane = memo(function TerminalPane({
       hardRefreshTimeoutRef.current = undefined
       setTerminalViewKey((currentKey) => currentKey + 1)
     }, HARD_REFRESH_DELAY)
-  }, [])
+  }, [terminalId])
 
   const commitTitle = useCallback(() => {
     setIsEditing(false)
@@ -283,6 +283,7 @@ export const TerminalPane = memo(function TerminalPane({
           isActive={isActive}
           isDropTarget={isDragOver}
           hidden={hidden}
+          onInputActivity={onActivate}
           initialOutput={restoreOutput}
           initialViewportY={initialViewportY}
           onFitReady={handleTerminalFit}

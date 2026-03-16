@@ -5,13 +5,13 @@ import { useAppStore } from './app-store'
 
 const initialState = useAppStore.getState()
 
-function makeTerminal(id = 'term-1'): Terminal {
+function makeTerminal(id = 'term-1', projectId = 'project-1'): Terminal {
   return {
     id,
     title: 'Terminal 1',
     cwd: '/tmp/project',
     isClaudeMode: false,
-    projectId: 'project-1',
+    projectId,
     createdAt: new Date().toISOString()
   }
 }
@@ -48,5 +48,35 @@ describe('useAppStore terminal output buffering', () => {
     useAppStore.getState().appendOutput('term-1', oversizedChunk)
 
     expect(useAppStore.getState().getTerminalOutput('term-1')).toHaveLength(TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+  })
+
+  it('restores the last active terminal when switching back to a project', () => {
+    useAppStore.getState().addTerminal(makeTerminal('term-a', 'project-a'))
+    useAppStore.getState().addTerminal(makeTerminal('term-b', 'project-a'))
+    useAppStore.getState().addTerminal(makeTerminal('term-c', 'project-b'))
+
+    useAppStore.getState().setActiveTerminal('term-a')
+    useAppStore.getState().switchToProject('project-b')
+    useAppStore.getState().setActiveTerminal('term-c')
+
+    useAppStore.getState().switchToProject('project-a')
+
+    expect(useAppStore.getState().activeProjectId).toBe('project-a')
+    expect(useAppStore.getState().activeTerminalId).toBe('term-a')
+  })
+
+  it('falls back to another terminal in the same project when the last active one is removed', () => {
+    useAppStore.getState().setActiveProject('project-a')
+    useAppStore.getState().addTerminal(makeTerminal('term-a', 'project-a'))
+    useAppStore.getState().addTerminal(makeTerminal('term-b', 'project-a'))
+
+    useAppStore.getState().setActiveTerminal('term-b')
+    useAppStore.getState().removeTerminal('term-b')
+
+    expect(useAppStore.getState().activeTerminalId).toBe('term-a')
+
+    useAppStore.getState().switchToProject('project-a')
+
+    expect(useAppStore.getState().activeTerminalId).toBe('term-a')
   })
 })
