@@ -173,6 +173,50 @@ export const TERMINAL_FONTS: readonly TerminalFontConfig[] = [
   { id: 'space-mono', name: 'Space Mono', family: "'Space Mono', monospace" }
 ] as const
 
+const TERMINAL_SYMBOL_FONT_FALLBACKS = [
+  "'Symbols Nerd Font Mono'",
+  "'Symbols Nerd Font'",
+  "'MesloLGS NF'",
+  "'MesloLGM Nerd Font Mono'",
+  "'Hack Nerd Font Mono'",
+  "'SauceCodePro Nerd Font Mono'",
+  "'FiraCode Nerd Font Mono'",
+  "'JetBrainsMono Nerd Font Mono'",
+  "'Noto Sans Symbols 2'",
+  "'Noto Sans Symbols'",
+  "'Apple Symbols'",
+  "'Segoe UI Symbol'",
+  "'Apple Color Emoji'",
+  "'Segoe UI Emoji'",
+  "'Noto Color Emoji'"
+] as const
+
+const TERMINAL_MONOSPACE_FALLBACKS = [
+  'Menlo',
+  'Monaco',
+  'Consolas',
+  'monospace'
+] as const
+
+/**
+ * Build a terminal font stack that keeps the selected monospace face first,
+ * but falls back to common Nerd/symbol fonts for Claude Code prompt glyphs.
+ */
+export function buildTerminalFontFamily(primaryFamily: string): string {
+  const families = [
+    ...primaryFamily.split(',').map(family => family.trim()).filter(Boolean),
+    ...TERMINAL_SYMBOL_FONT_FALLBACKS,
+    ...TERMINAL_MONOSPACE_FALLBACKS
+  ]
+
+  return Array.from(new Set(families)).join(', ')
+}
+
+export function getTerminalFontFamilyById(fontId: TerminalFontId = 'jetbrains-mono'): string {
+  const font = TERMINAL_FONTS.find(f => f.id === fontId)
+  return buildTerminalFontFamily(font?.family ?? "'JetBrains Mono', monospace")
+}
+
 export const COLOR_THEMES: ColorThemeDefinition[] = [
   {
     id: 'default',

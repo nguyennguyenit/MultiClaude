@@ -47,7 +47,7 @@ button, input, select, textarea, optgroup, option {
   --transition-fast: 0.15s ease;
 
   /* Fonts */
-  --terminal-font: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  --terminal-font: 'JetBrains Mono', 'Symbols Nerd Font Mono', 'Symbols Nerd Font', 'MesloLGS NF', 'MesloLGM Nerd Font Mono', 'Hack Nerd Font Mono', 'SauceCodePro Nerd Font Mono', 'FiraCode Nerd Font Mono', 'JetBrainsMono Nerd Font Mono', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'Segoe UI Symbol', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', Menlo, Monaco, Consolas, monospace;
   --modern-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
 
   /* Default colors (Tokyo Night) - overridden by JS theme system */

@@ -11,7 +11,7 @@ import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { joinPathsForTerminal } from './utils'
-import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
+import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { WindowsShell, Project } from '@shared/types'
 
 function App() {
@@ -300,10 +300,7 @@ function App() {
 
     // Set terminal font from settings (xterm uses this via use-terminal hook)
     const termFontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
-    const termFont = TERMINAL_FONTS.find(f => f.id === termFontId)
-    if (termFont) {
-      root.style.setProperty('--terminal-font', `${termFont.family}, Menlo, Monaco, Consolas, monospace`)
-    }
+    root.style.setProperty('--terminal-font', getTerminalFontFamilyById(termFontId))
 
     // Set app/UI font from settings - apply to both CSS variable and directly to body
     // to ensure all elements (including fixed-position modals) pick up the change

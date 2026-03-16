@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
-import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS } from '@shared/constants'
+import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 
 // Terminal timing constants (ms)
@@ -18,9 +18,6 @@ const RESIZE_REFIT_SETTLE_DELAY = 120  // Second fit after layout settles on max
 const TERMINAL_MIN_CONTRAST_RATIO = 4.5  // Keep black-on-gray ANSI spans readable in Codex/Claude output
 // NOTE: Cursor restore delay removed - CLI manages its own cursor
 
-// Terminal font family - used for font loading detection
-const DEFAULT_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
-
 function getPrimaryTerminalFont(): string | null {
   const { pendingSettings } = useSettingsStore.getState()
   const fontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
@@ -29,16 +26,6 @@ function getPrimaryTerminalFont(): string | null {
 
   const [primaryFont] = font.family.split(',')
   return primaryFont.trim().replace(/^['"]|['"]$/g, '')
-}
-
-/**
- * Get terminal font family from settings
- */
-function getTerminalFontFamily(): string {
-  const { pendingSettings } = useSettingsStore.getState()
-  const fontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
-  const font = TERMINAL_FONTS.find(f => f.id === fontId)
-  return font ? `${font.family}, Menlo, Monaco, Consolas, monospace` : DEFAULT_FONT_FAMILY
 }
 
 interface UseTerminalOptions {
@@ -266,7 +253,7 @@ export function useTerminal({
       cursorStyle: 'bar',
       cursorInactiveStyle: 'bar',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
       fontSize: 14,
-      fontFamily: getTerminalFontFamily(),
+      fontFamily: getTerminalFontFamilyById(useSettingsStore.getState().pendingSettings.terminalFontFamily ?? 'jetbrains-mono'),
       theme: getCurrentTerminalTheme(),
       minimumContrastRatio: TERMINAL_MIN_CONTRAST_RATIO,
       allowProposedApi: true,
@@ -803,7 +790,7 @@ export function useTerminal({
       if (!terminalRef.current || disposedRef.current) return
       if (state.pendingSettings.terminalFontFamily === prevState.pendingSettings.terminalFontFamily) return
 
-      terminalRef.current.options.fontFamily = getTerminalFontFamily()
+      terminalRef.current.options.fontFamily = getTerminalFontFamilyById(state.pendingSettings.terminalFontFamily ?? 'jetbrains-mono')
       applyFontMetrics()
       syncFontAfterLoad()
     })

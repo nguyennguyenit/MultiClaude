@@ -13,7 +13,7 @@ const VALID_RENDER_MODES: TerminalRenderMode[] = ['performance', 'balanced', 'qu
 const VALID_TERMINAL_PRESETS = [2, 4, 9, 'custom'] as const
 const VALID_UI_STYLES: UiStyle[] = ['modern', 'terminal']
 const VALID_TERMINAL_COLOR_PRESETS: TerminalColorPreset[] = ['green', 'blue', 'white']
-const VALID_TERMINAL_FONT_IDS: TerminalFontId[] = ['jetbrains-mono', 'source-code-pro', 'fira-code', 'vt323', 'ibm-plex-mono', 'space-mono']
+const VALID_TERMINAL_FONT_IDS: TerminalFontId[] = ['system', 'jetbrains-mono', 'source-code-pro', 'fira-code', 'vt323', 'ibm-plex-mono', 'space-mono']
 const VALID_APP_FONT_IDS: AppFontId[] = ['system', 'inter', 'geist', 'plus-jakarta-sans', 'roboto', 'ubuntu', 'segoe-ui']
 
 /**
@@ -49,6 +49,13 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
     validated.glassmorphismEnabled = typeof settings.glassmorphismEnabled === 'boolean'
       ? settings.glassmorphismEnabled
       : defaults.glassmorphismEnabled
+  }
+
+  // Validate terminalFontFamily
+  if (settings.terminalFontFamily !== undefined) {
+    validated.terminalFontFamily = VALID_TERMINAL_FONT_IDS.includes(settings.terminalFontFamily as TerminalFontId)
+      ? settings.terminalFontFamily as TerminalFontId
+      : defaults.terminalFontFamily
   }
 
   // Validate terminalLimit
