@@ -128,6 +128,43 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     }
   }, [])
 
+  // Repaint visible rows after renderer/visibility transitions.
+  const refreshVisibleRows = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal || disposedRef.current || terminal.rows <= 0) return
+
+    try {
+      terminal.refresh(0, terminal.rows - 1)
+    } catch {
+      // Ignore refresh errors during initialization/teardown races
+    }
+  }, [])
+
+  // Refit when a terminal becomes visible again so xterm recalculates cols/rows
+  // before TUIs redraw status lines or right-aligned badges.
+  const fitVisibleTerminal = useCallback(() => {
+    const terminal = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    if (!terminal || !fitAddon || disposedRef.current) return
+
+    try {
+      fitAddon.fit()
+    } catch {
+      // Ignore fit errors if layout is not ready yet
+    }
+  }, [])
+
+  const reconcileVisibleTerminal = useCallback((savedViewportY: number | null) => {
+    if (!terminalRef.current || disposedRef.current) return
+
+    fitVisibleTerminal()
+    refreshVisibleRows()
+
+    if (savedViewportY !== null && savedViewportY > 0 && terminalRef.current) {
+      terminalRef.current.scrollToLine(savedViewportY)
+    }
+  }, [fitVisibleTerminal, refreshVisibleRows])
+
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
     if (!containerRef.current || terminalRef.current) return
@@ -664,6 +701,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
             webglAddonRef.current = webglAddon
             terminalRef.current.loadAddon(webglAddon)
             attachContextLostListener(webglAddon)
+            refreshVisibleRows()
           } catch (e) {
             console.warn('WebGL addon failed to load:', e)
           }
@@ -677,6 +715,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
           // Ignore disposal errors
         }
         webglAddonRef.current = null
+        refreshVisibleRows()
       }
     }
 
@@ -689,7 +728,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive, isHidden, attachContextLostListener])
+  }, [isActive, isHidden, attachContextLostListener, refreshVisibleRows])
 
   // React to render mode setting changes
   useEffect(() => {
@@ -712,6 +751,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
             webglAddonRef.current = webglAddon
             terminalRef.current.loadAddon(webglAddon)
             attachContextLostListener(webglAddon)
+            refreshVisibleRows()
           } catch (e) {
             console.warn('WebGL addon failed to load:', e)
           }
@@ -724,10 +764,11 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
           // Ignore disposal errors
         }
         webglAddonRef.current = null
+        refreshVisibleRows()
       }
     })
     return unsubscribe
-  }, [attachContextLostListener])
+  }, [attachContextLostListener, refreshVisibleRows])
 
   // Visibility transition: save scroll when hiding, restore scroll and cursor when showing
   // Uses useLayoutEffect to capture scroll position BEFORE browser paints display:none
@@ -752,10 +793,9 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       const restoreScrollAndCursor = () => {
         if (cancelled || disposedRef.current || !terminalRef.current) return
 
-        // 1. Restore scroll position (no refresh needed - prevents screen jumping)
-        if (savedViewportY !== null && savedViewportY > 0) {
-          terminalRef.current.scrollToLine(savedViewportY)
-        }
+        // Refit and repaint after project switch so renderer changes and any
+        // hidden-layout drift do not leave stale TUI fragments on screen.
+        reconcileVisibleTerminal(savedViewportY)
 
         // 2. Focus terminal - let CLI manage its own cursor
         terminalRef.current.focus()
@@ -800,7 +840,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         clearTimeout(timer5)
       }
     }
-  }, [isHidden, isActive])
+  }, [isHidden, isActive, reconcileVisibleTerminal])
 
   return {
     containerRef,
