@@ -273,6 +273,17 @@ describe('TerminalManager', () => {
       expect(sessions[0].id).toBe(term.id)
       expect(sessions[0].projectId).toBe('proj-1')
     })
+
+    it('preserves buffered output beyond 100KB for restore', () => {
+      const term = manager.create()
+      const largeOutput = 'x'.repeat(150000)
+
+      mockPty._dataCallback?.(largeOutput)
+
+      const sessions = manager.getSessions()
+      expect(sessions[0].id).toBe(term.id)
+      expect(sessions[0].outputBuffer).toHaveLength(150000)
+    })
   })
 
   describe('destroyAsync', () => {

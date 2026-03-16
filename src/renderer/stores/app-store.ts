@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState } from '@shared/types'
-import { DEFAULT_ACTIVITY_BAR_STATE } from '@shared/constants'
+import { DEFAULT_ACTIVITY_BAR_STATE, TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
 
 export type ActiveView = 'terminals' | 'github'
 
@@ -78,7 +78,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         t.id === id
           ? {
               ...t,
-              output: (t.output + data).slice(-100000) // Keep last 100KB
+              output: (() => {
+                const nextOutput = t.output + data
+                return nextOutput.length > TERMINAL_OUTPUT_BUFFER_MAX
+                  ? nextOutput.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+                  : nextOutput
+              })()
             }
           : t
       )
