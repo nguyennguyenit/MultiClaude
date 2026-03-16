@@ -52,16 +52,22 @@ const scrollButtonWrapperStyle: CSSProperties = {
   containerType: 'size'
 }
 
+export interface TerminalRefreshHandle {
+  refresh: () => void
+  getViewportSnapshot: () => { viewportY: number | null; isAtBottom: boolean }
+}
+
 interface TerminalViewProps {
   terminalId: string
   isActive: boolean
   isDropTarget?: boolean
   hidden?: boolean
   initialOutput?: string
+  initialViewportY?: number | null
   /** Callback to expose fit function to parent for resize handling */
   onFitReady?: (fit: () => void) => void
   /** Callback to expose refresh function to parent for manual refresh */
-  onRefreshReady?: (refresh: () => void) => void
+  onRefreshReady?: (refreshHandle: TerminalRefreshHandle) => void
   /** Callback when terminal receives output - used for streaming detection */
   onOutput?: () => void
 }
@@ -72,13 +78,15 @@ export const TerminalView = memo(function TerminalView({
   isDropTarget = false,
   hidden = false,
   initialOutput,
+  initialViewportY,
   onFitReady,
   onRefreshReady,
   onOutput
 }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, terminalRef } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, getViewportSnapshot, terminalRef } = useTerminal({
     terminalId,
     initialOutput,
+    initialViewportY,
     isActive,
     isHidden: hidden
   })
@@ -317,8 +325,11 @@ export const TerminalView = memo(function TerminalView({
 
   // Expose refresh function to parent for manual refresh
   useEffect(() => {
-    onRefreshReady?.(refresh)
-  }, [refresh, onRefreshReady])
+    onRefreshReady?.({
+      refresh: () => refresh(),
+      getViewportSnapshot
+    })
+  }, [refresh, getViewportSnapshot, onRefreshReady])
 
   return (
     <div
