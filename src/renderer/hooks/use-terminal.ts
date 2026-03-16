@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS } from '@shared/constants'
+import { shouldBypassXtermShortcut } from '../utils'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -298,25 +299,13 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
     // Intercept global shortcuts before xterm processes them
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      // Block all DOM keyboard event phases for app-level shortcuts so xterm
+      // does not emit modified-key control sequences into the PTY.
+      if (shouldBypassXtermShortcut(e)) {
+        return false
+      }
+
       if (e.type !== 'keydown') return true
-
-      // Alt+1~9: Switch project by index (handled by global shortcut)
-      if (e.altKey && e.key >= '1' && e.key <= '9') {
-        // Allow bubbling to global handler
-        return false
-      }
-
-      // Ctrl+N or Ctrl+T: New terminal
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 't')) {
-        // Allow bubbling to global handler
-        return false
-      }
-
-      // Ctrl+W: Close active terminal
-      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-        // Allow bubbling to global handler
-        return false
-      }
 
       // Ctrl+V paste - detect image in clipboard and save to temp file
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true

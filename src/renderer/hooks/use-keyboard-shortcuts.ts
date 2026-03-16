@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../stores'
+import { getGlobalShortcut } from '../utils'
 
 interface KeyboardShortcutsOptions {
   onAddTerminal: () => void
@@ -23,48 +24,33 @@ export function useKeyboardShortcuts({
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Alt+1~9: Switch project by index
-      if (e.altKey && e.key >= '1' && e.key <= '9') {
-        e.preventDefault()
-        const index = parseInt(e.key) - 1
-        const { projects } = useAppStore.getState()
+      const shortcut = getGlobalShortcut(e)
+      if (!shortcut) return
 
-        if (projects[index]) {
-          if (onSelectProject) {
-            onSelectProject(projects[index].id)
-          } else {
-            useAppStore.getState().setActiveProject(projects[index].id)
+      e.preventDefault()
+
+      switch (shortcut.type) {
+        case 'switch-project': {
+          const { projects } = useAppStore.getState()
+          const project = projects[shortcut.index]
+          if (project) {
+            if (onSelectProject) {
+              onSelectProject(project.id)
+            } else {
+              useAppStore.getState().setActiveProject(project.id)
+            }
           }
+          return
         }
-        return
-      }
-
-      // Ctrl+N: New terminal (Cmd+N on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-        e.preventDefault()
-        onAddTerminal()
-        return
-      }
-
-      // Ctrl+T: New terminal alternative (Cmd+T on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
-        e.preventDefault()
-        onAddTerminal()
-        return
-      }
-
-      // Ctrl+W: Close active terminal (Cmd+W on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-        e.preventDefault()
-        onCloseTerminal()
-        return
-      }
-
-      // Ctrl+B: Toggle Git panel (Cmd+B on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-        e.preventDefault()
-        onToggleGitPanel?.()
-        return
+        case 'new-terminal':
+          onAddTerminal()
+          return
+        case 'close-terminal':
+          onCloseTerminal()
+          return
+        case 'toggle-git-panel':
+          onToggleGitPanel?.()
+          return
       }
     }
 
