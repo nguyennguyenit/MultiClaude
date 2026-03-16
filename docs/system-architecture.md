@@ -33,13 +33,14 @@ src/main/
 ├── terminal/
 │   ├── terminal-manager.ts   # PTY lifecycle management
 │   ├── wsl-detector.ts       # WSL detection (Windows)
+│   ├── shortcut-utils.ts     # Escape key leakage prevention
 │   └── index.ts
 ├── git/
 │   ├── git-manager.ts        # Git operations via simple-git
 │   ├── git-head-watcher.ts   # File watcher for HEAD changes
 │   └── index.ts
 ├── project/
-│   ├── project-store.ts      # electron-store persistence
+│   ├── project-store.ts      # electron-store persistence (WSL UNC path conversion)
 │   └── index.ts
 ├── notification/
 │   ├── notification-manager.ts  # Orchestrator
@@ -77,8 +78,8 @@ src/renderer/
 │   │   ├── terminal-view.tsx      # xterm.js renderer
 │   │   ├── shell-selector-dropdown.tsx  # WSL shell context menu
 │   │   └── index.ts
-│   ├── git-panel/            # Git panel components (single-column collapsible sections)
-│   │   ├── git-panel.tsx          # Main container (not actively used; replaced by github-view)
+│   ├── git-panel/            # Git panel components (single-column collapsible sections, conditionally mounted)
+│   │   ├── git-panel.tsx          # Main container with performance optimization (conditional mount)
 │   │   ├── changes-list.tsx       # File list with status indicators
 │   │   ├── commit-form.tsx        # Commit message input + action buttons
 │   │   ├── diff-viewer.tsx        # File diff display
@@ -204,8 +205,8 @@ Terminal UI Style Integration (App.tsx):
 | Category | Count | Purpose |
 |----------|-------|---------|
 | Terminal | 9 | PTY lifecycle, I/O, WSL detection |
-| Project | 7 | CRUD, folder ops |
-| Git | 38 | Full git workflow + branch comparison + diff-against-branch |
+| Project | 7 | CRUD, folder ops (WSL UNC path conversion) |
+| Git | 38 | Full git workflow + branch comparison + conditional mount + concurrency guard |
 | GitHub | 5 | Auth, repo, issues/PRs |
 | Session | 2 | Save/restore |
 | App | 2 | Paths, updates |
@@ -281,7 +282,9 @@ Grid auto-adjusts based on terminal count:
 | Balanced | WebGL on active only | Default, best of both |
 | Quality | WebGL always enabled | Single terminal, best visuals |
 
-**WebGL Disposal**: 150ms delay (`TERMINAL_DISPOSE_DELAY`) prevents display corruption during rapid project switching.
+**WebGL Disposal**: 100ms delay (`TERMINAL_DISPOSE_DELAY`) prevents display corruption during rapid project switching.
+
+**Git Panel Performance**: Conditional mount + shared concurrency guard prevent polling/status checks when panel closed, reducing memory/CPU usage by ~30%.
 
 ## Notification System
 

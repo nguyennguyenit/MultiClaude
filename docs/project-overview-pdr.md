@@ -6,7 +6,7 @@
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.1.6 |
+| Version | 3.0.1-beta.13 |
 | License | MIT |
 | Platforms | Linux (AppImage/deb), macOS (dmg), Windows (exe) |
 | Repository | github.com/nguyennguyenit/MultiClaude |
@@ -30,7 +30,7 @@
 | FR-1.3 | WebGL rendering with configurable modes (Performance/Balanced/Quality) | Complete |
 | FR-1.4 | Terminal title editing via double-click | Complete |
 | FR-1.5 | Claude mode indicator badge when Claude active | Complete |
-| FR-1.6 | WSL shell support (Windows): auto-detect distros, default shell setting, right-click shell selector | Complete |
+| FR-1.6 | WSL shell support (Windows): auto-detect distros, pwsh preference, right-click shell selector; WSL UNC path conversion | Complete |
 
 #### FR-2: Project Management
 | ID | Requirement | Status |
@@ -48,7 +48,7 @@
 | FR-3.3 | Branch management (create, checkout, delete, merge) | Complete |
 | FR-3.4 | Commit history viewer | Complete |
 | FR-3.5 | Stash management (save, apply, pop, drop) | Complete |
-| FR-3.6 | HEAD watcher for external changes | Complete |
+| FR-3.6 | HEAD watcher for external changes; conditional mount + shared concurrency guard | Complete |
 
 #### FR-4: GitHub Integration
 | ID | Requirement | Status |
@@ -88,7 +88,7 @@
 | ID | Requirement | Target | Status |
 |----|-------------|--------|--------|
 | NFR-1 | Startup time | <3s cold start | Met |
-| NFR-2 | Memory usage | <500MB with 4 terminals | Met |
+| NFR-2 | Memory usage | <500MB with 4 terminals (improved via git-panel conditional mount) | Met |
 | NFR-3 | Terminal latency | <50ms input-to-render | Met |
 | NFR-4 | Test coverage | 60% minimum | Met |
 | NFR-5 | Cross-platform builds | Linux, macOS, Windows | Complete |

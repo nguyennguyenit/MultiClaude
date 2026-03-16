@@ -51,6 +51,8 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | invoke | `project:open-folder` | - | `string \| null` | 🔄 |
 | invoke | `project:check-folder` | `cwd: string` | `{ exists, isEmpty, isGitRepo, fileCount }` | 🔄 |
 
+**Note on `project:open-folder`**: Automatically converts WSL UNC paths (`\\wsl$\distro\path`, `\\wsl.localhost\distro\path`) to Linux-compatible paths.
+
 ### Git Module
 
 | Method | Channel | Parameters | Returns | Status |

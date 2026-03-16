@@ -564,6 +564,32 @@ import { IPC_CHANNELS } from '@shared/constants'
 import { Terminal } from '@shared/types'
 ```
 
+## Performance Best Practices
+
+### Conditional Mounting (Git Panel Pattern)
+```typescript
+// Only mount git-panel when visible to prevent polling
+if (gitPanelOpen) {
+  return <GitPanel />
+}
+return null
+
+// Use shared concurrency guards to prevent duplicate git status calls
+const statusGuard = useRef(false)
+const getGitStatus = useCallback(async () => {
+  if (statusGuard.current) return
+  statusGuard.current = true
+  try {
+    return await git.status(cwd)
+  } finally {
+    statusGuard.current = false
+  }
+}, [cwd])
+```
+
+### Escape Key Leakage Prevention (shortcut-utils Pattern)
+Use `shortcut-utils.ts` for keyboard event handling to block escape propagation during critical operations like project switching.
+
 ## Development Commands
 
 | Command | Purpose |

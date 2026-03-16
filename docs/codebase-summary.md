@@ -1,9 +1,9 @@
 # MultiClaude Codebase Summary
 
 ## Overview
-MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management (with WSL support on Windows), and user settings (themes and notifications).
+MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management (with WSL support and pwsh preference on Windows, UNC path conversion), and user settings (themes and notifications).
 
-**Codebase Stats**: ~10K LOC, 90 TypeScript files, 80 IPC channels
+**Codebase Stats**: ~10K LOC, 90 TypeScript files, 86 IPC channels
 
 ## Architecture
 
@@ -27,7 +27,9 @@ MultiClaude v1.1.6 is an Electron 33 + React 19 + TypeScript desktop application
   - **Sync Methods**: Legacy `destroy(id)` and `destroyAll()` retained for compatibility
   - **Test Coverage**: 6 async tests covering graceful exit, timeout, force kill, invalid IDs, batch destruction
 - **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
-- **Shell Selection**: Default shell picker (cmd, PowerShell, WSL distro) + right-click context menu for per-terminal shell selection
+- **Shell Selection**: Default shell picker (pwsh preferred, cmd fallback on Windows; WSL distro) + right-click context menu for per-terminal shell selection
+- **Keyboard Shortcut Utils** (`shortcut-utils.ts`): New module blocking shortcut escape leakage during project switch
+- **IPC WSL Path Conversion**: `project:open-folder` converts UNC paths (`\\wsl$\distro\...`, `\\wsl.localhost\distro\...`) to Linux paths
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting) + VibeTheme color palette
 - **TerminalGrid**: Auto-flex layout (equal splits, no react-resizable-panels), adapts 1x1 → 3x4 based on terminal count
   - **Single-Parent Pattern** (Phase 1 of Terminal Cursor Fix)
@@ -284,7 +286,7 @@ src/
         └── terminal-themes.ts
 ```
 
-## IPC Channels (85 total)
+## IPC Channels (86 total)
 
 ### Terminal (9 channels)
 - `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
@@ -293,7 +295,7 @@ src/
 
 ### Project (7 channels)
 - `project:list`, `project:create`, `project:update`, `project:delete`, `project:set-active`
-- `project:open-folder`, `project:check-folder`
+- `project:open-folder` (WSL UNC path conversion: `\\wsl$\...` → Linux paths), `project:check-folder`
 
 ### Git (38 channels)
 **Basic**: `git:status`, `git:init`, `git:add-remote`, `git:push`
@@ -566,6 +568,8 @@ interface ProjectTerminal {
 - **App.tsx Active Terminal Sync**: useEffect syncs activeTerminalId with notification.setActiveTerminal IPC
   - Enables FocusDetector to track which terminal user is watching
   - Runs on every activeTerminalId change
+
+**Git Panel Performance**: Conditional mount + shared concurrency guard prevents polling when git-panel closed, reducing memory/CPU usage.
 
 **Feature Status**: Feature complete and fully integrated
 

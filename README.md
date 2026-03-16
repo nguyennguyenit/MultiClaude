@@ -77,9 +77,10 @@ src/
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 24+
 - GitHub CLI (`gh`) for GitHub integration
 - Claude Code CLI for running Claude
+- **Windows**: PowerShell (pwsh) is preferred; cmd is available as fallback
 - **Windows WSL**: If using WSL shell, you must install a Linux distribution:
   ```powershell
   wsl --install -d Ubuntu
@@ -87,6 +88,8 @@ src/
   > Error `WSL_E_DISTRO_NOT_FOUND` means WSL is installed but no distribution exists. Run the command above to fix.
 
   > **Note**: WSL terminals take 2-5 seconds to start (cold start) due to Linux kernel initialization. Subsequent terminals are faster while WSL is running.
+
+  > **Tip**: UNC paths (e.g., `\\wsl$\Ubuntu\home\user`) are automatically converted to Linux paths for folder operations.
 
 ## Usage
 

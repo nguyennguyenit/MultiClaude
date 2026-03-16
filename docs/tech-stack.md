@@ -64,11 +64,12 @@ multiclaude/
 ### Renderer Process
 - `@xterm/xterm`: Terminal rendering
 - `@xterm/addon-fit`: Auto-resize terminal
-- `@xterm/addon-webgl`: GPU-accelerated rendering
+- `@xterm/addon-webgl`: GPU-accelerated rendering (configurable modes: Performance/Balanced/Quality)
 - `react-resizable-panels`: Auto-split terminal grid layout
 - `zustand`: State management
 - `tailwindcss`: Styling
 - `@fontsource/*`: Monospace fonts (JetBrains Mono, Source Code Pro, Fira Code, IBM Plex Mono, Space Mono)
+- **Node.js**: 24+ (enforced in CI via GitHub Actions)
 
 ### Testing
 - `vitest`: Test runner with Vite integration
@@ -101,6 +102,8 @@ multiclaude/
 4. **GitHub CLI for Auth**: Use `gh` CLI for OAuth flow (proven, maintained)
 5. **electron-store for Settings**: Theme/sound preferences persisted via SettingsStore in main process
 6. **Auto-Split Terminal Grid**: All terminals visible simultaneously in resizable grid layout
+7. **PowerShell on Windows**: Prefer pwsh over cmd for better compatibility
+8. **WSL UNC Path Conversion**: Convert `\\wsl$\distro\...` paths to Linux paths for folder operations
 
 ## Terminal Grid Layout
 

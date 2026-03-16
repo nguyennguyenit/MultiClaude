@@ -2,7 +2,7 @@
 
 ## VibeTerminal Theme System
 
-MultiClaude v1.2 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and 5 curated dark themes.
+MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and 5 curated dark themes.
 
 ### Color Architecture
 
@@ -46,6 +46,8 @@ MultiClaude v1.2 uses the VibeTerminal aesthetic: a minimal, terminal-first UI w
 | Ctrl+N/T | New terminal |
 | Ctrl+W | Close active terminal |
 | Ctrl+B | Toggle Git panel |
+
+**Note**: Escape key handling is managed by `shortcut-utils.ts` to prevent leakage during project switching.
 
 ### Element Styling Guidelines
 
