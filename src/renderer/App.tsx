@@ -15,21 +15,19 @@ import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
 import type { WindowsShell, Project } from '@shared/types'
 
 function App() {
-  const {
-    terminals,
-    projects,
-    activeProjectId,
-    activeTerminalId,
-    addTerminal,
-    removeTerminal,
-    updateTerminalTitle,
-    addProject,
-    removeProject,
-    setProjects,
-    setActiveProject,
-    setActiveTerminal,
-    switchToProject
-  } = useAppStore()
+  const terminals = useAppStore((state) => state.terminals)
+  const projects = useAppStore((state) => state.projects)
+  const activeProjectId = useAppStore((state) => state.activeProjectId)
+  const activeTerminalId = useAppStore((state) => state.activeTerminalId)
+  const addTerminal = useAppStore((state) => state.addTerminal)
+  const removeTerminal = useAppStore((state) => state.removeTerminal)
+  const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
+  const addProject = useAppStore((state) => state.addProject)
+  const removeProject = useAppStore((state) => state.removeProject)
+  const setProjects = useAppStore((state) => state.setProjects)
+  const setActiveProject = useAppStore((state) => state.setActiveProject)
+  const setActiveTerminal = useAppStore((state) => state.setActiveTerminal)
+  const switchToProject = useAppStore((state) => state.switchToProject)
 
   // Active slide panel: 'git' | 'github' | 'settings' | null (Phase 4 adds actual panels)
   const [activePanel, setActivePanel] = useState<string | null>(null)

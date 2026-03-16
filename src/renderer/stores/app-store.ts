@@ -4,18 +4,16 @@ import { DEFAULT_ACTIVITY_BAR_STATE, TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT
 
 export type ActiveView = 'terminals' | 'github'
 
-interface TerminalWithOutput extends Terminal {
-  output: string
-}
-
 interface AppState {
   // Terminals
-  terminals: TerminalWithOutput[]
+  terminals: Terminal[]
+  terminalOutputs: Record<string, string>
   activeTerminalId: string | null
   addTerminal: (terminal: Terminal) => void
   removeTerminal: (id: string) => void
   setActiveTerminal: (id: string | null) => void
   updateTerminalTitle: (id: string, title: string) => void
+  getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void
 
   // Projects
@@ -43,19 +41,27 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   // Terminals
   terminals: [],
+  terminalOutputs: {},
   activeTerminalId: null,
 
   addTerminal: (terminal) =>
     set((state) => ({
-      terminals: [...state.terminals, { ...terminal, output: '' }],
+      terminals: [...state.terminals, terminal],
+      terminalOutputs: {
+        ...state.terminalOutputs,
+        [terminal.id]: ''
+      },
       activeTerminalId: terminal.id
     })),
 
   removeTerminal: (id) =>
     set((state) => {
       const newTerminals = state.terminals.filter((t) => t.id !== id)
+      const remainingOutputs = { ...state.terminalOutputs }
+      delete remainingOutputs[id]
       return {
         terminals: newTerminals,
+        terminalOutputs: remainingOutputs,
         activeTerminalId:
           state.activeTerminalId === id
             ? newTerminals[newTerminals.length - 1]?.id || null
@@ -72,21 +78,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
     })),
 
+  getTerminalOutput: (id) => get().terminalOutputs[id] ?? '',
+
   appendOutput: (id, data) =>
     set((state) => ({
-      terminals: state.terminals.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              output: (() => {
-                const nextOutput = t.output + data
-                return nextOutput.length > TERMINAL_OUTPUT_BUFFER_MAX
-                  ? nextOutput.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
-                  : nextOutput
-              })()
-            }
-          : t
-      )
+      terminalOutputs: {
+        ...state.terminalOutputs,
+        [id]: (() => {
+          const nextOutput = (state.terminalOutputs[id] ?? '') + data
+          return nextOutput.length > TERMINAL_OUTPUT_BUFFER_MAX
+            ? nextOutput.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+            : nextOutput
+        })()
+      }
     })),
 
   // Projects

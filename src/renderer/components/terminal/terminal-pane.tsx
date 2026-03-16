@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, memo, useState } from 'react'
 import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
 import { useFileDrop } from '../../hooks/use-file-drop'
+import { useAppStore } from '../../stores'
 import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
 
 // Streaming detection constants
@@ -43,6 +44,7 @@ export const TerminalPane = memo(function TerminalPane({
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
   const [terminalViewKey, setTerminalViewKey] = useState(0)
+  const [restoreOutput, setRestoreOutput] = useState(initialOutput)
   const [initialViewportY, setInitialViewportY] = useState<number | null>(null)
 
   // Sync editTitle when title prop changes externally
@@ -146,6 +148,7 @@ export const TerminalPane = memo(function TerminalPane({
     e.stopPropagation()
 
     const viewportSnapshot = terminalRefreshRef.current?.getViewportSnapshot()
+    setRestoreOutput(useAppStore.getState().getTerminalOutput(terminalId) || undefined)
     setInitialViewportY(
       viewportSnapshot && !viewportSnapshot.isAtBottom
         ? viewportSnapshot.viewportY
@@ -280,7 +283,7 @@ export const TerminalPane = memo(function TerminalPane({
           isActive={isActive}
           isDropTarget={isDragOver}
           hidden={hidden}
-          initialOutput={initialOutput}
+          initialOutput={restoreOutput}
           initialViewportY={initialViewportY}
           onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}
