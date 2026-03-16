@@ -10,25 +10,24 @@ import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
+import { joinPathsForTerminal } from './utils'
+import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { WindowsShell, Project } from '@shared/types'
 
 function App() {
-  const {
-    terminals,
-    projects,
-    activeProjectId,
-    activeTerminalId,
-    addTerminal,
-    removeTerminal,
-    updateTerminalTitle,
-    addProject,
-    removeProject,
-    setProjects,
-    setActiveProject,
-    setActiveTerminal,
-    switchToProject
-  } = useAppStore()
+  const terminals = useAppStore((state) => state.terminals)
+  const projects = useAppStore((state) => state.projects)
+  const activeProjectId = useAppStore((state) => state.activeProjectId)
+  const activeTerminalId = useAppStore((state) => state.activeTerminalId)
+  const addTerminal = useAppStore((state) => state.addTerminal)
+  const removeTerminal = useAppStore((state) => state.removeTerminal)
+  const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
+  const addProject = useAppStore((state) => state.addProject)
+  const removeProject = useAppStore((state) => state.removeProject)
+  const setProjects = useAppStore((state) => state.setProjects)
+  const setActiveProject = useAppStore((state) => state.setActiveProject)
+  const setActiveTerminal = useAppStore((state) => state.setActiveTerminal)
+  const switchToProject = useAppStore((state) => state.switchToProject)
 
   // Active slide panel: 'git' | 'github' | 'settings' | null (Phase 4 adds actual panels)
   const [activePanel, setActivePanel] = useState<string | null>(null)
@@ -169,13 +168,8 @@ function App() {
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
-    const formatted = paths.map(p => {
-      // Quote paths with special characters
-      if (/[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(p)) {
-        return `"${p.replace(/"/g, '\\"')}"`
-      }
-      return p
-    }).join(' ')
+    const formatted = joinPathsForTerminal(paths)
+    if (!formatted) return
     window.electron.terminal.write(terminalId, formatted)
   }, [])
 
@@ -306,10 +300,7 @@ function App() {
 
     // Set terminal font from settings (xterm uses this via use-terminal hook)
     const termFontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
-    const termFont = TERMINAL_FONTS.find(f => f.id === termFontId)
-    if (termFont) {
-      root.style.setProperty('--terminal-font', `${termFont.family}, Menlo, Monaco, Consolas, monospace`)
-    }
+    root.style.setProperty('--terminal-font', getTerminalFontFamilyById(termFontId))
 
     // Set app/UI font from settings - apply to both CSS variable and directly to body
     // to ensure all elements (including fixed-position modals) pick up the change

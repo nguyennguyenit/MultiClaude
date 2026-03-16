@@ -4,12 +4,8 @@ import { ResizeHandle } from './terminal-resize-handle'
 import { useTerminalResize } from '../../hooks/use-terminal-resize'
 import type { Terminal } from '@shared/types'
 
-interface TerminalWithOutput extends Terminal {
-  output: string
-}
-
 interface TerminalGridProps {
-  terminals: TerminalWithOutput[]
+  terminals: Terminal[]
   activeProjectId: string | null
   activeProjectPath?: string
   activeTerminalId: string | null
@@ -79,7 +75,7 @@ export const TerminalGrid = memo(function TerminalGrid({
    * preserving cursor position, buffer content, and WebGL state.
   */
   const projectGroups = useMemo(() => {
-    const groups = new Map<string, TerminalWithOutput[]>()
+    const groups = new Map<string, Terminal[]>()
     if (activeProjectId) groups.set(activeProjectId, [])
     for (const t of terminals) {
       const pid = getProjectId(t)
@@ -174,7 +170,6 @@ export const TerminalGrid = memo(function TerminalGrid({
                             isActive={terminal.id === activeTerminalId}
                             hidden={!group.isActive || terminal.id !== activeTerminalId}
                             isClaudeMode={terminal.isClaudeMode}
-                            initialOutput={terminal.output}
                             onActivate={() => onTerminalClick(terminal.id)}
                             onClose={() => onCloseTerminal?.(terminal.id)}
                             onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}

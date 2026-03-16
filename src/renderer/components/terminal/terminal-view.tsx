@@ -52,23 +52,43 @@ const scrollButtonWrapperStyle: CSSProperties = {
   containerType: 'size'
 }
 
+export interface TerminalRefreshHandle {
+  refresh: () => void
+  getViewportSnapshot: () => { viewportY: number | null; isAtBottom: boolean }
+}
+
 interface TerminalViewProps {
   terminalId: string
   isActive: boolean
+  isDropTarget?: boolean
   hidden?: boolean
+  onInputActivity?: () => void
   initialOutput?: string
+  initialViewportY?: number | null
   /** Callback to expose fit function to parent for resize handling */
   onFitReady?: (fit: () => void) => void
   /** Callback to expose refresh function to parent for manual refresh */
-  onRefreshReady?: (refresh: () => void) => void
+  onRefreshReady?: (refreshHandle: TerminalRefreshHandle) => void
   /** Callback when terminal receives output - used for streaming detection */
   onOutput?: () => void
 }
 
-export const TerminalView = memo(function TerminalView({ terminalId, isActive, hidden = false, initialOutput, onFitReady, onRefreshReady, onOutput }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, terminalRef } = useTerminal({
+export const TerminalView = memo(function TerminalView({
+  terminalId,
+  isActive,
+  isDropTarget = false,
+  hidden = false,
+  onInputActivity,
+  initialOutput,
+  initialViewportY,
+  onFitReady,
+  onRefreshReady,
+  onOutput
+}: TerminalViewProps) {
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, getViewportSnapshot, terminalRef } = useTerminal({
     terminalId,
     initialOutput,
+    initialViewportY,
     isActive,
     isHidden: hidden
   })
@@ -244,6 +264,25 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
     handleImageClick(e)
   }
 
+  const handleKeyDownCapture = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+      return
+    }
+    onInputActivity?.()
+  }, [onInputActivity])
+
+  const handleBeforeInputCapture = useCallback(() => {
+    onInputActivity?.()
+  }, [onInputActivity])
+
+  const handlePasteCapture = useCallback(() => {
+    onInputActivity?.()
+  }, [onInputActivity])
+
+  const handleCompositionStartCapture = useCallback(() => {
+    onInputActivity?.()
+  }, [onInputActivity])
+
   // Initialize terminal on mount
   useEffect(() => {
     initTerminal()
@@ -307,8 +346,11 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
 
   // Expose refresh function to parent for manual refresh
   useEffect(() => {
-    onRefreshReady?.(refresh)
-  }, [refresh, onRefreshReady])
+    onRefreshReady?.({
+      refresh: () => refresh(),
+      getViewportSnapshot
+    })
+  }, [refresh, getViewportSnapshot, onRefreshReady])
 
   return (
     <div
@@ -317,12 +359,20 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
       onClick={handleTerminalClick}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onKeyDownCapture={handleKeyDownCapture}
+      onBeforeInputCapture={handleBeforeInputCapture}
+      onPasteCapture={handlePasteCapture}
+      onCompositionStartCapture={handleCompositionStartCapture}
     >
       <div
         ref={containerRef}
-        className={`terminal-container${highlightArea ? ' image-hover' : ''}`}
+        className={`terminal-container${highlightArea ? ' image-hover' : ''}${isDropTarget ? ' terminal-drop-active' : ''}`}
         style={{ height: '100%', width: '100%' }}
       />
+
+      {isDropTarget && (
+        <div className="terminal-drop-overlay pointer-events-none absolute inset-2" />
+      )}
 
       {/* Hover underline for image path text */}
       {highlightArea && (

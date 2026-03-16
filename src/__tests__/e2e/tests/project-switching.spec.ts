@@ -8,6 +8,71 @@ import { mockProjects } from '../fixtures/test-data'
  * Validates fix for cursor not appearing after project switch.
  */
 test.describe('Project Switching - Cursor Display', () => {
+  test('input activity marks that terminal as active', async ({ window }) => {
+    const [project] = mockProjects
+    await injectMockProject(window, [project])
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    await window.evaluate((projectId: string) => {
+      interface TerminalState {
+        terminals: Array<{
+          id: string
+          title: string
+          cwd: string
+          isClaudeMode: boolean
+          projectId: string
+          createdAt: string
+        }>
+        terminalOutputs: Record<string, string>
+        activeTerminalId: string | null
+      }
+
+      interface StoreApi {
+        setState: (state: Partial<TerminalState>) => void
+      }
+
+      const appStore = (window as unknown as { __APP_STORE__?: StoreApi }).__APP_STORE__
+      appStore?.setState({
+        terminals: [
+          {
+            id: 'term-1',
+            title: 'Terminal 1',
+            cwd: '/tmp/project-switch-1',
+            isClaudeMode: false,
+            projectId,
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 'term-2',
+            title: 'Terminal 2',
+            cwd: '/tmp/project-switch-1',
+            isClaudeMode: false,
+            projectId,
+            createdAt: new Date().toISOString()
+          }
+        ],
+        terminalOutputs: {
+          'term-1': '',
+          'term-2': ''
+        },
+        activeTerminalId: 'term-1'
+      })
+    }, project.id)
+
+    const secondTerminal = window.locator('[data-terminal-id="term-2"] .terminal-container-wrapper')
+    await expect(secondTerminal).toBeVisible()
+
+    await secondTerminal.dispatchEvent('keydown', { key: 'a', bubbles: true })
+    await window.waitForTimeout(50)
+
+    const activeTerminalId = await window.evaluate(() => {
+      const store = (window as any).__APP_STORE__
+      return store?.getState()?.activeTerminalId
+    })
+
+    expect(activeTerminalId).toBe('term-2')
+  })
+
   test('A->B switch: cursor visible after switching projects', async ({ window }) => {
     // Setup: 2 projects
     const twoProjects = mockProjects.slice(0, 2)

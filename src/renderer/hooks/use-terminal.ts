@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
-import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS } from '@shared/constants'
+import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 
 // Terminal timing constants (ms)
@@ -14,11 +14,9 @@ const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab swit
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
+const RESIZE_REFIT_SETTLE_DELAY = 120  // Second fit after layout settles on maximize/unmaximize
 const TERMINAL_MIN_CONTRAST_RATIO = 4.5  // Keep black-on-gray ANSI spans readable in Codex/Claude output
 // NOTE: Cursor restore delay removed - CLI manages its own cursor
-
-// Terminal font family - used for font loading detection
-const DEFAULT_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
 
 function getPrimaryTerminalFont(): string | null {
   const { pendingSettings } = useSettingsStore.getState()
@@ -30,19 +28,10 @@ function getPrimaryTerminalFont(): string | null {
   return primaryFont.trim().replace(/^['"]|['"]$/g, '')
 }
 
-/**
- * Get terminal font family from settings
- */
-function getTerminalFontFamily(): string {
-  const { pendingSettings } = useSettingsStore.getState()
-  const fontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
-  const font = TERMINAL_FONTS.find(f => f.id === fontId)
-  return font ? `${font.family}, Menlo, Monaco, Consolas, monospace` : DEFAULT_FONT_FAMILY
-}
-
 interface UseTerminalOptions {
   terminalId: string
   initialOutput?: string
+  initialViewportY?: number | null
   isActive?: boolean  // Required for balanced render mode WebGL toggle
   isHidden?: boolean  // Hidden terminals have WebGL disabled to save GPU resources
   onResize?: (cols: number, rows: number) => void
@@ -92,7 +81,14 @@ function shouldUseWebGL(isActive: boolean, isHidden: boolean): boolean {
   }
 }
 
-export function useTerminal({ terminalId, initialOutput, isActive = true, isHidden = false, onResize }: UseTerminalOptions) {
+export function useTerminal({
+  terminalId,
+  initialOutput,
+  initialViewportY = null,
+  isActive = true,
+  isHidden = false,
+  onResize
+}: UseTerminalOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -113,6 +109,9 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
   const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
+  const fitAnimationFrameRef = useRef<number | null>(null)
+  const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const observedContainerSizeRef = useRef({ width: 0, height: 0 })
 
   // Helper to attach WebGL context lost listener via the public addon API.
   const attachContextLostListener = useCallback((addon: WebglAddon) => {
@@ -152,48 +151,68 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     }
   }, [])
 
-  // Refit when a terminal becomes visible again so xterm recalculates cols/rows
-  // before TUIs redraw status lines or right-aligned badges.
-  const fitVisibleTerminal = useCallback(() => {
+  const performFit = useCallback((restoreViewport = true) => {
     const terminal = terminalRef.current
     const fitAddon = fitAddonRef.current
-    if (!terminal || !fitAddon || disposedRef.current) return
+    const container = containerRef.current
+    if (!terminal || !fitAddon || !container || disposedRef.current) return false
+    if (container.clientWidth === 0 || container.clientHeight === 0) return false
+
+    const savedViewportY = terminal.buffer.active.viewportY
+    const shouldRestoreViewport = restoreViewport && !isAtBottomRef.current && savedViewportY > 0
 
     try {
       fitAddon.fit()
     } catch {
       // Ignore fit errors if layout is not ready yet
+      return false
+    }
+
+    refreshVisibleRows()
+
+    if (shouldRestoreViewport && terminalRef.current) {
+      terminalRef.current.scrollToLine(savedViewportY)
+    }
+
+    return true
+  }, [refreshVisibleRows])
+
+  const cancelScheduledFit = useCallback(() => {
+    if (fitAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(fitAnimationFrameRef.current)
+      fitAnimationFrameRef.current = null
+    }
+
+    if (fitSettleTimerRef.current) {
+      clearTimeout(fitSettleTimerRef.current)
+      fitSettleTimerRef.current = null
     }
   }, [])
+
+  // Refit when a terminal becomes visible again so xterm recalculates cols/rows
+  // before TUIs redraw status lines or right-aligned badges.
+  const fitVisibleTerminal = useCallback(() => {
+    performFit(false)
+  }, [performFit])
 
   const reconcileVisibleTerminal = useCallback((savedViewportY: number | null) => {
     if (!terminalRef.current || disposedRef.current) return
 
     clearTextureAtlas()
     fitVisibleTerminal()
-    refreshVisibleRows()
 
     if (savedViewportY !== null && savedViewportY > 0 && terminalRef.current) {
       terminalRef.current.scrollToLine(savedViewportY)
     }
-  }, [clearTextureAtlas, fitVisibleTerminal, refreshVisibleRows])
+  }, [clearTextureAtlas, fitVisibleTerminal])
 
   const applyFontMetrics = useCallback(() => {
     if (disposedRef.current || !terminalRef.current || !fitAddonRef.current) return
 
     clearTextureAtlas()
-
-    if (!isHiddenRef.current) {
-      try {
-        fitAddonRef.current.fit()
-      } catch {
-        // Ignore fit errors if layout is not ready yet
-      }
-    }
-
-    refreshVisibleRows()
+    performFit()
     window.electron.terminal.resize(terminalId, terminalRef.current.cols, terminalRef.current.rows)
-  }, [clearTextureAtlas, refreshVisibleRows, terminalId])
+  }, [clearTextureAtlas, performFit, terminalId])
 
   const syncFontAfterLoad = useCallback(() => {
     const primaryFont = getPrimaryTerminalFont()
@@ -234,7 +253,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       cursorStyle: 'bar',
       cursorInactiveStyle: 'bar',  // Keep cursor visible when inactive (prevents cursor disappearing on blur)
       fontSize: 14,
-      fontFamily: getTerminalFontFamily(),
+      fontFamily: getTerminalFontFamilyById(useSettingsStore.getState().pendingSettings.terminalFontFamily ?? 'jetbrains-mono'),
       theme: getCurrentTerminalTheme(),
       minimumContrastRatio: TERMINAL_MIN_CONTRAST_RATIO,
       allowProposedApi: true,
@@ -315,16 +334,21 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         // Ignore fit errors
       }
 
+      const restoreInitialViewport = () => {
+        if (disposedRef.current || !terminalRef.current) return
+        if (initialViewportY !== null && initialViewportY >= 0) {
+          terminalRef.current.scrollToLine(initialViewportY)
+        }
+        savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
+      }
+
       // Restore output AFTER WebGL init to prevent race condition
       if (initialOutput) {
-        terminal.write(initialOutput)
-        // Save initial viewport line position after output restore
-        requestAnimationFrame(() => {
-          if (!disposedRef.current && terminalRef.current) {
-            savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
-          }
+        terminal.write(initialOutput, () => {
+          requestAnimationFrame(restoreInitialViewport)
         })
       } else {
+        requestAnimationFrame(restoreInitialViewport)
         // Initial resize only for fresh terminals
         window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
       }
@@ -476,7 +500,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-  }, [terminalId, initialOutput, onResize, attachContextLostListener, syncFontAfterLoad])
+  }, [terminalId, initialOutput, initialViewportY, onResize, attachContextLostListener, syncFontAfterLoad])
 
   // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
@@ -506,15 +530,21 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
   // Fit terminal to container (with safety check for initialization)
   const fit = useCallback(() => {
-    // Only fit if terminal is fully initialized (has valid dimensions)
-    if (!terminalRef.current || !fitAddonRef.current) return
-    try {
-      fitAddonRef.current.fit()
-    } catch {
-      // Terminal not ready yet - dimensions not available
-      // This can happen during initialization race conditions
-    }
-  }, [])
+    if (disposedRef.current) return
+
+    cancelScheduledFit()
+
+    fitAnimationFrameRef.current = requestAnimationFrame(() => {
+      fitAnimationFrameRef.current = null
+
+      if (!performFit()) return
+
+      fitSettleTimerRef.current = setTimeout(() => {
+        fitSettleTimerRef.current = null
+        performFit()
+      }, RESIZE_REFIT_SETTLE_DELAY)
+    })
+  }, [cancelScheduledFit, performFit])
 
   // Focus terminal (let CLI manage cursor visibility)
   const focus = useCallback(() => {
@@ -541,6 +571,18 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   // Scroll terminal to bottom (for UI button)
   const scrollToBottom = useCallback(() => {
     terminalRef.current?.scrollToBottom()
+  }, [])
+
+  const getViewportSnapshot = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal || disposedRef.current) {
+      return { viewportY: null, isAtBottom: true }
+    }
+
+    return {
+      viewportY: terminal.buffer.active.viewportY,
+      isAtBottom: isAtBottomRef.current
+    }
   }, [])
 
   // Refresh terminal display (dispose WebGL, redraw, reinit WebGL)
@@ -584,9 +626,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       }
 
       // 4. Refit
-      try {
-        fitAddonRef.current?.fit()
-      } catch { /* ignore */ }
+      performFit(false)
 
       // 5. Restore scroll position after refresh using xterm.js API
       if (savedViewportY >= 0) {
@@ -600,7 +640,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         } catch { /* ignore notification errors */ }
       }
     }, REFRESH_DEBOUNCE)
-  }, [attachContextLostListener, clearTextureAtlas])
+  }, [attachContextLostListener, clearTextureAtlas, performFit])
 
   // Keep refreshFnRef in sync with refresh callback for context lost handler
   useEffect(() => {
@@ -624,6 +664,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         clearTimeout(refreshDebounceRef.current)
         refreshDebounceRef.current = null
       }
+
+      cancelScheduledFit()
 
 
       // Capture refs before nullifying
@@ -657,7 +699,37 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         }
       }, TERMINAL_DISPOSE_DELAY)
     }
-  }, [])
+  }, [cancelScheduledFit])
+
+  // Watch the actual xterm container so maximize/unmaximize refits after
+  // the terminal render area has reached its final size.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || typeof ResizeObserver === 'undefined') return
+
+    observedContainerSizeRef.current = {
+      width: Math.round(container.clientWidth),
+      height: Math.round(container.clientHeight)
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+
+      const width = Math.round(entry.contentRect.width)
+      const height = Math.round(entry.contentRect.height)
+      if (width <= 0 || height <= 0) return
+
+      const prevSize = observedContainerSizeRef.current
+      if (prevSize.width === width && prevSize.height === height) return
+
+      observedContainerSizeRef.current = { width, height }
+      fit()
+    })
+
+    resizeObserver.observe(container)
+    return () => resizeObserver.disconnect()
+  }, [fit])
 
   // Handle window resize
   useEffect(() => {
@@ -718,7 +790,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       if (!terminalRef.current || disposedRef.current) return
       if (state.pendingSettings.terminalFontFamily === prevState.pendingSettings.terminalFontFamily) return
 
-      terminalRef.current.options.fontFamily = getTerminalFontFamily()
+      terminalRef.current.options.fontFamily = getTerminalFontFamilyById(state.pendingSettings.terminalFontFamily ?? 'jetbrains-mono')
       applyFontMetrics()
       syncFontAfterLoad()
     })
@@ -910,6 +982,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
     isAtBottom,
     hasScrollback,
     refresh,
+    getViewportSnapshot,
     terminalRef  // Return ref instead of snapshot for live access
   }
 }

@@ -47,7 +47,7 @@ button, input, select, textarea, optgroup, option {
   --transition-fast: 0.15s ease;
 
   /* Fonts */
-  --terminal-font: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  --terminal-font: 'JetBrains Mono', 'Symbols Nerd Font Mono', 'Symbols Nerd Font', 'MesloLGS NF', 'MesloLGM Nerd Font Mono', 'Hack Nerd Font Mono', 'SauceCodePro Nerd Font Mono', 'FiraCode Nerd Font Mono', 'JetBrainsMono Nerd Font Mono', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'Segoe UI Symbol', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', Menlo, Monaco, Consolas, monospace;
   --modern-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
 
   /* Default colors (Tokyo Night) - overridden by JS theme system */
@@ -300,6 +300,28 @@ button, input, select, textarea, optgroup, option {
 
 .terminal-container .xterm-viewport {
   overflow-y: auto !important;
+  scrollbar-width: auto;
+  scrollbar-color: var(--text-muted) transparent;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar {
+  width: 12px;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 72%, var(--border));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-primary) 55%, var(--border));
+  background-clip: content-box;
 }
 
 .terminal-container.image-hover .xterm-screen {

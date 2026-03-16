@@ -2,6 +2,7 @@ import { useSettingsStore } from '../../stores'
 import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
 import type { ColorTheme, TerminalFontId, AppFontId } from '@shared/types'
 import { SettingsTitle } from './settings-typography'
+import { getFontFamily } from '../../utils'
 
 export function ThemeSelector() {
   const { pendingSettings, setColorTheme, setTerminalFontFamily, setModernFontFamily } = useSettingsStore()
@@ -99,7 +100,7 @@ export function ThemeSelector() {
         </select>
         <p className="text-sm text-[var(--mc-text-muted)]">
           Preview:{' '}
-          <span style={{ fontFamily: TERMINAL_FONTS.find(f => f.id === (pendingSettings.terminalFontFamily ?? 'jetbrains-mono'))?.family }}>
+          <span style={{ fontFamily: getFontFamily(pendingSettings.terminalFontFamily ?? 'jetbrains-mono') }}>
             The quick brown fox
           </span>
         </p>

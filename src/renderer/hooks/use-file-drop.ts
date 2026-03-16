@@ -2,8 +2,7 @@ import { useState, useCallback, DragEvent } from 'react'
 
 interface UseFileDropOptions {
   onDrop: (paths: string[]) => void
-  formatPath?: (path: string) => string
-  separator?: string
+  onDragStateChange?: (isDragOver: boolean) => void
 }
 
 interface UseFileDropReturn {
@@ -16,16 +15,8 @@ interface UseFileDropReturn {
   }
 }
 
-/**
- * Format file path - quote if contains spaces or special chars
- */
-function defaultFormatPath(path: string): string {
-  // Quote paths containing spaces or shell-special characters
-  if (/[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(path)) {
-    // Escape existing double quotes and wrap in quotes
-    return `"${path.replace(/"/g, '\\"')}"`
-  }
-  return path
+function isFileDrag(e: DragEvent): boolean {
+  return Array.from(e.dataTransfer?.types ?? []).includes('Files')
 }
 
 /**
@@ -35,42 +26,61 @@ function defaultFormatPath(path: string): string {
 export function useFileDrop(options: UseFileDropOptions): UseFileDropReturn {
   const {
     onDrop,
-    formatPath = defaultFormatPath,
-    separator = '\n'
+    onDragStateChange
   } = options
 
   const [isDragOver, setIsDragOver] = useState(false)
   const [, setDragCounter] = useState(0)
 
   const handleDragEnter = useCallback((e: DragEvent) => {
+    if (!isFileDrag(e)) return
+
     e.preventDefault()
     e.stopPropagation()
     setDragCounter(prev => {
-      if (prev === 0) setIsDragOver(true)
+      if (prev === 0) {
+        setIsDragOver(true)
+        onDragStateChange?.(true)
+      }
       return prev + 1
     })
-  }, [])
+  }, [onDragStateChange])
 
   const handleDragOver = useCallback((e: DragEvent) => {
+    if (!isFileDrag(e)) return
+
     e.preventDefault()
     e.stopPropagation()
+
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
   }, [])
 
   const handleDragLeave = useCallback((e: DragEvent) => {
+    if (!isFileDrag(e)) return
+
     e.preventDefault()
     e.stopPropagation()
     setDragCounter(prev => {
       const next = prev - 1
-      if (next === 0) setIsDragOver(false)
+      if (next <= 0) {
+        setIsDragOver(false)
+        onDragStateChange?.(false)
+        return 0
+      }
       return next
     })
-  }, [])
+  }, [onDragStateChange])
 
   const handleDrop = useCallback((e: DragEvent) => {
+    if (!isFileDrag(e)) return
+
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
     setDragCounter(0)
+    onDragStateChange?.(false)
 
     const files = e.dataTransfer?.files
     if (!files || files.length === 0) {
@@ -84,17 +94,16 @@ export function useFileDrop(options: UseFileDropOptions): UseFileDropReturn {
       const file = files[i]
       const filePath = window.electron.utils.getFilePath(file)
       if (filePath) {
-        paths.push(formatPath(filePath))
+        paths.push(filePath)
       } else {
         console.warn(`FileDrop: Could not get path for file: ${file.name}. It might be a security restriction or an unsupported file type.`)
       }
     }
 
     if (paths.length > 0) {
-      const text = paths.join(separator)
-      onDrop([text]) // Pass as single joined string
+      onDrop(paths)
     }
-  }, [onDrop, formatPath, separator])
+  }, [onDrop, onDragStateChange])
 
   return {
     isDragOver,

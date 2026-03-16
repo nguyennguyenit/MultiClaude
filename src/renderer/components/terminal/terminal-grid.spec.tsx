@@ -14,21 +14,16 @@ vi.mock('./terminal-resize-handle', () => ({
 
 import { TerminalGrid } from './terminal-grid'
 
-interface TerminalWithOutput extends Terminal {
-  output: string
-}
-
 describe('TerminalGrid', () => {
   it('keeps existing project grids mounted when the active project has no terminals', () => {
-    const terminals: TerminalWithOutput[] = [
+    const terminals: Terminal[] = [
       {
         id: 'term-a',
         title: 'Terminal A',
         cwd: '/tmp/project-a',
         isClaudeMode: false,
         projectId: 'project-a',
-        createdAt: new Date().toISOString(),
-        output: 'restorable output'
+        createdAt: new Date().toISOString()
       }
     ]
 

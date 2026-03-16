@@ -1,4 +1,4 @@
-import { TERMINAL_FONTS } from '@shared/constants'
+import { getTerminalFontFamilyById } from '@shared/constants'
 import type { TerminalFontId } from '@shared/types'
 
 /**
@@ -6,7 +6,5 @@ import type { TerminalFontId } from '@shared/types'
  * Returns fallback if font ID not found.
  */
 export function getFontFamily(fontId?: TerminalFontId): string {
-  if (!fontId) return "'JetBrains Mono', monospace"
-  const font = TERMINAL_FONTS.find((f) => f.id === fontId)
-  return font?.family ?? "'JetBrains Mono', monospace"
+  return getTerminalFontFamilyById(fontId)
 }

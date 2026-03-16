@@ -1,9 +1,13 @@
 import { useEffect, useRef, useCallback, memo, useState } from 'react'
-import { TerminalView } from './terminal-view'
+import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
+import { useFileDrop } from '../../hooks/use-file-drop'
+import { useAppStore } from '../../stores'
+import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
 
 // Streaming detection constants
 const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
 const STREAMING_FIT_DELAY = 500       // ms - delay fit during streaming to avoid reflow duplicates
+const HARD_REFRESH_DELAY = 140        // ms - let soft refresh run before rebuilding terminal view
 
 interface TerminalPaneProps {
   terminalId: string
@@ -34,10 +38,14 @@ export const TerminalPane = memo(function TerminalPane({
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeTimeoutRef = useRef<number | undefined>(undefined)
   const terminalFitRef = useRef<(() => void) | null>(null)
-  const terminalRefreshRef = useRef<(() => void) | null>(null)
+  const terminalRefreshRef = useRef<TerminalRefreshHandle | null>(null)
+  const hardRefreshTimeoutRef = useRef<number | undefined>(undefined)
   const lastOutputTimeRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
+  const [terminalViewKey, setTerminalViewKey] = useState(0)
+  const [restoreOutput, setRestoreOutput] = useState(initialOutput)
+  const [initialViewportY, setInitialViewportY] = useState<number | null>(null)
 
   // Sync editTitle when title prop changes externally
   useEffect(() => {
@@ -52,9 +60,28 @@ export const TerminalPane = memo(function TerminalPane({
   }, [])
 
   // Store refresh callback from TerminalView
-  const handleTerminalRefresh = useCallback((refreshFn: () => void) => {
-    terminalRefreshRef.current = refreshFn
+  const handleTerminalRefresh = useCallback((refreshHandle: TerminalRefreshHandle) => {
+    terminalRefreshRef.current = refreshHandle
   }, [])
+
+  const handleFileDropStateChange = useCallback((dragging: boolean) => {
+    if (dragging) {
+      setPendingDropTerminal(terminalId)
+    } else {
+      clearPendingDropTerminal(terminalId)
+    }
+  }, [terminalId])
+
+  const handleFileDrop = useCallback((paths: string[]) => {
+    setPendingDropTerminal(terminalId)
+    onInsertFilePath?.(paths)
+    clearPendingDropTerminal(terminalId)
+  }, [terminalId, onInsertFilePath])
+
+  const { isDragOver, dropHandlers } = useFileDrop({
+    onDrop: handleFileDrop,
+    onDragStateChange: handleFileDropStateChange
+  })
 
   // Track output for streaming detection
   const handleTerminalOutput = useCallback(() => {
@@ -113,8 +140,33 @@ export const TerminalPane = memo(function TerminalPane({
     return () => {
       resizeObserver.disconnect()
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
+      if (hardRefreshTimeoutRef.current) clearTimeout(hardRefreshTimeoutRef.current)
     }
   }, [])
+
+  const handleRefreshClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    const viewportSnapshot = terminalRefreshRef.current?.getViewportSnapshot()
+    setRestoreOutput(useAppStore.getState().getTerminalOutput(terminalId) || undefined)
+    setInitialViewportY(
+      viewportSnapshot && !viewportSnapshot.isAtBottom
+        ? viewportSnapshot.viewportY
+        : null
+    )
+
+    terminalRefreshRef.current?.refresh()
+
+    if (hardRefreshTimeoutRef.current) {
+      clearTimeout(hardRefreshTimeoutRef.current)
+    }
+
+    // Force a full xterm remount so broken viewport/canvas state can rebuild from scratch.
+    hardRefreshTimeoutRef.current = window.setTimeout(() => {
+      hardRefreshTimeoutRef.current = undefined
+      setTerminalViewKey((currentKey) => currentKey + 1)
+    }, HARD_REFRESH_DELAY)
+  }, [terminalId])
 
   const commitTitle = useCallback(() => {
     setIsEditing(false)
@@ -126,7 +178,9 @@ export const TerminalPane = memo(function TerminalPane({
   return (
     <div
       ref={containerRef}
+      data-terminal-id={terminalId}
       onClick={onActivate}
+      {...dropHandlers}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
     >
       {/* Top tab bar */}
@@ -196,7 +250,7 @@ export const TerminalPane = memo(function TerminalPane({
           {/* Refresh terminal display button */}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); terminalRefreshRef.current?.() }}
+            onClick={handleRefreshClick}
             className="pane-tab-action"
             title="Refresh terminal display"
             aria-label="Refresh terminal display"
@@ -224,10 +278,14 @@ export const TerminalPane = memo(function TerminalPane({
       {/* Terminal content - takes remaining space */}
       <div style={{ flex: 1, minHeight: 0 }}>
         <TerminalView
+          key={`${terminalId}-${terminalViewKey}`}
           terminalId={terminalId}
           isActive={isActive}
+          isDropTarget={isDragOver}
           hidden={hidden}
-          initialOutput={initialOutput}
+          onInputActivity={onActivate}
+          initialOutput={restoreOutput}
+          initialViewportY={initialViewportY}
           onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}
           onOutput={handleTerminalOutput}
