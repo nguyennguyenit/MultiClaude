@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useGitPanel } from '../../hooks/use-git-panel'
 import { CollapsibleSection } from '../git-panel/collapsible-section'
 import { DiffModal } from '../git-panel/diff-modal'
@@ -15,10 +15,14 @@ import type { GitFileStatus, GitBranchDiffFile } from '@shared/types'
 
 interface DiffModalState {
   fileName: string
+  oldFileName?: string
   fileStatus?: string
   additions?: number
   deletions?: number
-  diff: string | null
+  diff: string
+  isLoading: boolean
+  error?: string
+  sourceLabel?: string
   staged?: boolean
 }
 
@@ -30,36 +34,70 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
   const [syncing, setSyncing] = useState(false)
   const [diffModal, setDiffModal] = useState<DiffModalState | null>(null)
   const [showStashInput, setShowStashInput] = useState(false)
+  const diffRequestIdRef = useRef(0)
 
   const gitPanel = useGitPanel({ projectPath, enabled: true })
 
   const stagedFiles = gitPanel.files.filter(f => f.staged)
   const unstagedFiles = gitPanel.files.filter(f => !f.staged)
 
+  const closeDiffModal = useCallback(() => {
+    diffRequestIdRef.current += 1
+    setDiffModal(null)
+  }, [])
+
   // Open diff modal for a working-tree file
   const openFileDiff = useCallback(async (file: GitFileStatus) => {
     if (!projectPath) return
-    const result = await window.electron.git.diff(projectPath, file.path, file.staged)
-    setDiffModal({
+    const requestId = ++diffRequestIdRef.current
+    const modalBase: DiffModalState = {
       fileName: file.path,
+      oldFileName: file.oldPath,
       fileStatus: file.status,
       additions: file.additions,
       deletions: file.deletions,
-      diff: result.success ? result.diff || null : null,
+      diff: '',
+      isLoading: true,
+      sourceLabel: file.staged ? 'Staged changes' : 'Working tree',
       staged: file.staged
+    }
+    setDiffModal(modalBase)
+
+    const result = await window.electron.git.diff(projectPath, file.path, file.staged, file.oldPath)
+    if (diffRequestIdRef.current !== requestId) return
+
+    setDiffModal({
+      ...modalBase,
+      diff: result.success ? result.diff || '' : '',
+      isLoading: false,
+      error: result.success ? undefined : (result.error || 'Failed to load diff')
     })
   }, [projectPath])
 
   // Open diff modal for a branch-diff file (diff against base branch, not working tree)
   const openBranchFileDiff = useCallback(async (file: GitBranchDiffFile) => {
     if (!projectPath) return
-    const result = await window.electron.git.diffAgainstBranch(projectPath, file.path, gitPanel.baseBranch)
-    setDiffModal({
+    const requestId = ++diffRequestIdRef.current
+    const modalBase: DiffModalState = {
       fileName: file.path,
+      oldFileName: file.oldPath,
       fileStatus: file.status,
       additions: file.additions,
       deletions: file.deletions,
-      diff: result.success ? result.diff || null : null
+      diff: '',
+      isLoading: true,
+      sourceLabel: `Against ${gitPanel.baseBranch}`
+    }
+    setDiffModal(modalBase)
+
+    const result = await window.electron.git.diffAgainstBranch(projectPath, file.path, gitPanel.baseBranch, file.oldPath)
+    if (diffRequestIdRef.current !== requestId) return
+
+    setDiffModal({
+      ...modalBase,
+      diff: result.success ? result.diff || '' : '',
+      isLoading: false,
+      error: result.success ? undefined : (result.error || 'Failed to load diff')
     })
   }, [projectPath, gitPanel.baseBranch])
 
@@ -220,12 +258,16 @@ export function GitHubPanelContent({ projectPath }: GitHubPanelContentProps) {
       {/* Diff modal overlay */}
       <DiffModal
         isOpen={!!diffModal}
-        onClose={() => setDiffModal(null)}
+        onClose={closeDiffModal}
         fileName={diffModal?.fileName ?? null}
+        oldFileName={diffModal?.oldFileName}
         fileStatus={diffModal?.fileStatus}
         additions={diffModal?.additions}
         deletions={diffModal?.deletions}
         diff={diffModal?.diff ?? null}
+        isLoading={diffModal?.isLoading ?? false}
+        error={diffModal?.error}
+        sourceLabel={diffModal?.sourceLabel}
         staged={diffModal?.staged}
       />
     </div>

@@ -255,8 +255,8 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.commit(cwd, message)
   })
 
-  safeHandle(IPC_CHANNELS.GIT_DIFF, async (_, { cwd, file, staged }: { cwd: string; file?: string; staged?: boolean }) => {
-    return gitManager.getDiff(cwd, file, staged)
+  safeHandle(IPC_CHANNELS.GIT_DIFF, async (_, { cwd, file, staged, oldFile }: { cwd: string; file?: string; staged?: boolean; oldFile?: string }) => {
+    return gitManager.getDiff(cwd, file, staged, oldFile)
   })
 
   safeHandle(IPC_CHANNELS.GIT_DISCARD, async (_, { cwd, file }: { cwd: string; file: string }) => {
@@ -324,8 +324,8 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return gitManager.diffBranch(cwd, baseBranch)
   })
 
-  safeHandle(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, async (_, { cwd, file, baseBranch }: { cwd: string; file: string; baseBranch: string }) => {
-    return gitManager.getDiffAgainstBranch(cwd, file, baseBranch)
+  safeHandle(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, async (_, { cwd, file, baseBranch, oldFile }: { cwd: string; file: string; baseBranch: string; oldFile?: string }) => {
+    return gitManager.getDiffAgainstBranch(cwd, file, baseBranch, oldFile)
   })
 
   safeHandle(IPC_CHANNELS.GIT_CONFIG_SET, async (_, config: { userName?: string; userEmail?: string }) => {

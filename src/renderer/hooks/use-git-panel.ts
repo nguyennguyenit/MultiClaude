@@ -125,7 +125,7 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
       return
     }
     const file = files.find(f => f.path === path)
-    const result = await window.electron.git.diff(projectPath, path, file?.staged)
+    const result = await window.electron.git.diff(projectPath, path, file?.staged, file?.oldPath)
     setDiff(result.success ? result.diff || '' : null)
   }, [projectPath, files])
 
