@@ -40,6 +40,7 @@ plans/
 
 # Claude Code local commands
 .claude/commands/
+.claude/settings.local.json
 
 # Local feature planning folder
 new-feature/
