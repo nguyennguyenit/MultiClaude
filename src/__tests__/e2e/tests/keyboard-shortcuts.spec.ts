@@ -1,4 +1,16 @@
+import type { Page } from '@playwright/test'
 import { test, expect, injectMockProject, mockProjects } from '../fixtures'
+
+async function expectActiveProject(window: Page, projectId: string) {
+  const activeProjectId = await window.evaluate(() => {
+    const store = (window as unknown as {
+      __APP_STORE__?: { getState: () => { activeProjectId: string | null } }
+    }).__APP_STORE__
+    return store?.getState().activeProjectId ?? null
+  })
+
+  expect(activeProjectId).toBe(projectId)
+}
 
 /**
  * Keyboard shortcuts tests for MultiClaude.
@@ -23,9 +35,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.keyboard.press('Alt+1')
       await window.waitForTimeout(150)
 
-      // Verify first project tab is now active (use .first() to avoid multiple match errors)
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project1")').first()
-      await expect(activeTab).toBeVisible()
+      await expectActiveProject(window, 'test-project-1')
     })
 
     test('Alt+2 switches to second project', async ({ window }) => {
@@ -38,9 +48,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.keyboard.press('Alt+2')
       await window.waitForTimeout(150)
 
-      // Verify second project tab is now active
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project2")').first()
-      await expect(activeTab).toBeVisible()
+      await expectActiveProject(window, 'test-project-2')
     })
 
     test('Alt+3 switches to third project', async ({ window }) => {
@@ -53,9 +61,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.keyboard.press('Alt+3')
       await window.waitForTimeout(150)
 
-      // Verify third project tab is now active
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project3")').first()
-      await expect(activeTab).toBeVisible()
+      await expectActiveProject(window, 'test-project-3')
     })
 
     test('Alt+9 is ignored when less than 9 projects', async ({ window }) => {
@@ -68,9 +74,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.keyboard.press('Alt+9')
       await window.waitForTimeout(150)
 
-      // First project should still be active (no change)
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project1")').first()
-      await expect(activeTab).toBeVisible()
+      await expectActiveProject(window, 'test-project-1')
     })
   })
 
@@ -136,8 +140,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.keyboard.press('Alt+2')
       await window.waitForTimeout(150)
 
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project2")').first()
-      await expect(activeTab).toBeVisible()
+      await expectActiveProject(window, 'test-project-2')
     })
 
     test('rapid keyboard shortcuts are handled correctly', async ({ window }) => {
@@ -154,9 +157,7 @@ test.describe('Keyboard Shortcuts', () => {
       await window.keyboard.press('Alt+1')
       await window.waitForTimeout(200)
 
-      // Should end up on first project
-      const activeTab = window.locator('[class*="bg-[var(--mc-bg-primary)]"]:has-text("Project1")').first()
-      await expect(activeTab).toBeVisible()
+      await expectActiveProject(window, 'test-project-1')
     })
   })
 })

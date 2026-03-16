@@ -4,6 +4,7 @@ import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import { existsSync, readdirSync } from 'fs'
 import path from 'path'
+import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
 import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
 
 const DESTROY_TIMEOUT_MS = 3000
@@ -245,9 +246,8 @@ export class TerminalManager extends EventEmitter {
       if (termProcess.suspended || this.systemSuspended) return
 
       termProcess.outputBuffer += data
-      // Keep buffer at max 500KB
-      if (termProcess.outputBuffer.length > 500000) {
-        termProcess.outputBuffer = termProcess.outputBuffer.slice(-250000)
+      if (termProcess.outputBuffer.length > TERMINAL_OUTPUT_BUFFER_MAX) {
+        termProcess.outputBuffer = termProcess.outputBuffer.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
       }
       this.emit('output', { terminalId: id, data })
 
@@ -424,7 +424,7 @@ export class TerminalManager extends EventEmitter {
       cwd: t.metadata.cwd,
       projectId: t.metadata.projectId,
       claudeSessionId: t.metadata.claudeSessionId,
-      outputBuffer: t.outputBuffer.slice(-100000) // Last 100KB for session restore
+      outputBuffer: t.outputBuffer
     }))
   }
 }

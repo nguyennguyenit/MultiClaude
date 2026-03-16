@@ -1,5 +1,6 @@
 import simpleGit, { SimpleGit, StatusResult, LogResult, DefaultLogFields } from 'simple-git'
 import { spawn, execSync } from 'child_process'
+import { readFile, stat } from 'fs/promises'
 import { resolve, relative } from 'path'
 import type {
   GitStatus,
@@ -58,6 +59,182 @@ export class GitManager {
   // Validate stash index
   private isValidStashIndex(index: number): boolean {
     return Number.isInteger(index) && index >= 0 && index < 100
+  }
+
+  private mapPorcelainStatus(code: string, staged: boolean): GitFileStatus['status'] {
+    switch (code) {
+      case 'A':
+        return staged ? 'added' : 'untracked'
+      case 'M':
+        return 'modified'
+      case 'D':
+        return 'deleted'
+      case 'R':
+        return 'renamed'
+      case 'C':
+        return 'copied'
+      default:
+        return staged ? 'staged' : 'modified'
+    }
+  }
+
+  private parseRenamedPath(pathSpec: string): { path: string; oldPath?: string } {
+    const braceRename = pathSpec.match(/^(.*)\{(.*) => (.*)\}(.*)$/)
+    if (braceRename) {
+      return {
+        oldPath: `${braceRename[1]}${braceRename[2]}${braceRename[4]}`,
+        path: `${braceRename[1]}${braceRename[3]}${braceRename[4]}`
+      }
+    }
+
+    const rename = pathSpec.match(/^(.*) => (.*)$/)
+    if (rename) {
+      return {
+        oldPath: rename[1],
+        path: rename[2]
+      }
+    }
+
+    return { path: pathSpec }
+  }
+
+  private parseNumstat(output: string): Map<string, { additions: number; deletions: number; oldPath?: string }> {
+    const map = new Map<string, { additions: number; deletions: number; oldPath?: string }>()
+
+    for (const line of output.split('\n')) {
+      if (!line.trim()) continue
+
+      const parts = line.split('\t')
+      if (parts.length < 3) continue
+
+      const rawPath = parts.slice(2).join('\t').trim()
+      if (!rawPath) continue
+
+      const { path, oldPath } = this.parseRenamedPath(rawPath)
+      map.set(path, {
+        additions: parseInt(parts[0], 10) || 0,
+        deletions: parseInt(parts[1], 10) || 0,
+        oldPath
+      })
+    }
+
+    return map
+  }
+
+  private parsePorcelainFileStatus(output: string): GitFileStatus[] {
+    const records = output.split('\0')
+    const files: GitFileStatus[] = []
+
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i]
+      if (!record) continue
+
+      const code = record.slice(0, 2)
+      const path = record.slice(3)
+      if (!path) continue
+
+      if (code === '??') {
+        files.push({ path, status: 'untracked', staged: false })
+        continue
+      }
+
+      const indexStatus = code[0]
+      const worktreeStatus = code[1]
+      const needsOldPath = indexStatus === 'R' || indexStatus === 'C'
+      const oldPath = needsOldPath ? records[++i] || undefined : undefined
+
+      if (indexStatus !== ' ' && indexStatus !== '?') {
+        files.push({
+          path,
+          status: this.mapPorcelainStatus(indexStatus, true),
+          staged: true,
+          oldPath
+        })
+      }
+
+      if (worktreeStatus !== ' ' && worktreeStatus !== '?') {
+        files.push({
+          path,
+          status: this.mapPorcelainStatus(worktreeStatus, false),
+          staged: false
+        })
+      }
+    }
+
+    return files
+  }
+
+  private buildDiffArgs(baseArgs: string[], file?: string, oldFile?: string): string[] {
+    const args = ['--find-renames', ...baseArgs]
+
+    if (file) {
+      args.push('--')
+      if (oldFile && oldFile !== file) {
+        args.push(oldFile)
+      }
+      args.push(file)
+    }
+
+    return args
+  }
+
+  private getDiffFileMode(mode: number): string {
+    return (mode & 0o111) !== 0 ? '100755' : '100644'
+  }
+
+  private async buildUntrackedDiff(cwd: string, file: string): Promise<string> {
+    const absPath = resolve(cwd, file)
+    const fileStat = await stat(absPath)
+
+    if (fileStat.isDirectory()) {
+      return [
+        `diff --git a/${file} b/${file}`,
+        'new file mode 040000',
+        `+++ b/${file}`,
+        '@@ -0,0 +1 @@',
+        '+<untracked directory>'
+      ].join('\n')
+    }
+
+    const buffer = await readFile(absPath)
+    const mode = this.getDiffFileMode(fileStat.mode)
+    const isBinary = buffer.includes(0)
+
+    if (isBinary) {
+      return [
+        `diff --git a/${file} b/${file}`,
+        `new file mode ${mode}`,
+        `Binary files /dev/null and b/${file} differ`
+      ].join('\n')
+    }
+
+    const normalized = buffer.toString('utf8').replace(/\r\n/g, '\n')
+    const lines = normalized.length === 0
+      ? []
+      : (normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized).split('\n')
+
+    const header = [
+      `diff --git a/${file} b/${file}`,
+      `new file mode ${mode}`
+    ]
+
+    if (lines.length === 0) {
+      return header.join('\n')
+    }
+
+    const diffLines = [
+      ...header,
+      '--- /dev/null',
+      `+++ b/${file}`,
+      `@@ -0,0 +1,${lines.length} @@`,
+      ...lines.map(line => `+${line}`)
+    ]
+
+    if (!normalized.endsWith('\n')) {
+      diffLines.push('\\ No newline at end of file')
+    }
+
+    return diffLines.join('\n')
   }
 
   async getStatus(cwd: string): Promise<GitStatus> {
@@ -320,37 +497,8 @@ export class GitManager {
   async getFileStatus(cwd: string): Promise<GitFileStatus[]> {
     const git = this.getGit(cwd)
     try {
-      const status = await git.status()
-      const files: GitFileStatus[] = []
-
-      // Staged files
-      for (const file of status.staged) {
-        files.push({ path: file, status: 'staged', staged: true })
-      }
-
-      // Renamed (staged)
-      for (const { from, to } of status.renamed) {
-        files.push({ path: to, status: 'renamed', staged: true, oldPath: from })
-      }
-
-      // Modified (unstaged)
-      for (const file of status.modified) {
-        if (!status.staged.includes(file)) {
-          files.push({ path: file, status: 'modified', staged: false })
-        }
-      }
-
-      // Deleted (unstaged)
-      for (const file of status.deleted) {
-        if (!status.staged.includes(file)) {
-          files.push({ path: file, status: 'deleted', staged: false })
-        }
-      }
-
-      // Untracked
-      for (const file of status.not_added) {
-        files.push({ path: file, status: 'untracked', staged: false })
-      }
+      const porcelain = await git.raw(['status', '--porcelain', '-z'])
+      const files = this.parsePorcelainFileStatus(porcelain)
 
       // Enrich with line stats via --numstat
       try {
@@ -358,26 +506,16 @@ export class GitManager {
           git.diff(['--numstat']),
           git.diff(['--numstat', '--cached'])
         ])
-        const parseNumstat = (output: string): Map<string, { additions: number; deletions: number }> => {
-          const map = new Map<string, { additions: number; deletions: number }>()
-          for (const line of output.split('\n')) {
-            const parts = line.split('\t')
-            if (parts.length >= 3) {
-              const additions = parseInt(parts[0], 10) || 0
-              const deletions = parseInt(parts[1], 10) || 0
-              const filePath = parts[2].trim()
-              if (filePath) map.set(filePath, { additions, deletions })
-            }
-          }
-          return map
-        }
-        const unstagedStats = parseNumstat(unstagedNumstat)
-        const stagedStats = parseNumstat(stagedNumstat)
+        const unstagedStats = this.parseNumstat(unstagedNumstat)
+        const stagedStats = this.parseNumstat(stagedNumstat)
         for (const f of files) {
           const stats = f.staged ? stagedStats.get(f.path) : unstagedStats.get(f.path)
           if (stats) {
             f.additions = stats.additions
             f.deletions = stats.deletions
+            if (!f.oldPath && stats.oldPath) {
+              f.oldPath = stats.oldPath
+            }
           }
         }
       } catch {
@@ -407,30 +545,35 @@ export class GitManager {
         return { baseBranch: baseBranch || 'main', files: [], aheadBy: 0, behindBy: 0 }
       }
 
-      // Get accurate file statuses via --name-status
-      // Renames are output as: R100\told-path\tnew-path (two tab-separated paths)
-      const nameStatusRaw = await git.raw(['diff', '--name-status', `${baseBranch}...${current}`])
-      const statusMap = new Map<string, string>()
+      const [nameStatusRaw, numstatRaw] = await Promise.all([
+        git.raw(['diff', '--name-status', `${baseBranch}...${current}`]),
+        git.diff(['--numstat', `${baseBranch}...${current}`])
+      ])
+      const statusMap = new Map<string, { status: GitBranchDiffFile['status']; oldPath?: string }>()
       for (const line of nameStatusRaw.split('\n')) {
         const renameMatch = line.match(/^R\d*\t(.+)\t(.+)$/)
-        if (renameMatch) { statusMap.set(renameMatch[2], 'R'); continue }
+        if (renameMatch) {
+          statusMap.set(renameMatch[2], { status: 'renamed', oldPath: renameMatch[1] })
+          continue
+        }
         const match = line.match(/^([ADM])\t(.+)$/)
-        if (match) statusMap.set(match[2], match[1])
+        if (!match) continue
+
+        const fileStatus: GitBranchDiffFile['status'] =
+          match[1] === 'A' ? 'added' :
+          match[1] === 'D' ? 'deleted' : 'modified'
+        statusMap.set(match[2], { status: fileStatus })
       }
 
-      // Get line stats via diffSummary
-      const summary = await git.diffSummary([`${baseBranch}...${current}`])
-      const files: GitBranchDiffFile[] = summary.files.map(f => {
-        const rawStatus = statusMap.get(f.file) || 'M'
-        const fileStatus: GitBranchDiffFile['status'] =
-          rawStatus === 'A' ? 'added' :
-          rawStatus === 'D' ? 'deleted' :
-          rawStatus === 'R' ? 'renamed' : 'modified'
+      const numstatMap = this.parseNumstat(numstatRaw)
+      const files: GitBranchDiffFile[] = Array.from(statusMap.entries()).map(([path, info]) => {
+        const stats = numstatMap.get(path)
         return {
-          path: f.file,
-          status: fileStatus,
-          additions: ('insertions' in f ? f.insertions : 0) || 0,
-          deletions: ('deletions' in f ? f.deletions : 0) || 0
+          path,
+          status: info.status,
+          oldPath: info.oldPath ?? stats?.oldPath,
+          additions: stats?.additions ?? 0,
+          deletions: stats?.deletions ?? 0
         }
       })
 
@@ -496,13 +639,20 @@ export class GitManager {
     }
   }
 
-  async getDiff(cwd: string, file?: string, staged = false): Promise<GitDiffResult> {
+  async getDiff(cwd: string, file?: string, staged = false, oldFile?: string): Promise<GitDiffResult> {
+    if (file && !this.isValidFilePath(cwd, file)) return { success: false, error: 'Invalid file path' }
+    if (oldFile && !this.isValidFilePath(cwd, oldFile)) return { success: false, error: 'Invalid file path' }
     const git = this.getGit(cwd)
     try {
-      const args: string[] = staged ? ['--cached'] : []
-      if (file) args.push('--', file)
+      if (file && !staged) {
+        const status = await git.status()
+        if (status.not_added.includes(file)) {
+          const diff = await this.buildUntrackedDiff(cwd, file)
+          return { success: true, diff }
+        }
+      }
 
-      const diff = await git.diff(args)
+      const diff = await git.diff(this.buildDiffArgs(staged ? ['--cached'] : [], file, oldFile))
       return { success: true, diff }
     } catch (error) {
       return {
@@ -513,12 +663,13 @@ export class GitManager {
   }
 
   /** Get diff of a file against a base branch (three-dot merge-base diff) */
-  async getDiffAgainstBranch(cwd: string, file: string, baseBranch: string): Promise<GitDiffResult> {
+  async getDiffAgainstBranch(cwd: string, file: string, baseBranch: string, oldFile?: string): Promise<GitDiffResult> {
     if (!this.isValidFilePath(cwd, file)) return { success: false, error: 'Invalid file path' }
+    if (oldFile && !this.isValidFilePath(cwd, oldFile)) return { success: false, error: 'Invalid file path' }
     if (!this.isValidBranchName(baseBranch)) return { success: false, error: 'Invalid branch name' }
     const git = this.getGit(cwd)
     try {
-      const diff = await git.diff([`${baseBranch}...HEAD`, '--', file])
+      const diff = await git.diff(this.buildDiffArgs([`${baseBranch}...HEAD`], file, oldFile))
       return { success: true, diff }
     } catch (error) {
       return {

@@ -231,6 +231,8 @@ Each theme includes:
 | `Enter` | Save terminal title | During title edit |
 | `Escape` | Cancel terminal title edit | During title edit |
 
+**Note**: Escape key handling uses `shortcut-utils.ts` to prevent leakage to other components during project switching and other critical operations.
+
 ## 7. Responsive Behavior
 
 - **Toolbar**: 32px fixed height, compact layout with macOS traffic light padding

@@ -60,7 +60,7 @@ export interface ElectronAPI {
     unstageFile: (cwd: string, file: string) => Promise<boolean>
     stageAll: (cwd: string) => Promise<boolean>
     commit: (cwd: string, message: string) => Promise<GitCommitResult>
-    diff: (cwd: string, file?: string, staged?: boolean) => Promise<GitDiffResult>
+    diff: (cwd: string, file?: string, staged?: boolean, oldFile?: string) => Promise<GitDiffResult>
     discard: (cwd: string, file: string) => Promise<boolean>
     // Extended operations
     pull: (cwd: string) => Promise<GitOperationResult>
@@ -81,7 +81,7 @@ export interface ElectronAPI {
     configSet: (config: GitConfig) => Promise<GitOperationResult>
     // Branch diff comparison
     diffBranch: (cwd: string, baseBranch?: string) => Promise<GitBranchDiff>
-    diffAgainstBranch: (cwd: string, file: string, baseBranch: string) => Promise<GitDiffResult>
+    diffAgainstBranch: (cwd: string, file: string, baseBranch: string, oldFile?: string) => Promise<GitDiffResult>
     // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback: (data: { projectPath: string }) => void) => () => void
     // Watch project for external git changes
@@ -214,7 +214,7 @@ const api: ElectronAPI = {
     unstageFile: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE_FILE, { cwd, file }),
     stageAll: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE_ALL, cwd),
     commit: (cwd, message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, { cwd, message }),
-    diff: (cwd, file, staged) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, { cwd, file, staged }),
+    diff: (cwd, file, staged, oldFile) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, { cwd, file, staged, oldFile }),
     discard: (cwd, file) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, { cwd, file }),
     // Extended operations
     pull: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL, cwd),
@@ -235,7 +235,7 @@ const api: ElectronAPI = {
     configSet: (config) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CONFIG_SET, config),
     // Branch diff comparison
     diffBranch: (cwd, baseBranch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_BRANCH, { cwd, baseBranch }),
-    diffAgainstBranch: (cwd, file, baseBranch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, { cwd, file, baseBranch }),
+    diffAgainstBranch: (cwd, file, baseBranch, oldFile) => ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_AGAINST_BRANCH, { cwd, file, baseBranch, oldFile }),
     // Branch change event listener (from terminal git commands or file watcher)
     onBranchChanged: (callback) => {
       const listener = (_: unknown, data: { projectPath: string }) => callback(data)

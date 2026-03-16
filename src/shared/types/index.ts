@@ -96,7 +96,7 @@ export interface GitConfig {
 // Git file status for commit workflow panel
 export interface GitFileStatus {
   path: string
-  status: 'staged' | 'modified' | 'untracked' | 'deleted' | 'renamed' | 'copied'
+  status: 'added' | 'staged' | 'modified' | 'untracked' | 'deleted' | 'renamed' | 'copied'
   staged: boolean
   oldPath?: string
   additions?: number
@@ -106,6 +106,7 @@ export interface GitFileStatus {
 export interface GitBranchDiffFile {
   path: string
   status: 'added' | 'modified' | 'deleted' | 'renamed'
+  oldPath?: string
   additions: number
   deletions: number
 }

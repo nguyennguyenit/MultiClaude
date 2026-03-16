@@ -8,7 +8,7 @@
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 1.1.7-beta |
+| Version | 3.0.1-beta.13 |
 | License | MIT |
 | Platforms | Linux, macOS, Windows |
 | Repository | github.com/nguyennguyenit/MultiClaude |
@@ -44,7 +44,7 @@
 | FR-01.3 | WebGL rendering with configurable modes | ✅ Complete | S-04 |
 | FR-01.4 | Terminal title editing via double-click | ✅ Complete | S-02 |
 | FR-01.5 | Claude mode indicator badge | ✅ Complete | S-02 |
-| FR-01.6 | WSL shell support (Windows) | ✅ Complete | S-02, S-04 |
+| FR-01.6 | WSL shell support + pwsh preference + UNC path conversion | ✅ Complete | S-02, S-04 |
 
 ### FR-02: Project Management
 
@@ -118,7 +118,7 @@
 | ID | Requirement | Target | Status |
 |----|-------------|--------|--------|
 | NFR-01 | Startup time | <3s cold start | ✅ Met |
-| NFR-02 | Memory usage | <500MB with 4 terminals | ✅ Met |
+| NFR-02 | Memory usage | <500MB with 4 terminals (improved via git-panel conditional mount) | ✅ Met |
 | NFR-03 | Terminal latency | <50ms input-to-render | ✅ Met |
 | NFR-04 | Test coverage | 60% minimum | ✅ Met |
 | NFR-05 | Cross-platform builds | Linux, macOS, Windows | ✅ Complete |

@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS } from '@shared/constants'
+import { shouldBypassXtermShortcut } from '../utils'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -13,18 +14,28 @@ const WEBGL_TOGGLE_DEBOUNCE = 50  // Debounce for WebGL toggle on rapid tab swit
 const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
+const TERMINAL_MIN_CONTRAST_RATIO = 4.5  // Keep black-on-gray ANSI spans readable in Codex/Claude output
 // NOTE: Cursor restore delay removed - CLI manages its own cursor
 
 // Terminal font family - used for font loading detection
 const DEFAULT_FONT_FAMILY = 'JetBrains Mono, Menlo, Monaco, Consolas, monospace'
-const PRIMARY_FONT = 'JetBrains Mono'
+
+function getPrimaryTerminalFont(): string | null {
+  const { pendingSettings } = useSettingsStore.getState()
+  const fontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
+  const font = TERMINAL_FONTS.find(f => f.id === fontId)
+  if (!font || font.id === 'system') return null
+
+  const [primaryFont] = font.family.split(',')
+  return primaryFont.trim().replace(/^['"]|['"]$/g, '')
+}
 
 /**
  * Get terminal font family from settings
  */
 function getTerminalFontFamily(): string {
-  const { savedSettings } = useSettingsStore.getState()
-  const fontId = savedSettings.terminalFontFamily ?? 'jetbrains-mono'
+  const { pendingSettings } = useSettingsStore.getState()
+  const fontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
   const font = TERMINAL_FONTS.find(f => f.id === fontId)
   return font ? `${font.family}, Menlo, Monaco, Consolas, monospace` : DEFAULT_FONT_FAMILY
 }
@@ -103,29 +114,105 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
   const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
 
-  // Helper to attach WebGL context lost listener (defined early to avoid hoisting issues)
-  // NOTE: Accesses @xterm/addon-webgl internal API. Tested with v0.18.0.
-  // If xterm updates break this, fallback is safe - manual refresh button still works.
+  // Helper to attach WebGL context lost listener via the public addon API.
   const attachContextLostListener = useCallback((addon: WebglAddon) => {
-    // Access WebGL canvas via internal renderer API
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing xterm internal API
-    const canvas = (addon as any)._renderer?._renderLayers?.[0]?._canvas as HTMLCanvasElement | undefined
-    if (!canvas) return
-
-    const handleContextLost = () => {
+    const contextLossDisposable = addon.onContextLoss(() => {
       console.warn('WebGL context lost, auto-refreshing terminal...')
       refreshFnRef.current?.(true)  // Show notification on auto-refresh
-    }
-
-    canvas.addEventListener('webglcontextlost', handleContextLost)
+    })
 
     // Wrap dispose to cleanup listener
     const originalDispose = addon.dispose.bind(addon)
     addon.dispose = () => {
-      canvas.removeEventListener('webglcontextlost', handleContextLost)
+      contextLossDisposable.dispose()
       originalDispose()
     }
   }, [])
+
+  const clearTextureAtlas = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal || disposedRef.current) return
+
+    try {
+      terminal.clearTextureAtlas()
+    } catch {
+      // Ignore atlas resets during initialization/teardown races
+    }
+  }, [])
+
+  // Repaint visible rows after renderer/visibility transitions.
+  const refreshVisibleRows = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal || disposedRef.current || terminal.rows <= 0) return
+
+    try {
+      terminal.refresh(0, terminal.rows - 1)
+    } catch {
+      // Ignore refresh errors during initialization/teardown races
+    }
+  }, [])
+
+  // Refit when a terminal becomes visible again so xterm recalculates cols/rows
+  // before TUIs redraw status lines or right-aligned badges.
+  const fitVisibleTerminal = useCallback(() => {
+    const terminal = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    if (!terminal || !fitAddon || disposedRef.current) return
+
+    try {
+      fitAddon.fit()
+    } catch {
+      // Ignore fit errors if layout is not ready yet
+    }
+  }, [])
+
+  const reconcileVisibleTerminal = useCallback((savedViewportY: number | null) => {
+    if (!terminalRef.current || disposedRef.current) return
+
+    clearTextureAtlas()
+    fitVisibleTerminal()
+    refreshVisibleRows()
+
+    if (savedViewportY !== null && savedViewportY > 0 && terminalRef.current) {
+      terminalRef.current.scrollToLine(savedViewportY)
+    }
+  }, [clearTextureAtlas, fitVisibleTerminal, refreshVisibleRows])
+
+  const applyFontMetrics = useCallback(() => {
+    if (disposedRef.current || !terminalRef.current || !fitAddonRef.current) return
+
+    clearTextureAtlas()
+
+    if (!isHiddenRef.current) {
+      try {
+        fitAddonRef.current.fit()
+      } catch {
+        // Ignore fit errors if layout is not ready yet
+      }
+    }
+
+    refreshVisibleRows()
+    window.electron.terminal.resize(terminalId, terminalRef.current.cols, terminalRef.current.rows)
+  }, [clearTextureAtlas, refreshVisibleRows, terminalId])
+
+  const syncFontAfterLoad = useCallback(() => {
+    const primaryFont = getPrimaryTerminalFont()
+    if (!primaryFont || !document.fonts || typeof document.fonts.load !== 'function') return
+
+    Promise.allSettled([
+      document.fonts.load(`14px "${primaryFont}"`),
+      document.fonts.load(`500 14px "${primaryFont}"`)
+    ]).then(() => {
+      if (disposedRef.current) return
+
+      // Delay slightly to ensure browser font metrics have settled.
+      setTimeout(() => {
+        applyFontMetrics()
+      }, FONT_LOAD_REFIT_DELAY)
+    }).catch(() => {
+      // Font load failed, fallback font will be used - no action needed
+    })
+  }, [applyFontMetrics])
 
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
@@ -149,6 +236,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       fontSize: 14,
       fontFamily: getTerminalFontFamily(),
       theme: getCurrentTerminalTheme(),
+      minimumContrastRatio: TERMINAL_MIN_CONTRAST_RATIO,
       allowProposedApi: true,
       windowsMode: false,     // Don't auto-convert \r to \r\n - fixes in-place status line updates
       convertEol: false,      // Don't auto-convert line endings - preserves cursor positioning
@@ -241,28 +329,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
       }
 
-      // Font loading detection: refit terminal after primary font loads
-      // This fixes character width calculation issues when font loads after terminal init
-      if (document.fonts && typeof document.fonts.load === 'function') {
-        document.fonts.load(`14px "${PRIMARY_FONT}"`).then(() => {
-          if (disposedRef.current || !terminalRef.current || !fitAddonRef.current) return
-          // Delay refit slightly to ensure font metrics are fully updated
-          setTimeout(() => {
-            if (disposedRef.current || !fitAddonRef.current) return
-            try {
-              fitAddonRef.current.fit()
-              // Notify PTY of new dimensions
-              if (terminalRef.current) {
-                window.electron.terminal.resize(terminalId, terminalRef.current.cols, terminalRef.current.rows)
-              }
-            } catch {
-              // Ignore fit errors
-            }
-          }, FONT_LOAD_REFIT_DELAY)
-        }).catch(() => {
-          // Font load failed, fallback font will be used - no action needed
-        })
-      }
+      // Refit and clear cached glyphs after the active font finishes loading.
+      syncFontAfterLoad()
     }, TERMINAL_INIT_DELAY)
 
     // Auto-copy on selection complete
@@ -298,25 +366,13 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
 
     // Intercept global shortcuts before xterm processes them
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      // Block all DOM keyboard event phases for app-level shortcuts so xterm
+      // does not emit modified-key control sequences into the PTY.
+      if (shouldBypassXtermShortcut(e)) {
+        return false
+      }
+
       if (e.type !== 'keydown') return true
-
-      // Alt+1~9: Switch project by index (handled by global shortcut)
-      if (e.altKey && e.key >= '1' && e.key <= '9') {
-        // Allow bubbling to global handler
-        return false
-      }
-
-      // Ctrl+N or Ctrl+T: New terminal
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'n' || e.key === 't')) {
-        // Allow bubbling to global handler
-        return false
-      }
-
-      // Ctrl+W: Close active terminal
-      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-        // Allow bubbling to global handler
-        return false
-      }
 
       // Ctrl+V paste - detect image in clipboard and save to temp file
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
@@ -420,7 +476,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-  }, [terminalId, initialOutput, onResize, attachContextLostListener])
+  }, [terminalId, initialOutput, onResize, attachContextLostListener, syncFontAfterLoad])
 
   // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
@@ -504,6 +560,8 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       // Save viewport line position before refresh (more reliable than DOM scrollTop)
       const savedViewportY = terminalRef.current.buffer.active.viewportY
 
+      clearTextureAtlas()
+
       // 1. Dispose current WebGL addon
       try {
         webglAddonRef.current?.dispose()
@@ -542,7 +600,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         } catch { /* ignore notification errors */ }
       }
     }, REFRESH_DEBOUNCE)
-  }, [attachContextLostListener])
+  }, [attachContextLostListener, clearTextureAtlas])
 
   // Keep refreshFnRef in sync with refresh callback for context lost handler
   useEffect(() => {
@@ -611,9 +669,19 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
   // Sync terminal theme with app settings (includes terminal preset cursor)
   // Must reload WebGL addon to apply cursor color changes
   useEffect(() => {
-    const unsubscribe = useSettingsStore.subscribe(() => {
+    const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
       if (!terminalRef.current || disposedRef.current) return
+
+      const themeChanged =
+        state.pendingSettings.colorTheme !== prevState.pendingSettings.colorTheme ||
+        state.pendingSettings.themeMode !== prevState.pendingSettings.themeMode ||
+        state.pendingSettings.uiStyle !== prevState.pendingSettings.uiStyle ||
+        state.pendingSettings.terminalStyleOptions?.colorPreset !== prevState.pendingSettings.terminalStyleOptions?.colorPreset
+
+      if (!themeChanged) return
+
       terminalRef.current.options.theme = getCurrentTerminalTheme()
+      clearTextureAtlas()
 
       // WebGL addon caches cursor color - must dispose and reload to apply changes
       if (webglAddonRef.current) {
@@ -642,7 +710,20 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       }
     })
     return unsubscribe
-  }, [attachContextLostListener])
+  }, [attachContextLostListener, clearTextureAtlas])
+
+  // Sync terminal font changes for already-mounted terminals.
+  useEffect(() => {
+    const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
+      if (!terminalRef.current || disposedRef.current) return
+      if (state.pendingSettings.terminalFontFamily === prevState.pendingSettings.terminalFontFamily) return
+
+      terminalRef.current.options.fontFamily = getTerminalFontFamily()
+      applyFontMetrics()
+      syncFontAfterLoad()
+    })
+    return unsubscribe
+  }, [applyFontMetrics, syncFontAfterLoad])
 
   // Toggle WebGL addon based on active state, hidden state, and render mode (debounced)
   useEffect(() => {
@@ -675,6 +756,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
             webglAddonRef.current = webglAddon
             terminalRef.current.loadAddon(webglAddon)
             attachContextLostListener(webglAddon)
+            refreshVisibleRows()
           } catch (e) {
             console.warn('WebGL addon failed to load:', e)
           }
@@ -688,6 +770,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
           // Ignore disposal errors
         }
         webglAddonRef.current = null
+        refreshVisibleRows()
       }
     }
 
@@ -700,7 +783,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive, isHidden, attachContextLostListener])
+  }, [isActive, isHidden, attachContextLostListener, refreshVisibleRows])
 
   // React to render mode setting changes
   useEffect(() => {
@@ -723,6 +806,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
             webglAddonRef.current = webglAddon
             terminalRef.current.loadAddon(webglAddon)
             attachContextLostListener(webglAddon)
+            refreshVisibleRows()
           } catch (e) {
             console.warn('WebGL addon failed to load:', e)
           }
@@ -735,10 +819,11 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
           // Ignore disposal errors
         }
         webglAddonRef.current = null
+        refreshVisibleRows()
       }
     })
     return unsubscribe
-  }, [attachContextLostListener])
+  }, [attachContextLostListener, refreshVisibleRows])
 
   // Visibility transition: save scroll when hiding, restore scroll and cursor when showing
   // Uses useLayoutEffect to capture scroll position BEFORE browser paints display:none
@@ -763,10 +848,9 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
       const restoreScrollAndCursor = () => {
         if (cancelled || disposedRef.current || !terminalRef.current) return
 
-        // 1. Restore scroll position (no refresh needed - prevents screen jumping)
-        if (savedViewportY !== null && savedViewportY > 0) {
-          terminalRef.current.scrollToLine(savedViewportY)
-        }
+        // Refit and repaint after project switch so renderer changes and any
+        // hidden-layout drift do not leave stale TUI fragments on screen.
+        reconcileVisibleTerminal(savedViewportY)
 
         // 2. Focus terminal - let CLI manage its own cursor
         terminalRef.current.focus()
@@ -811,7 +895,7 @@ export function useTerminal({ terminalId, initialOutput, isActive = true, isHidd
         clearTimeout(timer5)
       }
     }
-  }, [isHidden, isActive])
+  }, [isHidden, isActive, reconcileVisibleTerminal])
 
   return {
     containerRef,

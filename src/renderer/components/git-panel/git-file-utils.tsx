@@ -8,7 +8,8 @@ export function getStatusColor(status: string | undefined): string {
     case 'untracked': return 'text-green-400'
     case 'modified': return 'text-amber-400'
     case 'deleted': return 'text-red-400'
-    case 'renamed': return 'text-blue-400'
+    case 'renamed':
+    case 'copied': return 'text-blue-400'
     default: return 'text-[var(--mc-text-muted)]'
   }
 }
@@ -39,6 +40,7 @@ export function getStatusLabel(status: string | undefined): React.ReactNode {
         </svg>
       )
     case 'renamed': 
+    case 'copied':
       return (
         <svg className="w-3.5 h-3.5 transform translate-y-[-1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />

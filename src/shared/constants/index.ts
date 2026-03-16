@@ -1,5 +1,6 @@
 export * from './ipc-channels'
 export * from './themes'
+export * from './terminal'
 export * from './terminal-themes'
 export * from './notification'
 export * from './url-validation'
