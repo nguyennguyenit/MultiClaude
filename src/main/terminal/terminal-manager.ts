@@ -2,6 +2,8 @@ import * as pty from '@lydell/node-pty'
 import os from 'os'
 import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
+import { existsSync, readdirSync } from 'fs'
+import path from 'path'
 import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
 
 const DESTROY_TIMEOUT_MS = 3000
@@ -19,6 +21,7 @@ interface PTYProcess {
 export class TerminalManager extends EventEmitter {
   private terminals: Map<string, PTYProcess> = new Map()
   private shell: string
+  private resolvedWindowsPowerShellCommand: string | null = null
   private systemSuspended = false // Track system suspend state
 
   constructor() {
@@ -66,6 +69,47 @@ export class TerminalManager extends EventEmitter {
     return process.env.SHELL || '/bin/bash'
   }
 
+  private resolveWindowsPowerShellCommand(): string {
+    if (this.resolvedWindowsPowerShellCommand) {
+      return this.resolvedWindowsPowerShellCommand
+    }
+
+    const wherePwsh = spawnSync('where.exe', ['pwsh.exe'], {
+      stdio: 'ignore',
+      windowsHide: true
+    })
+    if (wherePwsh.status === 0) {
+      this.resolvedWindowsPowerShellCommand = 'pwsh.exe'
+      return this.resolvedWindowsPowerShellCommand
+    }
+
+    const powerShellRoots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)']]
+      .filter((root): root is string => typeof root === 'string' && root.length > 0)
+      .map(root => path.join(root, 'PowerShell'))
+
+    for (const root of powerShellRoots) {
+      if (!existsSync(root)) continue
+
+      try {
+        const candidates = readdirSync(root, { withFileTypes: true })
+          .filter(entry => entry.isDirectory())
+          .map(entry => path.join(root, entry.name, 'pwsh.exe'))
+          .filter(candidate => existsSync(candidate))
+          .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+
+        if (candidates.length > 0) {
+          this.resolvedWindowsPowerShellCommand = candidates[0]
+          return this.resolvedWindowsPowerShellCommand
+        }
+      } catch {
+        // Ignore unreadable install roots and keep falling back.
+      }
+    }
+
+    this.resolvedWindowsPowerShellCommand = 'powershell.exe'
+    return this.resolvedWindowsPowerShellCommand
+  }
+
   /**
    * Get shell command and args based on WindowsShell option
    * Non-Windows: uses default shell
@@ -90,7 +134,7 @@ export class TerminalManager extends EventEmitter {
 
     if (shell.type === 'powershell') {
       return {
-        command: 'powershell.exe',
+        command: this.resolveWindowsPowerShellCommand(),
         args: ['-NoLogo']
       }
     }

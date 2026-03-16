@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import * as pty from '@lydell/node-pty'
 import { TerminalManager } from '../terminal-manager'
+
+const mockSpawnSync = vi.hoisted(() => vi.fn())
+const mockExistsSync = vi.hoisted(() => vi.fn())
+const mockReaddirSync = vi.hoisted(() => vi.fn())
 
 // Mock node-pty
 const mockPty = {
@@ -16,12 +21,32 @@ vi.mock('@lydell/node-pty', () => ({
   spawn: vi.fn(() => mockPty)
 }))
 
+vi.mock('child_process', async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process')
+  return {
+    ...actual,
+    spawnSync: mockSpawnSync
+  }
+})
+
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs')
+  return {
+    ...actual,
+    existsSync: mockExistsSync,
+    readdirSync: mockReaddirSync
+  }
+})
+
 describe('TerminalManager', () => {
   let manager: TerminalManager
 
   beforeEach(() => {
     manager = new TerminalManager()
     vi.clearAllMocks()
+    mockSpawnSync.mockReturnValue({ status: 1 })
+    mockExistsSync.mockReturnValue(false)
+    mockReaddirSync.mockReturnValue([])
   })
 
   afterEach(() => {
@@ -171,6 +196,72 @@ describe('TerminalManager', () => {
 
     it('returns false for non-existent terminal', () => {
       expect(manager.invokeClaudeCode('invalid')).toBe(false)
+    })
+  })
+
+  describe('Windows PowerShell resolution', () => {
+    it('prefers pwsh.exe when available on PATH', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      mockSpawnSync.mockImplementation((command: string, args?: string[]) => (
+        command === 'where.exe' && args?.[0] === 'pwsh.exe'
+          ? { status: 0 }
+          : { status: 1 }
+      ))
+
+      const winManager = new TerminalManager()
+      winManager.create({ shell: { type: 'powershell' } })
+
+      expect(pty.spawn).toHaveBeenCalledWith(
+        'pwsh.exe',
+        ['-NoLogo'],
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+
+      platformSpy.mockRestore()
+    })
+
+    it('falls back to PowerShell 7 install path when pwsh.exe is not on PATH', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      const originalProgramFiles = process.env.ProgramFiles
+
+      process.env.ProgramFiles = 'C:\\Program Files'
+      mockSpawnSync.mockReturnValue({ status: 1 })
+      mockExistsSync.mockImplementation((target: string) => (
+        target === 'C:\\Program Files/PowerShell' || target === 'C:\\Program Files/PowerShell/7/pwsh.exe'
+      ))
+      mockReaddirSync.mockReturnValue([
+        {
+          name: '7',
+          isDirectory: () => true
+        }
+      ])
+
+      const winManager = new TerminalManager()
+      winManager.create({ shell: { type: 'powershell' } })
+
+      expect(pty.spawn).toHaveBeenCalledWith(
+        'C:\\Program Files/PowerShell/7/pwsh.exe',
+        ['-NoLogo'],
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+
+      process.env.ProgramFiles = originalProgramFiles
+      platformSpy.mockRestore()
+    })
+
+    it('falls back to powershell.exe when PowerShell 7 is unavailable', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+
+      const winManager = new TerminalManager()
+      winManager.create({ shell: { type: 'powershell' } })
+
+      expect(pty.spawn).toHaveBeenCalledWith(
+        'powershell.exe',
+        ['-NoLogo'],
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+
+      platformSpy.mockRestore()
     })
   })
 
