@@ -10,6 +10,7 @@ import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
+import { joinPathsForTerminal } from './utils'
 import { THEMES, TERMINAL_FONTS, APP_FONTS } from '@shared/constants'
 import type { WindowsShell, Project } from '@shared/types'
 
@@ -169,13 +170,8 @@ function App() {
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
-    const formatted = paths.map(p => {
-      // Quote paths with special characters
-      if (/[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(p)) {
-        return `"${p.replace(/"/g, '\\"')}"`
-      }
-      return p
-    }).join(' ')
+    const formatted = joinPathsForTerminal(paths)
+    if (!formatted) return
     window.electron.terminal.write(terminalId, formatted)
   }, [])
 

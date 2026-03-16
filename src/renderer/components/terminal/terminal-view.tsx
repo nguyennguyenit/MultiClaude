@@ -55,6 +55,7 @@ const scrollButtonWrapperStyle: CSSProperties = {
 interface TerminalViewProps {
   terminalId: string
   isActive: boolean
+  isDropTarget?: boolean
   hidden?: boolean
   initialOutput?: string
   /** Callback to expose fit function to parent for resize handling */
@@ -65,7 +66,16 @@ interface TerminalViewProps {
   onOutput?: () => void
 }
 
-export const TerminalView = memo(function TerminalView({ terminalId, isActive, hidden = false, initialOutput, onFitReady, onRefreshReady, onOutput }: TerminalViewProps) {
+export const TerminalView = memo(function TerminalView({
+  terminalId,
+  isActive,
+  isDropTarget = false,
+  hidden = false,
+  initialOutput,
+  onFitReady,
+  onRefreshReady,
+  onOutput
+}: TerminalViewProps) {
   const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, terminalRef } = useTerminal({
     terminalId,
     initialOutput,
@@ -320,9 +330,13 @@ export const TerminalView = memo(function TerminalView({ terminalId, isActive, h
     >
       <div
         ref={containerRef}
-        className={`terminal-container${highlightArea ? ' image-hover' : ''}`}
+        className={`terminal-container${highlightArea ? ' image-hover' : ''}${isDropTarget ? ' terminal-drop-active' : ''}`}
         style={{ height: '100%', width: '100%' }}
       />
+
+      {isDropTarget && (
+        <div className="terminal-drop-overlay pointer-events-none absolute inset-2" />
+      )}
 
       {/* Hover underline for image path text */}
       {highlightArea && (

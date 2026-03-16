@@ -5,39 +5,91 @@
  * trigger DOM drag events consistently. This is a known Electron/Chromium issue.
  *
  * Strategy:
- * 1. DOM events - Register handlers but they may not fire
- * 2. IPC fallback - Main process intercepts will-navigate for file:// URLs
- *    This requires NOT preventing default on drag events when DOM events don't fire
+ * 1. Per-terminal DOM events handle normal drag/drop and set a pending drop target
+ * 2. Document fallback handles platforms where only top-level events fire
+ * 3. IPC fallback handles Electron navigation interception and reuses the pending target
  */
 
 import { useAppStore } from '../stores'
+import { joinPathsForTerminal } from './terminal-path-utils'
 
-/**
- * Format file path - quote if contains spaces or special chars
- */
-function formatPath(path: string): string {
-  if (/[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(path)) {
-    return `"${path.replace(/"/g, '\\"')}"`
-  }
-  return path
-}
-
-/**
- * Write file path to active terminal
- */
-function writePathToActiveTerminal(filePath: string): void {
-  const { activeTerminalId } = useAppStore.getState()
-  if (!activeTerminalId) {
-    console.warn('[FileDropHandler] No active terminal')
-    return
-  }
-
-  const formatted = formatPath(filePath)
-  window.electron.terminal.write(activeTerminalId, formatted)
-}
+const TERMINAL_DROP_TARGET_SELECTOR = '[data-terminal-id]'
 
 let initialized = false
 let domEventsWorking = false
+let pendingDropTerminalId: string | null = null
+
+function getTerminalIdFromTarget(target: EventTarget | null | undefined): string | null {
+  if (!target || typeof target !== 'object' || !('closest' in target)) {
+    return null
+  }
+
+  const terminalElement = (target as {
+    closest: (selector: string) => { dataset?: Record<string, string | undefined> } | null
+  }).closest(TERMINAL_DROP_TARGET_SELECTOR)
+
+  return terminalElement?.dataset?.terminalId ?? null
+}
+
+function getTerminalIdFromPoint(clientX: number, clientY: number): string | null {
+  if (typeof document.elementFromPoint !== 'function') return null
+  return getTerminalIdFromTarget(document.elementFromPoint(clientX, clientY))
+}
+
+function resolveDropTerminalId(target?: EventTarget | null): string | null {
+  return resolvePreferredDropTerminalId(
+    useAppStore.getState().activeTerminalId,
+    getTerminalIdFromTarget(target) ?? pendingDropTerminalId
+  )
+}
+
+function writePathsToResolvedTerminal(paths: string[], target?: EventTarget | null): void {
+  const terminalId = resolveDropTerminalId(target)
+  if (!terminalId) {
+    console.warn('[FileDropHandler] No terminal available for dropped files')
+    return
+  }
+
+  writePathsToTerminal(terminalId, paths)
+}
+
+function extractFilePaths(files: FileList | null | undefined): string[] {
+  if (!files || files.length === 0) return []
+
+  const paths: string[] = []
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    try {
+      const filePath = window.electron.utils.getFilePath(file)
+      if (filePath) {
+        paths.push(filePath)
+      }
+    } catch (err) {
+      console.error('[FileDropHandler] Error:', err)
+    }
+  }
+
+  return paths
+}
+
+export function setPendingDropTerminal(terminalId: string | null): void {
+  pendingDropTerminalId = terminalId
+}
+
+export function clearPendingDropTerminal(terminalId?: string): void {
+  if (terminalId && pendingDropTerminalId !== terminalId) return
+  pendingDropTerminalId = null
+}
+
+export function resolvePreferredDropTerminalId(activeTerminalId: string | null, targetTerminalId: string | null): string | null {
+  return targetTerminalId ?? activeTerminalId
+}
+
+export function writePathsToTerminal(terminalId: string, paths: string[]): void {
+  const input = joinPathsForTerminal(paths)
+  if (!input) return
+  window.electron.terminal.write(terminalId, input)
+}
 
 /**
  * Initialize document-level file drop handling
@@ -60,6 +112,11 @@ export function initFileDropHandler(): void {
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'copy'
       }
+
+      const hoveredTerminalId = getTerminalIdFromPoint(e.clientX, e.clientY) ?? getTerminalIdFromTarget(e.target)
+      if (hoveredTerminalId) {
+        setPendingDropTerminal(hoveredTerminalId)
+      }
     }
   })
 
@@ -69,33 +126,32 @@ export function initFileDropHandler(): void {
 
     e.preventDefault()
 
-    const files = e.dataTransfer?.files
-    if (!files || files.length === 0) return
-
-    const paths: string[] = []
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      try {
-        const filePath = window.electron.utils.getFilePath(file)
-        if (filePath) {
-          paths.push(formatPath(filePath))
-        }
-      } catch (err) {
-        console.error('[FileDropHandler] Error:', err)
-      }
-    }
-
+    const paths = extractFilePaths(e.dataTransfer?.files)
     if (paths.length > 0) {
-      const { activeTerminalId } = useAppStore.getState()
-      if (activeTerminalId) {
-        window.electron.terminal.write(activeTerminalId, paths.join(' '))
-      }
+      writePathsToResolvedTerminal(paths, e.target)
     }
+
+    clearPendingDropTerminal()
+  })
+
+  document.addEventListener('dragend', () => {
+    clearPendingDropTerminal()
+  })
+
+  document.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget === null) {
+      clearPendingDropTerminal()
+    }
+  })
+
+  window.addEventListener('blur', () => {
+    clearPendingDropTerminal()
   })
 
   // IPC fallback - always register
   // Main process intercepts will-navigate for file:// URLs
   window.electron.onFileDrop((filePath) => {
-    writePathToActiveTerminal(filePath)
+    writePathsToResolvedTerminal([filePath])
+    clearPendingDropTerminal()
   })
 }

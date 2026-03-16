@@ -1,5 +1,7 @@
 import { useEffect, useRef, useCallback, memo, useState } from 'react'
 import { TerminalView } from './terminal-view'
+import { useFileDrop } from '../../hooks/use-file-drop'
+import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
 
 // Streaming detection constants
 const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
@@ -55,6 +57,25 @@ export const TerminalPane = memo(function TerminalPane({
   const handleTerminalRefresh = useCallback((refreshFn: () => void) => {
     terminalRefreshRef.current = refreshFn
   }, [])
+
+  const handleFileDropStateChange = useCallback((dragging: boolean) => {
+    if (dragging) {
+      setPendingDropTerminal(terminalId)
+    } else {
+      clearPendingDropTerminal(terminalId)
+    }
+  }, [terminalId])
+
+  const handleFileDrop = useCallback((paths: string[]) => {
+    setPendingDropTerminal(terminalId)
+    onInsertFilePath?.(paths)
+    clearPendingDropTerminal(terminalId)
+  }, [terminalId, onInsertFilePath])
+
+  const { isDragOver, dropHandlers } = useFileDrop({
+    onDrop: handleFileDrop,
+    onDragStateChange: handleFileDropStateChange
+  })
 
   // Track output for streaming detection
   const handleTerminalOutput = useCallback(() => {
@@ -126,7 +147,9 @@ export const TerminalPane = memo(function TerminalPane({
   return (
     <div
       ref={containerRef}
+      data-terminal-id={terminalId}
       onClick={onActivate}
+      {...dropHandlers}
       style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
     >
       {/* Top tab bar */}
@@ -226,6 +249,7 @@ export const TerminalPane = memo(function TerminalPane({
         <TerminalView
           terminalId={terminalId}
           isActive={isActive}
+          isDropTarget={isDragOver}
           hidden={hidden}
           initialOutput={initialOutput}
           onFitReady={handleTerminalFit}
