@@ -23,7 +23,8 @@ import type {
   GitHubPR,
   UpdateState,
   WslInfo,
-  WindowsShell
+  WindowsShell,
+  WindowState
 } from '@shared/types'
 
 // Type-safe API for renderer
@@ -162,6 +163,8 @@ export interface ElectronAPI {
   }
   window: {
     updateTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>
+    getState: () => Promise<WindowState>
+    onStateChanged: (callback: (state: WindowState) => void) => () => void
     minimize: () => Promise<void>
     maximize: () => Promise<void>
     close: () => Promise<void>
@@ -323,6 +326,12 @@ const api: ElectronAPI = {
   },
   window: {
     updateTitleBarOverlay: (colors) => ipcRenderer.invoke('update-title-bar-overlay', colors),
+    getState: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_STATE),
+    onStateChanged: (callback) => {
+      const listener = (_: unknown, state: WindowState) => callback(state)
+      ipcRenderer.on(IPC_CHANNELS.WINDOW_STATE_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_STATE_CHANGED, listener)
+    },
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
     maximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
     close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE)

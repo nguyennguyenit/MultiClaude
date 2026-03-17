@@ -120,6 +120,8 @@ export const IPC_CHANNELS = {
   VIETNAMESE_IME_STATUS: 'vietnamese-ime:status',
 
   // Windows channels
+  WINDOW_GET_STATE: 'window:get-state',
+  WINDOW_STATE_CHANGED: 'window:state-changed',
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close'
