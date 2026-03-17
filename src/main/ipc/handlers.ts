@@ -1,9 +1,9 @@
-import { BrowserWindow, ipcMain, dialog, shell, app } from 'electron'
+import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
-import type { AppSettings } from '@shared/types'
+import type { AppSettings, WindowState } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { GitHeadWatcher } from '../git/git-head-watcher'
@@ -40,8 +40,41 @@ function safeOn(channel: string, listener: Parameters<typeof ipcMain.on>[1]) {
   ipcMain.on(channel, listener)
 }
 
+function getWindowState(window: BrowserWindow): WindowState {
+  const bounds = window.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const workArea = display.workArea
+  const fillsWorkArea =
+    Math.abs(bounds.x - workArea.x) <= 1 &&
+    Math.abs(bounds.y - workArea.y) <= 1 &&
+    Math.abs(bounds.width - workArea.width) <= 1 &&
+    Math.abs(bounds.height - workArea.height) <= 1
+
+  const isMaximized = window.isMaximized()
+  const isFullScreen = window.isFullScreen()
+
+  return {
+    isMaximized,
+    isFullScreen,
+    isExpanded: isMaximized || isFullScreen || fillsWorkArea
+  }
+}
+
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   const { terminalManager, gitManager, gitHeadWatcher, projectStore, settingsStore, notificationManager } = managers
+  const emitWindowState = () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.WINDOW_STATE_CHANGED, getWindowState(window))
+    }
+  }
+
+  window.on('maximize', emitWindowState)
+  window.on('unmaximize', emitWindowState)
+  window.on('enter-full-screen', emitWindowState)
+  window.on('leave-full-screen', emitWindowState)
+  window.on('resize', emitWindowState)
+  window.on('move', emitWindowState)
+  window.webContents.on('did-finish-load', emitWindowState)
 
   // Register git head watcher callback to emit branch changes from external terminals
   gitHeadWatcher.onBranchChange((projectPath) => {
@@ -640,6 +673,18 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Window handlers
+  safeHandle(IPC_CHANNELS.WINDOW_GET_STATE, () => {
+    if (window && !window.isDestroyed()) {
+      return getWindowState(window)
+    }
+
+    return {
+      isMaximized: false,
+      isFullScreen: false,
+      isExpanded: false
+    }
+  })
+
   safeHandle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
     if (window && !window.isDestroyed()) {
       window.minimize()

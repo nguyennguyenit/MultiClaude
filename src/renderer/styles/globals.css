@@ -368,6 +368,10 @@ button, input, select, textarea, optgroup, option {
   z-index: 1;
 }
 
+.toolbar-group-left {
+  transition: padding-left var(--transition-fast);
+}
+
 /* App branding: logo + name */
 .toolbar-brand {
   display: flex;

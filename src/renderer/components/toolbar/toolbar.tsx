@@ -1,8 +1,15 @@
+import { useEffect, useState } from 'react'
 import { ToolbarButton } from './toolbar-button'
 import logoImg from '../../assets/logo.png'
+import type { WindowState } from '@shared/types'
 
 // Detect macOS for traffic light padding
 const isMac = navigator.platform.toLowerCase().includes('mac')
+const DEFAULT_WINDOW_STATE: WindowState = {
+  isMaximized: false,
+  isFullScreen: false,
+  isExpanded: false
+}
 
 interface ToolbarProps {
   onAddTerminal: () => void
@@ -41,13 +48,43 @@ export function Toolbar({
   onToggleSettings,
   activePanel
 }: ToolbarProps) {
+  const [windowState, setWindowState] = useState(DEFAULT_WINDOW_STATE)
+
+  useEffect(() => {
+    if (!isMac) return
+
+    let isSubscribed = true
+
+    window.electron.window.getState()
+      .then((state) => {
+        if (isSubscribed) {
+          setWindowState(state)
+        }
+      })
+      .catch(() => {})
+
+    const unsubscribe = window.electron.window.onStateChanged((state) => {
+      if (isSubscribed) {
+        setWindowState(state)
+      }
+    })
+
+    return () => {
+      isSubscribed = false
+      unsubscribe()
+    }
+  }, [])
+
   return (
     <div className="toolbar">
       {/* Drag region sits behind interactive elements */}
       <div className="toolbar-drag" />
 
-      {/* Left group: macOS traffic light padding + branding */}
-      <div className="toolbar-group" style={{ paddingLeft: isMac ? 72 : 8 }}>
+      {/* Left group: keep clear of traffic lights unless the macOS window is expanded */}
+      <div
+        className="toolbar-group toolbar-group-left"
+        style={{ paddingLeft: isMac && !windowState.isExpanded ? 72 : 8 }}
+      >
         <div className="toolbar-brand">
           <img src={logoImg} alt="MultiClaude" className="toolbar-brand-logo" />
           <span className="toolbar-brand-name">MultiClaude</span>

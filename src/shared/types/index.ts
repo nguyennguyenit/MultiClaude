@@ -70,6 +70,12 @@ export interface AppSession {
   }
 }
 
+export interface WindowState {
+  isMaximized: boolean
+  isFullScreen: boolean
+  isExpanded: boolean
+}
+
 // Git types
 export interface GitStatus {
   isRepo: boolean

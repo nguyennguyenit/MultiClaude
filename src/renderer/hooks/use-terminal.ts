@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
+import { createUserScrollIntent, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD, type UserScrollIntent } from '../utils/terminal-scroll-utils'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -16,7 +17,15 @@ const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam 
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
 const RESIZE_REFIT_SETTLE_DELAY = 120  // Second fit after layout settles on maximize/unmaximize
 const TERMINAL_MIN_CONTRAST_RATIO = 4.5  // Keep black-on-gray ANSI spans readable in Codex/Claude output
+const USER_SCROLL_WHEEL_GRACE = 180  // Keep wheel scroll intent alive long enough to win the next write callback
+const USER_SCROLL_DRAG_GRACE = 1200  // Allow scrollbar dragging to continue across streaming output
 // NOTE: Cursor restore delay removed - CLI manages its own cursor
+
+interface ViewportEventListener {
+  target: EventTarget
+  type: string
+  handler: EventListener
+}
 
 function getPrimaryTerminalFont(): string | null {
   const { pendingSettings } = useSettingsStore.getState()
@@ -98,12 +107,15 @@ export function useTerminal({
   const isHiddenRef = useRef(isHidden)
   const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
   const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
-  const isWritingRef = useRef(false)  // Guard against scroll tracking during programmatic writes
+  const pendingWriteCountRef = useRef(0)  // xterm writes can overlap; count them instead of a single boolean
+  const userViewportInteractingRef = useRef(false)  // Track wheel/drag interaction so manual scroll wins during streaming
+  const pendingUserScrollIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve manual scroll changes that happen mid-write
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
-  const viewportScrollHandlerRef = useRef<{ element: Element; handler: () => void } | null>(null)  // Cleanup for viewport scroll listener
+  const viewportListenersRef = useRef<ViewportEventListener[] | null>(null)  // Cleanup for viewport-level user interaction listeners
+  const userViewportInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -233,6 +245,28 @@ export function useTerminal({
     })
   }, [applyFontMetrics])
 
+  const clearUserViewportInteraction = useCallback(() => {
+    if (userViewportInteractionTimerRef.current) {
+      clearTimeout(userViewportInteractionTimerRef.current)
+      userViewportInteractionTimerRef.current = null
+    }
+
+    userViewportInteractingRef.current = false
+  }, [])
+
+  const markUserViewportInteraction = useCallback((durationMs: number) => {
+    userViewportInteractingRef.current = true
+
+    if (userViewportInteractionTimerRef.current) {
+      clearTimeout(userViewportInteractionTimerRef.current)
+    }
+
+    userViewportInteractionTimerRef.current = setTimeout(() => {
+      userViewportInteractionTimerRef.current = null
+      userViewportInteractingRef.current = false
+    }, durationMs)
+  }, [])
+
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
     if (!containerRef.current || terminalRef.current) return
@@ -283,12 +317,21 @@ export function useTerminal({
     terminal.loadAddon(webLinksAddon)
 
     // Helper function to check and update scroll position for smart scroll behavior
-    const updateScrollPosition = () => {
-      if (isWritingRef.current) return  // Skip during programmatic writes to avoid race condition
+    const syncScrollPosition = (captureUserIntent = false) => {
       const buffer = terminal.buffer.active
       const linesFromBottom = buffer.baseY - buffer.viewportY
-      const SCROLL_THRESHOLD = 5
-      const atBottom = linesFromBottom <= SCROLL_THRESHOLD
+      const atBottom = linesFromBottom <= TERMINAL_SCROLL_THRESHOLD
+
+      if (pendingWriteCountRef.current > 0 && !captureUserIntent) return
+
+      if (pendingWriteCountRef.current > 0 && captureUserIntent) {
+        pendingUserScrollIntentRef.current = createUserScrollIntent(
+          buffer.baseY,
+          buffer.viewportY,
+          TERMINAL_SCROLL_THRESHOLD
+        )
+      }
+
       isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
       setIsAtBottom(atBottom)  // With threshold for UI button visibility
       setHasScrollback(buffer.baseY > 0)  // Track if any scrollback content exists
@@ -297,14 +340,27 @@ export function useTerminal({
 
     // Track scroll position for smart scroll behavior
     // xterm.js onScroll fires when scrollback buffer changes
-    scrollDisposableRef.current = terminal.onScroll(updateScrollPosition)
+    scrollDisposableRef.current = terminal.onScroll(() => syncScrollPosition(false))
 
-    // Also listen for scroll events on the terminal viewport for user scroll detection
-    // xterm.js onScroll may not fire for all viewport scroll events
+    // Also listen for viewport wheel/drag events so manual scroll changes can win while output streams.
     const viewportElement = terminal.element?.querySelector('.xterm-viewport')
     if (viewportElement) {
-      viewportElement.addEventListener('scroll', updateScrollPosition)
-      viewportScrollHandlerRef.current = { element: viewportElement, handler: updateScrollPosition }
+      const viewportListeners: ViewportEventListener[] = []
+      const addViewportListener = (target: EventTarget, type: string, handler: EventListener) => {
+        target.addEventListener(type, handler)
+        viewportListeners.push({ target, type, handler })
+      }
+
+      addViewportListener(viewportElement, 'scroll', () => syncScrollPosition(userViewportInteractingRef.current))
+      addViewportListener(viewportElement, 'wheel', () => markUserViewportInteraction(USER_SCROLL_WHEEL_GRACE))
+      addViewportListener(viewportElement, 'pointerdown', () => markUserViewportInteraction(USER_SCROLL_DRAG_GRACE))
+      addViewportListener(window, 'pointerup', clearUserViewportInteraction)
+      addViewportListener(window, 'pointercancel', clearUserViewportInteraction)
+      addViewportListener(viewportElement, 'touchstart', () => markUserViewportInteraction(USER_SCROLL_DRAG_GRACE))
+      addViewportListener(viewportElement, 'touchend', clearUserViewportInteraction)
+      addViewportListener(viewportElement, 'touchcancel', clearUserViewportInteraction)
+
+      viewportListenersRef.current = viewportListeners
     }
 
     terminalRef.current = terminal
@@ -340,6 +396,7 @@ export function useTerminal({
           terminalRef.current.scrollToLine(initialViewportY)
         }
         savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
+        syncScrollPosition(false)
       }
 
       // Restore output AFTER WebGL init to prevent race condition
@@ -500,7 +557,16 @@ export function useTerminal({
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     })
-  }, [terminalId, initialOutput, initialViewportY, onResize, attachContextLostListener, syncFontAfterLoad])
+  }, [
+    terminalId,
+    initialOutput,
+    initialViewportY,
+    onResize,
+    attachContextLostListener,
+    syncFontAfterLoad,
+    clearUserViewportInteraction,
+    markUserViewportInteraction
+  ])
 
   // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
@@ -510,18 +576,32 @@ export function useTerminal({
     const wasAtBottom = isAtBottomRef.current
     const savedY = terminalRef.current.buffer.active.viewportY
 
-    // Suppress scroll tracking during write to prevent race condition
-    // where onScroll fires at intermediate state (viewportY < baseY)
-    isWritingRef.current = true
+    // Keep programmatic scroll tracking disabled until this write has fully flushed.
+    pendingWriteCountRef.current += 1
 
     terminalRef.current.write(data, () => {
-      // Callback fires AFTER xterm fully processes data — safe to update state
-      isWritingRef.current = false
+      pendingWriteCountRef.current = Math.max(0, pendingWriteCountRef.current - 1)
+      const terminal = terminalRef.current
+      if (!terminal) return
 
-      // If user was reading history (not at bottom), restore their scroll position
-      if (!wasAtBottom && terminalRef.current && savedY >= 0) {
-        terminalRef.current.scrollToLine(savedY)
+      const restoreTarget = resolveViewportRestoreTarget({
+        wasAtBottom,
+        savedViewportY: savedY,
+        pendingUserScrollIntent: pendingUserScrollIntentRef.current
+      })
+      pendingUserScrollIntentRef.current = null
+
+      if (restoreTarget === 'bottom') {
+        terminal.scrollToBottom()
+      } else if (typeof restoreTarget === 'number' && restoreTarget >= 0) {
+        terminal.scrollToLine(restoreTarget)
       }
+
+      const buffer = terminal.buffer.active
+      const linesFromBottom = buffer.baseY - buffer.viewportY
+      isAtBottomRef.current = buffer.viewportY >= buffer.baseY
+      setIsAtBottom(linesFromBottom <= TERMINAL_SCROLL_THRESHOLD)
+      setHasScrollback(buffer.baseY > 0)
     })
 
     // NOTE: Removed auto cursor restore - it interferes with Claude Code CLI's cursor positioning
@@ -656,8 +736,9 @@ export function useTerminal({
       // Set disposed flag before any cleanup to prevent race conditions
       disposedRef.current = true
 
-      // Reset writing flag on dispose
-      isWritingRef.current = false
+      pendingWriteCountRef.current = 0
+      pendingUserScrollIntentRef.current = null
+      clearUserViewportInteraction()
 
       // Clear pending refresh
       if (refreshDebounceRef.current) {
@@ -673,16 +754,17 @@ export function useTerminal({
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
-      const viewportScrollHandler = viewportScrollHandlerRef.current
+      const viewportListeners = viewportListenersRef.current
       terminalRef.current = null
       fitAddonRef.current = null
       webglAddonRef.current = null
       scrollDisposableRef.current = null
-      viewportScrollHandlerRef.current = null
+      viewportListenersRef.current = null
 
-      // Cleanup viewport scroll listener
-      if (viewportScrollHandler) {
-        viewportScrollHandler.element.removeEventListener('scroll', viewportScrollHandler.handler)
+      if (viewportListeners) {
+        for (const listener of viewportListeners) {
+          listener.target.removeEventListener(listener.type, listener.handler)
+        }
       }
 
       // Delay disposal to allow xterm's internal setTimeout callbacks to complete
@@ -699,7 +781,7 @@ export function useTerminal({
         }
       }, TERMINAL_DISPOSE_DELAY)
     }
-  }, [cancelScheduledFit])
+  }, [cancelScheduledFit, clearUserViewportInteraction])
 
   // Watch the actual xterm container so maximize/unmaximize refits after
   // the terminal render area has reached its final size.
