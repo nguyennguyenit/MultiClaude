@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { createUserScrollIntent, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD } from './terminal-scroll-utils'
+import { createUserScrollIntent, isViewportNearBottom, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD } from './terminal-scroll-utils'
 
 describe('terminal-scroll-utils', () => {
+  it('treats viewports within the threshold as bottom-following', () => {
+    expect(isViewportNearBottom(120, 116, TERMINAL_SCROLL_THRESHOLD)).toBe(true)
+  })
+
+  it('treats viewports outside the threshold as scrollback', () => {
+    expect(isViewportNearBottom(120, 114, TERMINAL_SCROLL_THRESHOLD)).toBe(false)
+  })
+
   it('keeps user attached to live output when they scroll back to bottom', () => {
     expect(createUserScrollIntent(120, 117, TERMINAL_SCROLL_THRESHOLD)).toEqual({
       viewportY: null,
