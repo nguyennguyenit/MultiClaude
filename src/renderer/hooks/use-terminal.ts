@@ -6,7 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
-import { createUserScrollIntent, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD, type UserScrollIntent } from '../utils/terminal-scroll-utils'
+import { createUserScrollIntent, isViewportNearBottom, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD, type UserScrollIntent } from '../utils/terminal-scroll-utils'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -25,6 +25,11 @@ interface ViewportEventListener {
   target: EventTarget
   type: string
   handler: EventListener
+}
+
+interface PendingWriteViewportSnapshot {
+  wasAtBottom: boolean
+  savedViewportY: number
 }
 
 function getPrimaryTerminalFont(): string | null {
@@ -106,8 +111,9 @@ export function useTerminal({
   const isActiveRef = useRef(isActive)
   const isHiddenRef = useRef(isHidden)
   const prevHiddenRef = useRef(isHidden)  // Track previous hidden state for visibility transitions
-  const isAtBottomRef = useRef(true)  // Track if viewport is at bottom for smart scroll (non-reactive for write())
+  const isAtBottomRef = useRef(true)  // Track if viewport is at/near bottom for smart scroll (non-reactive for write())
   const pendingWriteCountRef = useRef(0)  // xterm writes can overlap; count them instead of a single boolean
+  const pendingWriteViewportSnapshotRef = useRef<PendingWriteViewportSnapshot | null>(null)
   const userViewportInteractingRef = useRef(false)  // Track wheel/drag interaction so manual scroll wins during streaming
   const pendingUserScrollIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve manual scroll changes that happen mid-write
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
@@ -319,8 +325,11 @@ export function useTerminal({
     // Helper function to check and update scroll position for smart scroll behavior
     const syncScrollPosition = (captureUserIntent = false) => {
       const buffer = terminal.buffer.active
-      const linesFromBottom = buffer.baseY - buffer.viewportY
-      const atBottom = linesFromBottom <= TERMINAL_SCROLL_THRESHOLD
+      const atBottom = isViewportNearBottom(
+        buffer.baseY,
+        buffer.viewportY,
+        TERMINAL_SCROLL_THRESHOLD
+      )
 
       if (pendingWriteCountRef.current > 0 && !captureUserIntent) return
 
@@ -332,8 +341,8 @@ export function useTerminal({
         )
       }
 
-      isAtBottomRef.current = buffer.viewportY >= buffer.baseY  // Exact for write()
-      setIsAtBottom(atBottom)  // With threshold for UI button visibility
+      isAtBottomRef.current = atBottom
+      setIsAtBottom(atBottom)
       setHasScrollback(buffer.baseY > 0)  // Track if any scrollback content exists
       // Note: Scroll position is saved in visibility effect when terminal becomes hidden
     }
@@ -570,23 +579,37 @@ export function useTerminal({
 
   // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
-    if (!terminalRef.current) return
+    const terminal = terminalRef.current
+    if (!terminal) return
 
     // Save scroll state BEFORE write (xterm auto-scrolls on write)
-    const wasAtBottom = isAtBottomRef.current
-    const savedY = terminalRef.current.buffer.active.viewportY
+    if (pendingWriteCountRef.current === 0) {
+      const buffer = terminal.buffer.active
+      pendingWriteViewportSnapshotRef.current = {
+        wasAtBottom: isViewportNearBottom(
+          buffer.baseY,
+          buffer.viewportY,
+          TERMINAL_SCROLL_THRESHOLD
+        ),
+        savedViewportY: buffer.viewportY
+      }
+    }
 
     // Keep programmatic scroll tracking disabled until this write has fully flushed.
     pendingWriteCountRef.current += 1
 
-    terminalRef.current.write(data, () => {
+    terminal.write(data, () => {
       pendingWriteCountRef.current = Math.max(0, pendingWriteCountRef.current - 1)
       const terminal = terminalRef.current
       if (!terminal) return
+      if (pendingWriteCountRef.current > 0) return
+
+      const pendingWriteViewportSnapshot = pendingWriteViewportSnapshotRef.current
+      pendingWriteViewportSnapshotRef.current = null
 
       const restoreTarget = resolveViewportRestoreTarget({
-        wasAtBottom,
-        savedViewportY: savedY,
+        wasAtBottom: pendingWriteViewportSnapshot?.wasAtBottom ?? true,
+        savedViewportY: pendingWriteViewportSnapshot?.savedViewportY ?? terminal.buffer.active.viewportY,
         pendingUserScrollIntent: pendingUserScrollIntentRef.current
       })
       pendingUserScrollIntentRef.current = null
@@ -598,9 +621,13 @@ export function useTerminal({
       }
 
       const buffer = terminal.buffer.active
-      const linesFromBottom = buffer.baseY - buffer.viewportY
-      isAtBottomRef.current = buffer.viewportY >= buffer.baseY
-      setIsAtBottom(linesFromBottom <= TERMINAL_SCROLL_THRESHOLD)
+      const atBottom = isViewportNearBottom(
+        buffer.baseY,
+        buffer.viewportY,
+        TERMINAL_SCROLL_THRESHOLD
+      )
+      isAtBottomRef.current = atBottom
+      setIsAtBottom(atBottom)
       setHasScrollback(buffer.baseY > 0)
     })
 
@@ -737,6 +764,7 @@ export function useTerminal({
       disposedRef.current = true
 
       pendingWriteCountRef.current = 0
+      pendingWriteViewportSnapshotRef.current = null
       pendingUserScrollIntentRef.current = null
       clearUserViewportInteraction()
 
