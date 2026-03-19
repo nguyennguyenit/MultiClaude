@@ -2,7 +2,9 @@
   <img src="./build/icon.png" alt="MultiClaude" width="120" />
 </p>
 
-# MultiClaude [![Electron 33](https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/) [![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![xterm.js](https://img.shields.io/badge/xterm.js-Terminal-2C2C32?style=flat-square&logo=gnubash&logoColor=white)](https://xtermjs.org/) [![GitHub](https://img.shields.io/badge/GitHub-Integrated-181717?style=flat-square&logo=github&logoColor=white)](https://cli.github.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
+# MultiClaude 
+
+[![Electron 33](https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/) [![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![xterm.js](https://img.shields.io/badge/xterm.js-Terminal-2C2C32?style=flat-square&logo=gnubash&logoColor=white)](https://xtermjs.org/) [![GitHub](https://img.shields.io/badge/GitHub-Integrated-181717?style=flat-square&logo=github&logoColor=white)](https://cli.github.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
 
 **MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
 
