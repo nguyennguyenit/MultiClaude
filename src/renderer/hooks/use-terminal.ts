@@ -6,7 +6,14 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
-import { createUserScrollIntent, isViewportNearBottom, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD, type UserScrollIntent } from '../utils/terminal-scroll-utils'
+import {
+  createUserScrollIntent,
+  isPointerOnViewportScrollbar,
+  isViewportNearBottom,
+  resolveViewportRestoreTarget,
+  TERMINAL_SCROLL_THRESHOLD,
+  type UserScrollIntent
+} from '../utils/terminal-scroll-utils'
 
 // Terminal timing constants (ms)
 const TERMINAL_INIT_DELAY = 50  // Delay for WebGL addon & fit after terminal.open()
@@ -116,6 +123,7 @@ export function useTerminal({
   const pendingWriteViewportSnapshotRef = useRef<PendingWriteViewportSnapshot | null>(null)
   const userViewportInteractingRef = useRef(false)  // Track wheel/drag interaction so manual scroll wins during streaming
   const pendingUserScrollIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve manual scroll changes that happen mid-write
+  const followOutputOnNextWriteRef = useRef(false)  // Local input should pull the next output back to the live cursor
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
@@ -273,6 +281,23 @@ export function useTerminal({
     }, durationMs)
   }, [])
 
+  const followLiveOutput = useCallback(() => {
+    followOutputOnNextWriteRef.current = true
+    pendingUserScrollIntentRef.current = null
+    clearUserViewportInteraction()
+
+    const terminal = terminalRef.current
+    if (!terminal || disposedRef.current) return
+
+    terminal.scrollToBottom()
+
+    const buffer = terminal.buffer.active
+    isAtBottomRef.current = true
+    setIsAtBottom(true)
+    setHasScrollback(buffer.baseY > 0)
+    savedViewportYRef.current = buffer.viewportY
+  }, [clearUserViewportInteraction])
+
   const initTerminal = useCallback(() => {
     if (disposedRef.current) return
     if (!containerRef.current || terminalRef.current) return
@@ -331,6 +356,10 @@ export function useTerminal({
         TERMINAL_SCROLL_THRESHOLD
       )
 
+      if (captureUserIntent) {
+        followOutputOnNextWriteRef.current = atBottom
+      }
+
       if (pendingWriteCountRef.current > 0 && !captureUserIntent) return
 
       if (pendingWriteCountRef.current > 0 && captureUserIntent) {
@@ -352,7 +381,7 @@ export function useTerminal({
     scrollDisposableRef.current = terminal.onScroll(() => syncScrollPosition(false))
 
     // Also listen for viewport wheel/drag events so manual scroll changes can win while output streams.
-    const viewportElement = terminal.element?.querySelector('.xterm-viewport')
+    const viewportElement = terminal.element?.querySelector('.xterm-viewport') as HTMLElement | null
     if (viewportElement) {
       const viewportListeners: ViewportEventListener[] = []
       const addViewportListener = (target: EventTarget, type: string, handler: EventListener) => {
@@ -362,7 +391,19 @@ export function useTerminal({
 
       addViewportListener(viewportElement, 'scroll', () => syncScrollPosition(userViewportInteractingRef.current))
       addViewportListener(viewportElement, 'wheel', () => markUserViewportInteraction(USER_SCROLL_WHEEL_GRACE))
-      addViewportListener(viewportElement, 'pointerdown', () => markUserViewportInteraction(USER_SCROLL_DRAG_GRACE))
+      addViewportListener(viewportElement, 'pointerdown', (event) => {
+        if (!(event instanceof PointerEvent)) return
+        if (!isPointerOnViewportScrollbar({
+          clientX: event.clientX,
+          viewportClientWidth: viewportElement.clientWidth,
+          viewportOffsetWidth: viewportElement.offsetWidth,
+          viewportRight: viewportElement.getBoundingClientRect().right
+        })) {
+          return
+        }
+
+        markUserViewportInteraction(USER_SCROLL_DRAG_GRACE)
+      })
       addViewportListener(window, 'pointerup', clearUserViewportInteraction)
       addViewportListener(window, 'pointercancel', clearUserViewportInteraction)
       addViewportListener(viewportElement, 'touchstart', () => markUserViewportInteraction(USER_SCROLL_DRAG_GRACE))
@@ -448,7 +489,10 @@ export function useTerminal({
       try {
         const text = await navigator.clipboard.readText()
         // Write directly to PTY to avoid duplicate from terminal.paste()
-        if (text) window.electron.terminal.write(terminalId, text)
+        if (text) {
+          followLiveOutput()
+          window.electron.terminal.write(terminalId, text)
+        }
       } catch {
         // Clipboard permission denied - ignore silently
       }
@@ -492,6 +536,7 @@ export function useTerminal({
 
               const filePath = await window.electron.clipboard.saveImage(base64Data)
               if (filePath) {
+                followLiveOutput()
                 // Track image in store for hover preview
                 useImageStore.getState().addImage(terminalId, filePath)
                 const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
@@ -512,14 +557,20 @@ export function useTerminal({
             // Write directly to PTY - shell will echo back and display via onOutput
             // Do NOT use terminal.paste() as it writes to display AND triggers onData,
             // causing duplicate when PTY echoes back
-            if (text) window.electron.terminal.write(terminalId, text)
+            if (text) {
+              followLiveOutput()
+              window.electron.terminal.write(terminalId, text)
+            }
           } catch {
             // Clipboard permission denied
           }
         }
       }).catch(() => {
         navigator.clipboard.readText().then(text => {
-          if (text) window.electron.terminal.write(terminalId, text)
+          if (text) {
+            followLiveOutput()
+            window.electron.terminal.write(terminalId, text)
+          }
         }).catch(() => { })
       })
 
@@ -535,6 +586,8 @@ export function useTerminal({
     let imeDelDebt = 0
 
     terminal.onData((data) => {
+      followLiveOutput()
+
       // Single DEL: swallow if debt > 0 (extra DEL from IME NFD mismatch)
       if (data === '\x7f') {
         if (imeDelDebt > 0) {
@@ -574,7 +627,8 @@ export function useTerminal({
     attachContextLostListener,
     syncFontAfterLoad,
     clearUserViewportInteraction,
-    markUserViewportInteraction
+    markUserViewportInteraction,
+    followLiveOutput
   ])
 
   // Write data to terminal with auto cursor restore and smart scroll
@@ -608,10 +662,12 @@ export function useTerminal({
       pendingWriteViewportSnapshotRef.current = null
 
       const restoreTarget = resolveViewportRestoreTarget({
+        forceStickToBottom: followOutputOnNextWriteRef.current,
         wasAtBottom: pendingWriteViewportSnapshot?.wasAtBottom ?? true,
         savedViewportY: pendingWriteViewportSnapshot?.savedViewportY ?? terminal.buffer.active.viewportY,
         pendingUserScrollIntent: pendingUserScrollIntentRef.current
       })
+      followOutputOnNextWriteRef.current = false
       pendingUserScrollIntentRef.current = null
 
       if (restoreTarget === 'bottom') {
@@ -766,6 +822,7 @@ export function useTerminal({
       pendingWriteCountRef.current = 0
       pendingWriteViewportSnapshotRef.current = null
       pendingUserScrollIntentRef.current = null
+      followOutputOnNextWriteRef.current = false
       clearUserViewportInteraction()
 
       // Clear pending refresh

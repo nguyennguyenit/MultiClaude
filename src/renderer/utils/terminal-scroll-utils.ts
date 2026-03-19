@@ -7,6 +7,23 @@ export interface UserScrollIntent {
 
 export type ViewportRestoreTarget = number | 'bottom' | null
 
+export function isPointerOnViewportScrollbar({
+  clientX,
+  viewportClientWidth,
+  viewportOffsetWidth,
+  viewportRight
+}: {
+  clientX: number
+  viewportClientWidth: number
+  viewportOffsetWidth: number
+  viewportRight: number
+}): boolean {
+  const scrollbarWidth = viewportOffsetWidth - viewportClientWidth
+  if (scrollbarWidth <= 0) return false
+
+  return clientX >= viewportRight - scrollbarWidth
+}
+
 export function isViewportNearBottom(
   baseY: number,
   viewportY: number,
@@ -26,14 +43,20 @@ export function createUserScrollIntent(
 }
 
 export function resolveViewportRestoreTarget({
+  forceStickToBottom = false,
   wasAtBottom,
   savedViewportY,
   pendingUserScrollIntent
 }: {
+  forceStickToBottom?: boolean
   wasAtBottom: boolean
   savedViewportY: number
   pendingUserScrollIntent: UserScrollIntent | null
 }): ViewportRestoreTarget {
+  if (forceStickToBottom) {
+    return 'bottom'
+  }
+
   if (pendingUserScrollIntent) {
     return pendingUserScrollIntent.stickToBottom ? 'bottom' : pendingUserScrollIntent.viewportY
   }
