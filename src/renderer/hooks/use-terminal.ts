@@ -793,6 +793,11 @@ export function useTerminal({
     terminalRef.current?.clear()
   }, [])
 
+  // Scroll terminal to the first line in the scrollback buffer.
+  const scrollToTop = useCallback(() => {
+    terminalRef.current?.scrollToLine(0)
+  }, [])
+
   // Scroll terminal to bottom (for UI button)
   const scrollToBottom = useCallback(() => {
     terminalRef.current?.scrollToBottom()
@@ -1207,6 +1212,7 @@ export function useTerminal({
     blur,
     showCursor,
     clear,
+    scrollToTop,
     scrollToBottom,
     isAtBottom,
     hasScrollback,

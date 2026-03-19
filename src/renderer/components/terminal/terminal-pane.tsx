@@ -147,6 +147,16 @@ export const TerminalPane = memo(function TerminalPane({
     terminalRefreshRef.current?.refresh()
   }, [])
 
+  const handleScrollToTopClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    terminalRefreshRef.current?.scrollToTop()
+  }, [])
+
+  const handleScrollToBottomClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    terminalRefreshRef.current?.scrollToBottom()
+  }, [])
+
   const commitTitle = useCallback(() => {
     setIsEditing(false)
     if (editTitle !== title) {
@@ -168,89 +178,118 @@ export const TerminalPane = memo(function TerminalPane({
           {/* Claude mode badge */}
           {isClaudeMode && <span className="pane-tab-claude">AI</span>}
 
-          {/* Title - editable on double-click */}
-          {isEditing ? (
-            <input
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitTitle()
-                else if (e.key === 'Escape') {
-                  setEditTitle(title)
-                  setIsEditing(false)
-                }
-                e.stopPropagation()
-              }}
-              onClick={(e) => e.stopPropagation()}
-              autoFocus
-              className="pane-tab-name"
-              style={{ cursor: 'text' }}
-            />
-          ) : (
-            <span
-              className="pane-tab-name"
-              onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
-              title="Double-click to rename"
-            >
-              {title}
-            </span>
-          )}
+          <div className="pane-tab-title-group">
+            {/* Title - editable on double-click */}
+            {isEditing ? (
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitTitle()
+                  else if (e.key === 'Escape') {
+                    setEditTitle(title)
+                    setIsEditing(false)
+                  }
+                  e.stopPropagation()
+                }}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+                className="pane-tab-name pane-tab-name-input"
+                style={{ cursor: 'text' }}
+              />
+            ) : (
+              <span
+                className="pane-tab-name"
+                onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                title="Double-click to rename"
+              >
+                {title}
+              </span>
+            )}
 
-          {/* Rename terminal button */}
-          {!isEditing && (
+            {/* Rename terminal button */}
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                className="pane-tab-action"
+                title="Rename terminal"
+                aria-label="Rename terminal"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <div className="pane-tab-actions">
+            {/* Scroll buttons */}
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+              onClick={handleScrollToTopClick}
               className="pane-tab-action"
-              title="Rename terminal"
-              aria-label="Rename terminal"
+              title="Scroll to top"
+              aria-label="Scroll to top"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 15l-6-6-6 6" />
               </svg>
             </button>
-          )}
 
-          {/* Insert file path button */}
-          <button
-            type="button"
-            onClick={handleInsertFilePath}
-            className="pane-tab-action"
-            title="Insert file path (Ctrl+Shift+I)"
-            aria-label="Insert file path"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </button>
+            <button
+              type="button"
+              onClick={handleScrollToBottomClick}
+              className="pane-tab-action"
+              title="Scroll to bottom"
+              aria-label="Scroll to bottom"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
 
-          {/* Refresh terminal display button */}
-          <button
-            type="button"
-            onClick={handleRefreshClick}
-            className="pane-tab-action"
-            title="Refresh terminal display"
-            aria-label="Refresh terminal display"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
+            {/* Insert file path button */}
+            <button
+              type="button"
+              onClick={handleInsertFilePath}
+              className="pane-tab-action"
+              title="Insert file path (Ctrl+Shift+I)"
+              aria-label="Insert file path"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </button>
 
-          {/* Close button */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onClose() }}
-            className="pane-tab-close"
-            title="Close terminal"
-            aria-label="Close terminal"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            {/* Refresh terminal display button */}
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              className="pane-tab-action"
+              title="Refresh terminal display"
+              aria-label="Refresh terminal display"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClose() }}
+              className="pane-tab-close"
+              title="Close terminal"
+              aria-label="Close terminal"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
