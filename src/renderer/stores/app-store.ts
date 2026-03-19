@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState } from '@shared/types'
 import { DEFAULT_ACTIVITY_BAR_STATE, TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
+import type { TerminalKeyboardEnhancementState } from '../utils/keyboard-enhancement-utils'
 
 export type ActiveView = 'terminals' | 'github'
 
@@ -19,6 +20,7 @@ interface AppState {
   // Terminals
   terminals: Terminal[]
   terminalOutputs: Record<string, string>
+  terminalKeyboardEnhancements: Record<string, TerminalKeyboardEnhancementState>
   activeTerminalId: string | null
   lastActiveTerminalByProjectId: Record<string, string>
   addTerminal: (terminal: Terminal) => void
@@ -27,6 +29,8 @@ interface AppState {
   updateTerminalTitle: (id: string, title: string) => void
   getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void
+  getTerminalKeyboardEnhancement: (id: string) => TerminalKeyboardEnhancementState | null
+  setTerminalKeyboardEnhancement: (id: string, state: TerminalKeyboardEnhancementState) => void
 
   // Projects
   projects: Project[]
@@ -54,6 +58,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Terminals
   terminals: [],
   terminalOutputs: {},
+  terminalKeyboardEnhancements: {},
   activeTerminalId: null,
   lastActiveTerminalByProjectId: {},
 
@@ -63,6 +68,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       terminalOutputs: {
         ...state.terminalOutputs,
         [terminal.id]: ''
+      },
+      terminalKeyboardEnhancements: {
+        ...state.terminalKeyboardEnhancements
       },
       activeTerminalId: terminal.id,
       lastActiveTerminalByProjectId: {
@@ -76,7 +84,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const removedTerminal = state.terminals.find((terminal) => terminal.id === id)
       const newTerminals = state.terminals.filter((t) => t.id !== id)
       const remainingOutputs = { ...state.terminalOutputs }
+      const remainingKeyboardEnhancements = { ...state.terminalKeyboardEnhancements }
       delete remainingOutputs[id]
+      delete remainingKeyboardEnhancements[id]
 
       const nextLastActiveTerminalByProjectId = { ...state.lastActiveTerminalByProjectId }
       if (removedTerminal) {
@@ -98,6 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         terminals: newTerminals,
         terminalOutputs: remainingOutputs,
+        terminalKeyboardEnhancements: remainingKeyboardEnhancements,
         activeTerminalId:
           state.activeTerminalId === id
             ? activeProjectTerminalIds[activeProjectTerminalIds.length - 1]
@@ -147,6 +158,16 @@ export const useAppStore = create<AppState>((set, get) => ({
             ? nextOutput.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
             : nextOutput
         })()
+      }
+    })),
+
+  getTerminalKeyboardEnhancement: (id) => get().terminalKeyboardEnhancements[id] ?? null,
+
+  setTerminalKeyboardEnhancement: (id, state) =>
+    set((store) => ({
+      terminalKeyboardEnhancements: {
+        ...store.terminalKeyboardEnhancements,
+        [id]: state
       }
     })),
 

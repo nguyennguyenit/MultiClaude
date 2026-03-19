@@ -312,12 +312,12 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onOutput(({ terminalId: id, data }) => {
       if (id === terminalId) {
-        write(data)
+        const visibleData = write(data)
         // Notify parent of output for streaming detection
         onOutput?.()
         // Skip appending during restore period to prevent duplicate prompts
-        if (!skipAppendRef.current) {
-          appendOutput(terminalId, data)
+        if (!skipAppendRef.current && visibleData) {
+          appendOutput(terminalId, visibleData)
         }
       }
     })

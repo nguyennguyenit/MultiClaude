@@ -3,9 +3,17 @@ import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { useSettingsStore, useToastStore, useImageStore } from '../stores'
+import { useSettingsStore, useToastStore, useImageStore, useAppStore } from '../stores'
 import { getTerminalTheme, isAllowedExternalUrl, TERMINAL_COLOR_PRESETS, TERMINAL_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
+import {
+  INITIAL_KEYBOARD_ENHANCEMENT_STATE,
+  getCsiUEnterSequence,
+  isTerminalKeyboardEnhancementEnabled,
+  isTerminalKeyboardEnhancementStateEqual,
+  processTerminalKeyboardEnhancementData,
+  type TerminalKeyboardEnhancementState
+} from '../utils/keyboard-enhancement-utils'
 import {
   createUserScrollIntent,
   isPointerOnViewportScrollbar,
@@ -138,6 +146,40 @@ export function useTerminal({
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const observedContainerSizeRef = useRef({ width: 0, height: 0 })
+  const keyboardEnhancementStateRef = useRef<TerminalKeyboardEnhancementState>(
+    useAppStore.getState().getTerminalKeyboardEnhancement(terminalId) ?? INITIAL_KEYBOARD_ENHANCEMENT_STATE
+  )
+
+  const syncKeyboardEnhancementState = useCallback((nextState: TerminalKeyboardEnhancementState) => {
+    if (isTerminalKeyboardEnhancementStateEqual(keyboardEnhancementStateRef.current, nextState)) {
+      return
+    }
+
+    keyboardEnhancementStateRef.current = nextState
+    useAppStore.getState().setTerminalKeyboardEnhancement(terminalId, nextState)
+  }, [terminalId])
+
+  const processKeyboardEnhancementOutput = useCallback((data: string) => {
+    const result = processTerminalKeyboardEnhancementData(data, keyboardEnhancementStateRef.current)
+
+    syncKeyboardEnhancementState(result.nextState)
+
+    for (const response of result.responses) {
+      window.electron.terminal.write(terminalId, response)
+    }
+
+    return result.visibleData
+  }, [syncKeyboardEnhancementState, terminalId])
+
+  const shouldSendEnhancedEnter = useCallback(() => {
+    if (isTerminalKeyboardEnhancementEnabled(keyboardEnhancementStateRef.current)) {
+      return true
+    }
+
+    return useAppStore.getState().terminals.some(
+      terminal => terminal.id === terminalId && terminal.isClaudeMode
+    )
+  }, [terminalId])
 
   // Helper to attach WebGL context lost listener via the public addon API.
   const attachContextLostListener = useCallback((addon: WebglAddon) => {
@@ -508,6 +550,21 @@ export function useTerminal({
 
       if (e.type !== 'keydown') return true
 
+      // Kitty-style keyboard enhancement lets CLIs distinguish Shift+Enter
+      // from plain Enter for multiline prompts.
+      if (
+        e.key === 'Enter' &&
+        shouldSendEnhancedEnter()
+      ) {
+        const sequence = getCsiUEnterSequence(e)
+        if (sequence) {
+          e.preventDefault()
+          followLiveOutput()
+          window.electron.terminal.write(terminalId, sequence)
+          return false
+        }
+      }
+
       // Ctrl+V paste - detect image in clipboard and save to temp file
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true
 
@@ -628,13 +685,17 @@ export function useTerminal({
     syncFontAfterLoad,
     clearUserViewportInteraction,
     markUserViewportInteraction,
-    followLiveOutput
+    followLiveOutput,
+    shouldSendEnhancedEnter
   ])
 
   // Write data to terminal with auto cursor restore and smart scroll
   const write = useCallback((data: string) => {
     const terminal = terminalRef.current
-    if (!terminal) return
+    if (!terminal) return ''
+
+    const visibleData = processKeyboardEnhancementOutput(data)
+    if (!visibleData) return ''
 
     // Save scroll state BEFORE write (xterm auto-scrolls on write)
     if (pendingWriteCountRef.current === 0) {
@@ -652,7 +713,7 @@ export function useTerminal({
     // Keep programmatic scroll tracking disabled until this write has fully flushed.
     pendingWriteCountRef.current += 1
 
-    terminal.write(data, () => {
+    terminal.write(visibleData, () => {
       pendingWriteCountRef.current = Math.max(0, pendingWriteCountRef.current - 1)
       const terminal = terminalRef.current
       if (!terminal) return
@@ -689,7 +750,8 @@ export function useTerminal({
 
     // NOTE: Removed auto cursor restore - it interferes with Claude Code CLI's cursor positioning
     // Claude Code manages its own cursor via escape sequences for status line rendering
-  }, [])
+    return visibleData
+  }, [processKeyboardEnhancementOutput])
 
   // Fit terminal to container (with safety check for initialization)
   const fit = useCallback(() => {

@@ -41,6 +41,20 @@ describe('useAppStore terminal output buffering', () => {
     expect(useAppStore.getState().getTerminalOutput('term-1')).toBe('')
   })
 
+  it('clears keyboard enhancement state when removing a terminal', () => {
+    useAppStore.getState().addTerminal(makeTerminal())
+    useAppStore.getState().setTerminalKeyboardEnhancement('term-1', {
+      supported: true,
+      flags: 9,
+      stack: [0],
+      pendingSequence: ''
+    })
+
+    useAppStore.getState().removeTerminal('term-1')
+
+    expect(useAppStore.getState().getTerminalKeyboardEnhancement('term-1')).toBeNull()
+  })
+
   it('trims buffered output to the configured limit', () => {
     useAppStore.getState().addTerminal(makeTerminal())
 
