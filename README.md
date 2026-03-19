@@ -141,7 +141,7 @@ src/
 | Switch to Project 1-9 | Alt+1 to Alt+9 |
 | New Terminal | Ctrl+N or Ctrl+T |
 | Close Active Terminal | Ctrl+W |
-| Open URL | Ctrl+Click link (Cmd+Click on macOS) |
+| Open URL | Click link |
 | Copy | Select text (auto-copies) |
 | Paste | Right-click or Ctrl+V |
 | Paste Image | Ctrl+V (clipboard image > temp file > insert path) |
