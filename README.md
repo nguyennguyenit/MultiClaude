@@ -13,15 +13,11 @@
     <a href="https://cli.github.com/"><img src="https://img.shields.io/badge/GitHub-Integrated-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub Integrated" /></a>
     <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT" /></a>
   </p>
-
-  <p>
-    <strong>MultiClaude</strong> is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
-  </p>
-
-  <p>
-    Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, and repo operations than a raw shell setup.
-  </p>
 </div>
+
+**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+
+Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, and repo operations than a raw shell setup.
 
 ## What Makes It Different
 
