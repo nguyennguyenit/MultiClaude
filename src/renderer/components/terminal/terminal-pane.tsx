@@ -1,13 +1,12 @@
-import { useEffect, useRef, useCallback, memo, useState } from 'react'
+import { useEffect, useRef, useCallback, memo, useState, useMemo } from 'react'
 import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
 import { useFileDrop } from '../../hooks/use-file-drop'
-import { useAppStore } from '../../stores'
 import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
+import { useAppStore } from '../../stores'
 
 // Streaming detection constants
 const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
 const STREAMING_FIT_DELAY = 500       // ms - delay fit during streaming to avoid reflow duplicates
-const HARD_REFRESH_DELAY = 140        // ms - let soft refresh run before rebuilding terminal view
 
 interface TerminalPaneProps {
   terminalId: string
@@ -39,13 +38,13 @@ export const TerminalPane = memo(function TerminalPane({
   const resizeTimeoutRef = useRef<number | undefined>(undefined)
   const terminalFitRef = useRef<(() => void) | null>(null)
   const terminalRefreshRef = useRef<TerminalRefreshHandle | null>(null)
-  const hardRefreshTimeoutRef = useRef<number | undefined>(undefined)
   const lastOutputTimeRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
-  const [terminalViewKey, setTerminalViewKey] = useState(0)
-  const [restoreOutput, setRestoreOutput] = useState(initialOutput)
-  const [initialViewportY, setInitialViewportY] = useState<number | null>(null)
+  const restoredInitialOutput = useMemo(
+    () => initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId),
+    [initialOutput, terminalId]
+  )
 
   // Sync editTitle when title prop changes externally
   useEffect(() => {
@@ -140,33 +139,23 @@ export const TerminalPane = memo(function TerminalPane({
     return () => {
       resizeObserver.disconnect()
       if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
-      if (hardRefreshTimeoutRef.current) clearTimeout(hardRefreshTimeoutRef.current)
     }
   }, [])
 
   const handleRefreshClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-
-    const viewportSnapshot = terminalRefreshRef.current?.getViewportSnapshot()
-    setRestoreOutput(useAppStore.getState().getTerminalOutput(terminalId) || undefined)
-    setInitialViewportY(
-      viewportSnapshot && !viewportSnapshot.isAtBottom
-        ? viewportSnapshot.viewportY
-        : null
-    )
-
     terminalRefreshRef.current?.refresh()
+  }, [])
 
-    if (hardRefreshTimeoutRef.current) {
-      clearTimeout(hardRefreshTimeoutRef.current)
-    }
+  const handleScrollToTopClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    terminalRefreshRef.current?.scrollToTop()
+  }, [])
 
-    // Force a full xterm remount so broken viewport/canvas state can rebuild from scratch.
-    hardRefreshTimeoutRef.current = window.setTimeout(() => {
-      hardRefreshTimeoutRef.current = undefined
-      setTerminalViewKey((currentKey) => currentKey + 1)
-    }, HARD_REFRESH_DELAY)
-  }, [terminalId])
+  const handleScrollToBottomClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    terminalRefreshRef.current?.scrollToBottom()
+  }, [])
 
   const commitTitle = useCallback(() => {
     setIsEditing(false)
@@ -189,103 +178,130 @@ export const TerminalPane = memo(function TerminalPane({
           {/* Claude mode badge */}
           {isClaudeMode && <span className="pane-tab-claude">AI</span>}
 
-          {/* Title - editable on double-click */}
-          {isEditing ? (
-            <input
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitTitle()
-                else if (e.key === 'Escape') {
-                  setEditTitle(title)
-                  setIsEditing(false)
-                }
-                e.stopPropagation()
-              }}
-              onClick={(e) => e.stopPropagation()}
-              autoFocus
-              className="pane-tab-name"
-              style={{ cursor: 'text' }}
-            />
-          ) : (
-            <span
-              className="pane-tab-name"
-              onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
-              title="Double-click to rename"
-            >
-              {title}
-            </span>
-          )}
+          <div className="pane-tab-title-group">
+            {/* Title - editable on double-click */}
+            {isEditing ? (
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitTitle()
+                  else if (e.key === 'Escape') {
+                    setEditTitle(title)
+                    setIsEditing(false)
+                  }
+                  e.stopPropagation()
+                }}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+                className="pane-tab-name pane-tab-name-input"
+                style={{ cursor: 'text' }}
+              />
+            ) : (
+              <span
+                className="pane-tab-name"
+                onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                title="Double-click to rename"
+              >
+                {title}
+              </span>
+            )}
 
-          {/* Rename terminal button */}
-          {!isEditing && (
+            {/* Rename terminal button */}
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                className="pane-tab-action"
+                title="Rename terminal"
+                aria-label="Rename terminal"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <div className="pane-tab-actions">
+            {/* Scroll buttons */}
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+              onClick={handleScrollToTopClick}
               className="pane-tab-action"
-              title="Rename terminal"
-              aria-label="Rename terminal"
+              title="Scroll to top"
+              aria-label="Scroll to top"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 15l-6-6-6 6" />
               </svg>
             </button>
-          )}
 
-          {/* Insert file path button */}
-          <button
-            type="button"
-            onClick={handleInsertFilePath}
-            className="pane-tab-action"
-            title="Insert file path (Ctrl+Shift+I)"
-            aria-label="Insert file path"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </button>
+            <button
+              type="button"
+              onClick={handleScrollToBottomClick}
+              className="pane-tab-action"
+              title="Scroll to bottom"
+              aria-label="Scroll to bottom"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
 
-          {/* Refresh terminal display button */}
-          <button
-            type="button"
-            onClick={handleRefreshClick}
-            className="pane-tab-action"
-            title="Refresh terminal display"
-            aria-label="Refresh terminal display"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
+            {/* Insert file path button */}
+            <button
+              type="button"
+              onClick={handleInsertFilePath}
+              className="pane-tab-action"
+              title="Insert file path (Ctrl+Shift+I)"
+              aria-label="Insert file path"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </button>
 
-          {/* Close button */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onClose() }}
-            className="pane-tab-close"
-            title="Close terminal"
-            aria-label="Close terminal"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            {/* Refresh terminal display button */}
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              className="pane-tab-action"
+              title="Refresh terminal display"
+              aria-label="Refresh terminal display"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClose() }}
+              className="pane-tab-close"
+              title="Close terminal"
+              aria-label="Close terminal"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Terminal content - takes remaining space */}
       <div style={{ flex: 1, minHeight: 0 }}>
         <TerminalView
-          key={`${terminalId}-${terminalViewKey}`}
           terminalId={terminalId}
           isActive={isActive}
           isDropTarget={isDragOver}
           hidden={hidden}
           onInputActivity={onActivate}
-          initialOutput={restoreOutput}
-          initialViewportY={initialViewportY}
+          initialOutput={restoredInitialOutput}
           onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}
           onOutput={handleTerminalOutput}

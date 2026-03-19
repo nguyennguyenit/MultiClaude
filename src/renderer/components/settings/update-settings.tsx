@@ -6,13 +6,14 @@ const GITHUB_REPO = 'nguyennguyenit/MultiClaude'
 
 export function UpdateSettings() {
   const { state, loadState, checkForUpdates, downloadUpdate, installUpdate } = useUpdateStore()
-  const { status, currentVersion, latestVersion, releaseNotes, downloadProgress, error } = state
+  const { status, currentVersion, latestVersion, releaseNotes, downloadProgress, error, installMode } = state
 
   useEffect(() => {
     loadState()
   }, [loadState])
 
   const hasUpdate = status === 'available' || status === 'downloading' || status === 'ready'
+  const isManualInstall = installMode === 'open-installer'
   const releaseUrl = latestVersion
     ? `https://github.com/${GITHUB_REPO}/releases/tag/v${latestVersion}`
     : `https://github.com/${GITHUB_REPO}/releases`
@@ -70,7 +71,12 @@ export function UpdateSettings() {
       {/* Actions */}
       <div className="settings-card rounded-xl flex flex-col gap-3">
         <p className="text-base font-semibold text-[var(--mc-text-primary)]">Update Actions</p>
-        <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">Check for and install the latest version</p>
+        <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">
+          {isManualInstall
+            ? 'Check for updates, download the macOS installer, then open it to finish installation.'
+            : 'Check for and install the latest version.'
+          }
+        </p>
 
         {/* Download Progress */}
         {status === 'downloading' && (
@@ -86,6 +92,12 @@ export function UpdateSettings() {
               />
             </div>
           </div>
+        )}
+
+        {status === 'ready' && isManualInstall && (
+          <p className="text-sm text-[var(--mc-text-muted)]">
+            MultiClaude will close and open the downloaded DMG so you can drag it into Applications.
+          </p>
         )}
 
         <div className="flex flex-wrap items-center gap-3">
@@ -119,7 +131,7 @@ export function UpdateSettings() {
                   className="px-4 py-2 text-sm rounded-md bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] hover:opacity-90 transition-opacity flex items-center gap-2"
                 >
                   <InstallIcon />
-                  Install and Restart
+                  {isManualInstall ? 'Install Update' : 'Install and Restart'}
                 </button>
               )}
             </>

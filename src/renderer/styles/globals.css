@@ -748,11 +748,27 @@ button, input, select, textarea, optgroup, option {
   flex-shrink: 0;
 }
 
+.pane-tab-title-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pane-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .pane-tab-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  flex: 0 1 auto;
+  max-width: 100%;
   min-width: 0;
   background: none;
   border: none;
@@ -762,6 +778,10 @@ button, input, select, textarea, optgroup, option {
   padding: 0;
   cursor: inherit;
   text-align: left;
+}
+
+.pane-tab-name-input {
+  flex: 1;
 }
 
 .pane-tab-name:focus {

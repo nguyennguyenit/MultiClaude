@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createUserScrollIntent, isViewportNearBottom, resolveViewportRestoreTarget, TERMINAL_SCROLL_THRESHOLD } from './terminal-scroll-utils'
+import {
+  createUserScrollIntent,
+  isPointerOnViewportScrollbar,
+  isViewportNearBottom,
+  resolveViewportRestoreTarget,
+  TERMINAL_SCROLL_THRESHOLD
+} from './terminal-scroll-utils'
 
 describe('terminal-scroll-utils', () => {
   it('treats viewports within the threshold as bottom-following', () => {
@@ -54,11 +60,48 @@ describe('terminal-scroll-utils', () => {
     })).toBe(40)
   })
 
+  it('forces bottom-follow mode after local input requests live output', () => {
+    expect(resolveViewportRestoreTarget({
+      forceStickToBottom: true,
+      wasAtBottom: false,
+      savedViewportY: 40,
+      pendingUserScrollIntent: {
+        viewportY: 12,
+        stickToBottom: false
+      }
+    })).toBe('bottom')
+  })
+
   it('does not force a restore when the terminal was already following output', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: true,
       savedViewportY: 40,
       pendingUserScrollIntent: null
     })).toBeNull()
+  })
+
+  it('only treats pointer presses on the viewport scrollbar as drag intent', () => {
+    expect(isPointerOnViewportScrollbar({
+      clientX: 396,
+      viewportClientWidth: 388,
+      viewportOffsetWidth: 400,
+      viewportRight: 400
+    })).toBe(true)
+
+    expect(isPointerOnViewportScrollbar({
+      clientX: 320,
+      viewportClientWidth: 388,
+      viewportOffsetWidth: 400,
+      viewportRight: 400
+    })).toBe(false)
+  })
+
+  it('does not infer scrollbar dragging when overlay scrollbars have no gutter', () => {
+    expect(isPointerOnViewportScrollbar({
+      clientX: 400,
+      viewportClientWidth: 400,
+      viewportOffsetWidth: 400,
+      viewportRight: 400
+    })).toBe(false)
   })
 })

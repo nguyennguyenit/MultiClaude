@@ -54,6 +54,8 @@ const scrollButtonWrapperStyle: CSSProperties = {
 
 export interface TerminalRefreshHandle {
   refresh: () => void
+  scrollToTop: () => void
+  scrollToBottom: () => void
   getViewportSnapshot: () => { viewportY: number | null; isAtBottom: boolean }
 }
 
@@ -85,7 +87,7 @@ export const TerminalView = memo(function TerminalView({
   onRefreshReady,
   onOutput
 }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, getViewportSnapshot, terminalRef } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef } = useTerminal({
     terminalId,
     initialOutput,
     initialViewportY,
@@ -312,12 +314,12 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onOutput(({ terminalId: id, data }) => {
       if (id === terminalId) {
-        write(data)
+        const visibleData = write(data)
         // Notify parent of output for streaming detection
         onOutput?.()
         // Skip appending during restore period to prevent duplicate prompts
-        if (!skipAppendRef.current) {
-          appendOutput(terminalId, data)
+        if (!skipAppendRef.current && visibleData) {
+          appendOutput(terminalId, visibleData)
         }
       }
     })
@@ -348,9 +350,11 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     onRefreshReady?.({
       refresh: () => refresh(),
+      scrollToTop,
+      scrollToBottom,
       getViewportSnapshot
     })
-  }, [refresh, getViewportSnapshot, onRefreshReady])
+  }, [refresh, scrollToTop, scrollToBottom, getViewportSnapshot, onRefreshReady])
 
   return (
     <div

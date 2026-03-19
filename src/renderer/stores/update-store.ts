@@ -16,7 +16,8 @@ const DEFAULT_STATE: UpdateState = {
   latestVersion: null,
   releaseNotes: null,
   downloadProgress: 0,
-  error: null
+  error: null,
+  installMode: 'auto-install'
 }
 
 export const useUpdateStore = create<UpdateStore>((set) => ({

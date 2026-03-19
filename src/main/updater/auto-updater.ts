@@ -1,16 +1,24 @@
 import { autoUpdater, UpdateInfo } from 'electron-updater'
 import { BrowserWindow, app } from 'electron'
+import { createWriteStream, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs'
+import { join } from 'path'
+import { Readable, Transform } from 'stream'
+import { pipeline } from 'stream/promises'
+import { spawn } from 'child_process'
 import type { UpdateState, UpdateStatus } from '@shared/types'
+import { getUpdateInstallMode, pickMacDmgAsset, type GitHubReleaseAsset } from './mac-installer'
 
 // Configure logging
 autoUpdater.logger = console
 autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.autoInstallOnAppQuit = process.platform !== 'darwin'
 // Enable prerelease updates when running a beta/alpha version
 autoUpdater.allowPrerelease = true
 
 let mainWindow: BrowserWindow | null = null
 let isDevMode = false
+const installMode = getUpdateInstallMode()
+const isMacOS = installMode === 'open-installer'
 
 // In-memory state
 let updateState: UpdateState = {
@@ -19,16 +27,22 @@ let updateState: UpdateState = {
   latestVersion: null,
   releaseNotes: null,
   downloadProgress: 0,
-  error: null
+  error: null,
+  installMode
 }
 
-// Release notes cache (24hr TTL)
-interface ReleaseNotesCache {
-  version: string
+interface ReleaseMetadata {
   notes: string
+  dmgAsset: GitHubReleaseAsset | null
+}
+
+// Release metadata cache (24hr TTL)
+interface ReleaseMetadataCache extends ReleaseMetadata {
+  version: string
   timestamp: number
 }
-let releaseNotesCache: ReleaseNotesCache | null = null
+let releaseMetadataCache: ReleaseMetadataCache | null = null
+let downloadedMacInstallerPath: string | null = null
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
 
 function setStatus(status: UpdateStatus, extra?: Partial<UpdateState>) {
@@ -46,12 +60,19 @@ export function getUpdateState(): UpdateState {
   return { ...updateState, currentVersion: app.getVersion() }
 }
 
-async function fetchReleaseNotes(version: string): Promise<string> {
+function clearPendingMacInstaller() {
+  downloadedMacInstallerPath = null
+}
+
+async function fetchReleaseMetadata(version: string): Promise<ReleaseMetadata> {
   // Check cache
-  if (releaseNotesCache &&
-      releaseNotesCache.version === version &&
-      Date.now() - releaseNotesCache.timestamp < CACHE_TTL) {
-    return releaseNotesCache.notes
+  if (releaseMetadataCache &&
+      releaseMetadataCache.version === version &&
+      Date.now() - releaseMetadataCache.timestamp < CACHE_TTL) {
+    return {
+      notes: releaseMetadataCache.notes,
+      dmgAsset: releaseMetadataCache.dmgAsset
+    }
   }
 
   try {
@@ -61,19 +82,148 @@ async function fetchReleaseNotes(version: string): Promise<string> {
     })
 
     if (!res.ok) {
-      return 'No release notes available.'
+      return {
+        notes: 'No release notes available.',
+        dmgAsset: null
+      }
     }
 
-    const data = await res.json()
+    const data = await res.json() as {
+      body?: string
+      assets?: Array<{
+        name?: string
+        browser_download_url?: string
+        size?: number
+      }>
+    }
     const notes = data.body || 'No release notes available.'
+    const assets = Array.isArray(data.assets)
+      ? data.assets
+        .filter((asset): asset is Required<Pick<GitHubReleaseAsset, 'name' | 'browser_download_url'>> & Pick<GitHubReleaseAsset, 'size'> =>
+          typeof asset.name === 'string' && typeof asset.browser_download_url === 'string')
+        .map(asset => ({
+          name: asset.name,
+          browser_download_url: asset.browser_download_url,
+          size: typeof asset.size === 'number' ? asset.size : undefined
+        }))
+      : []
+    const dmgAsset = pickMacDmgAsset(assets)
 
     // Cache result
-    releaseNotesCache = { version, notes, timestamp: Date.now() }
+    releaseMetadataCache = {
+      version,
+      notes,
+      dmgAsset,
+      timestamp: Date.now()
+    }
 
-    return notes
+    return { notes, dmgAsset }
   } catch {
-    return 'Failed to fetch release notes.'
+    return {
+      notes: 'Failed to fetch release notes.',
+      dmgAsset: null
+    }
   }
+}
+
+async function downloadMacInstaller(version: string): Promise<void> {
+  const { dmgAsset } = await fetchReleaseMetadata(version)
+
+  if (!dmgAsset) {
+    throw new Error('No macOS DMG installer found for this release. Please download it manually from GitHub Releases.')
+  }
+
+  clearPendingMacInstaller()
+
+  const installersDir = join(app.getPath('userData'), 'updates')
+  const installerPath = join(installersDir, dmgAsset.name)
+  const tempInstallerPath = `${installerPath}.download`
+  mkdirSync(installersDir, { recursive: true })
+
+  try {
+    unlinkSync(tempInstallerPath)
+  } catch {
+    // Ignore stale temp files from previous attempts.
+  }
+
+  const response = await fetch(dmgAsset.browser_download_url, {
+    headers: { 'User-Agent': 'MultiClaude-Updater' }
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download macOS installer (${response.status} ${response.statusText})`)
+  }
+
+  const totalBytes = Number(response.headers.get('content-length') ?? dmgAsset.size ?? 0)
+  let downloadedBytes = 0
+  let lastProgress = 0
+
+  const progressStream = new Transform({
+    transform(chunk, _encoding, callback) {
+      const chunkSize = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk)
+      downloadedBytes += chunkSize
+
+      if (totalBytes > 0) {
+        const progress = Math.max(1, Math.min(99, Math.round((downloadedBytes / totalBytes) * 100)))
+        if (progress !== lastProgress) {
+          lastProgress = progress
+          setStatus('downloading', { downloadProgress: progress })
+        }
+      }
+
+      callback(null, chunk)
+    }
+  })
+
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+      progressStream,
+      createWriteStream(tempInstallerPath)
+    )
+
+    if (existsSync(installerPath)) {
+      unlinkSync(installerPath)
+    }
+
+    renameSync(tempInstallerPath, installerPath)
+    downloadedMacInstallerPath = installerPath
+    setStatus('ready', { downloadProgress: 100, error: null })
+  } catch (error) {
+    clearPendingMacInstaller()
+    try {
+      unlinkSync(tempInstallerPath)
+    } catch {
+      // Ignore failed temp cleanup.
+    }
+    throw error
+  }
+}
+
+function installMacUpdate(): void {
+  if (!downloadedMacInstallerPath || !existsSync(downloadedMacInstallerPath)) {
+    clearPendingMacInstaller()
+    setStatus('error', {
+      error: 'Downloaded macOS installer not found. Please download the update again.'
+    })
+    return
+  }
+
+  const installerPath = downloadedMacInstallerPath
+
+  app.once('will-quit', () => {
+    try {
+      const opener = spawn('/usr/bin/open', [installerPath], {
+        detached: true,
+        stdio: 'ignore'
+      })
+      opener.unref()
+    } catch (error) {
+      console.error('[AutoUpdater] Failed to open macOS installer:', error)
+    }
+  })
+
+  app.quit()
 }
 
 async function checkWithRetry(retries: number, delayMs: number) {
@@ -106,22 +256,31 @@ export function initAutoUpdater(window: BrowserWindow) {
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for updates...')
-    setStatus('checking', { error: null })
+    clearPendingMacInstaller()
+    setStatus('checking', { error: null, downloadProgress: 0 })
   })
 
   autoUpdater.on('update-available', async (info: UpdateInfo) => {
     console.log('[AutoUpdater] Update available:', info.version)
-    const notes = await fetchReleaseNotes(info.version)
+    clearPendingMacInstaller()
+    const { notes } = await fetchReleaseMetadata(info.version)
     setStatus('available', {
       latestVersion: info.version,
       releaseNotes: notes,
-      error: null
+      error: null,
+      downloadProgress: 0
     })
   })
 
   autoUpdater.on('update-not-available', () => {
     console.log('[AutoUpdater] No updates available')
-    setStatus('up-to-date', { error: null })
+    clearPendingMacInstaller()
+    setStatus('up-to-date', {
+      latestVersion: null,
+      releaseNotes: null,
+      downloadProgress: 0,
+      error: null
+    })
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -187,10 +346,33 @@ export async function checkForUpdatesManually(): Promise<UpdateState> {
 
 export async function downloadUpdate(): Promise<void> {
   setStatus('downloading', { downloadProgress: 0 })
+
+  if (isMacOS) {
+    if (!updateState.latestVersion) {
+      setStatus('error', { error: 'Please check for updates again before downloading.' })
+      return
+    }
+
+    try {
+      await downloadMacInstaller(updateState.latestVersion)
+    } catch (error) {
+      setStatus('error', {
+        error: (error as Error).message || 'Failed to download macOS installer.'
+      })
+      throw error
+    }
+    return
+  }
+
   await autoUpdater.downloadUpdate()
 }
 
 export function installUpdate(): void {
+  if (isMacOS) {
+    installMacUpdate()
+    return
+  }
+
   // quitAndInstall closes all windows (triggering window-all-closed cleanup),
   // then installs the update. isSilent=false surfaces code signature errors
   // via the autoUpdater 'error' event instead of failing silently.
