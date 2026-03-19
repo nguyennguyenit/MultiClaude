@@ -1,6 +1,42 @@
-# MultiClaude
+<p align="center">
+  <img src="./build/icon.png" alt="MultiClaude" width="120" />
+</p>
 
-Multi-agent terminal manager for Claude Code. Run multiple Claude Code instances simultaneously, manage projects, and integrate with Git/GitHub.
+# MultiClaude [![Electron 33](https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/) [![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![xterm.js](https://img.shields.io/badge/xterm.js-Terminal-2C2C32?style=flat-square&logo=gnubash&logoColor=white)](https://xtermjs.org/) [![GitHub](https://img.shields.io/badge/GitHub-Integrated-181717?style=flat-square&logo=github&logoColor=white)](https://cli.github.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
+
+**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+
+Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, and repo operations than a raw shell setup.
+
+## What Makes It Different
+
+- **Parallel Claude Code Workspaces**: Run up to 12 Claude Code terminals in one window with an auto-split grid that scales from focused single-terminal work to broad multi-agent runs.
+- **Project-Scoped Persistence**: Each project keeps its own terminal layout, active sessions, and window state so context survives app restarts and repo switching.
+- **Git + GitHub Inside the App**: Visual git status, staging, branches, stash, history, GitHub auth via `gh`, remote repo creation, plus issue and pull request views.
+- **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks.
+- **Desktop-First Terminal UX**: Native PTY terminals with configurable WebGL modes, drag-and-drop file paths, clipboard image path insertion, WSL-aware shell handling, and global shortcuts.
+- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 10 themes, and light/dark/system appearance without requiring a backend service.
+
+## Ecosystem
+
+**Workflow Fit:**
+
+| Tool | Best for | Persistent project layouts | Built-in Git panel | GitHub view | Notifications | Desktop UI |
+|------|----------|----------------------------|--------------------|-------------|---------------|------------|
+| Claude Code CLI | One repo, one terminal, raw speed | - | - | - | - | - |
+| tmux / terminal splits | Power-user terminal multiplexing | Manual | - | - | - | - |
+| MultiClaude | Parallel Claude workflows across multiple repos | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+**Feature Matrix:**
+
+| Capability | Claude Code CLI | tmux / terminal splits | MultiClaude |
+|------------|-----------------|------------------------|-------------|
+| Run many Claude sessions in one workspace | Manual | ✅ | ✅ |
+| Per-project terminal layout persistence | - | Manual | ✅ |
+| Visual Git status, staging, branches, stash | - | - | ✅ |
+| GitHub auth, repo creation, issues, PRs | - | - | ✅ |
+| Native OS, Telegram, Discord notifications | - | - | ✅ |
+| Cross-platform packaged desktop app | - | - | ✅ |
 
 ## Download
 
@@ -17,17 +53,6 @@ Get the latest version from [GitHub Releases](https://github.com/nguyennguyenit/
 - **macOS**: Run `xattr -cr /Applications/MultiClaude.app` in Terminal to remove quarantine, then open the app
 - **Windows**: Click "More info" > "Run anyway" (for SmartScreen warning)
 - **Linux AppImage**: Make executable with `chmod +x MultiClaude-*.AppImage`
-
-## Features
-
-- **Multi-Agent Terminals**: Up to 12 terminals in auto-split grid layout
-- **Project Management**: Per-project terminal layouts with session persistence
-- **Git Integration**: Visual git panel with staging, commits, branches, stash, history
-- **GitHub Integration**: Login via gh CLI, create repos, view issues/PRs
-- **Notifications**: Task alerts via native OS, Telegram, or Discord
-- **Themes**: 7 color themes + light/dark/system mode
-- **Terminal Rendering**: Configurable WebGL modes (Performance/Balanced/Quality)
-- **Auto-Updates**: In-app updates with changelog display
 
 ## Quick Start
 
