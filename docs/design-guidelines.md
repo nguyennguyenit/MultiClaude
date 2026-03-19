@@ -2,7 +2,18 @@
 
 ## VibeTerminal Theme System
 
-MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and 5 curated dark themes.
+MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and dual theme systems.
+
+### Theme Systems (Two Distinct Concepts)
+
+**1. UI Color Themes** (app chrome: toolbar, panels, buttons, text)
+- 7 themes: Default, Dusk, Lime, Ocean, Retro, Neo, Forest
+- Light/Dark/System modes applied to each
+- Controls toolbar, panels, sidebar, UI elements
+
+**2. Terminal ANSI Palette Themes** (xterm.js colors only)
+- 5 curated color schemes: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
+- Applied to terminal output, text rendering, cursor colors
 
 ### Color Architecture
 
@@ -14,8 +25,8 @@ MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-
 
 **Theme Definitions** (in `src/shared/constants/themes.ts`):
 - VibeTheme interface includes UI colors + full ANSI 16-color palette for xterm
-- 5 themes: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
 - Themes applied dynamically in App.tsx via `setTheme(themeId)`
+- Both systems coexist: UI theme sets chrome, ANSI palette sets terminal colors
 
 ### Layout Architecture
 

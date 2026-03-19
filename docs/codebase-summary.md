@@ -69,6 +69,11 @@ MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop app
     - Clamps position to valid range: `Math.max(0, Math.min(newViewportY, baseY))`
   - **isAtBottom Tracking**: Preserved and restored to prevent smart scroll from overriding scroll position
   - **Thread Safety**: Render-phase save ensures capture before CSS `display:none` hides viewport
+- **Terminal Scroll Pinning During Streaming**: Auto-scroll to live output when Claude is active (v3.0.1-beta)
+  - Prevents user scroll hijacking during concurrent write operations
+  - Smart scroll guards against scroll loss during overlapping updates
+- **Sibling Terminal Close Restoration**: Restores output after closing adjacent terminals (v3.0.1-beta)
+  - Prevents blank display when closing terminals in same grid
 - **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
   - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
   - WebGL addon ref tracking with proper disposal order (addon before terminal)
@@ -127,10 +132,13 @@ MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop app
   - localStorage migration: One-time automatic migration of old data on first load
   - Optimized equality check: Field-by-field comparison instead of JSON.stringify
 - **SettingsPanel**: Tabbed settings UI (Appearance, Terminals, Notifications, Updates) with Save/Cancel buttons
-- **ThemeSelector**: VibeTheme picker with 5 curated dark themes
+- **ThemeSelector**: VibeTheme picker with dual systems:
+  - **UI Themes** (7 total): Default, Dusk, Lime, Ocean, Retro, Neo, Forest applied to app chrome
+  - **Terminal ANSI Palettes** (5 total): Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark applied to xterm colors
+- **ToggleSwitch**: Reusable settings control component for boolean toggles (NEW v3.0.1-beta)
+- **UpdateBanner**: Visual state management component for app updates (NEW v3.0.1-beta)
 - **VibeTerminal Theme System** (v1.2):
   - **VibeTheme Interface**: Unified theme with UI colors + full ANSI 16-color palette
-  - **5 Themes**: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
   - **CSS Variables**: `--bg-primary`, `--text-primary`, `--accent`, `--border`, `--hover`, `--tab-bg`, `--cursor`, `--selection-bg`, `--toolbar-height` (32px), `--panel-width` (340px)
   - **Dynamic Application**: Themes applied via `setTheme(themeId)` in App.tsx, CSS vars update in globals.css
   - **xterm Integration**: Theme colors passed to TerminalView for terminal color palette
@@ -183,6 +191,13 @@ MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop app
 - **Preload API**: Added `setActiveTerminal()` to ElectronAPI for renderer-to-main focus tracking
 - **Test Coverage**: 17 tests for FocusDetector, 14 tests for TaskTracker
 
+#### Vietnamese IME Support (NEW v3.0.1-beta)
+- **VietnamesePatcher**: Auto-detect and patch Claude CLI for Vietnamese IME support
+  - Auto-runs on app startup to detect issues with Claude CLI and Vietnamese input method
+  - Patches Claude CLI config if needed for proper IME handling
+  - Improves terminal input reliability for Vietnamese language users
+  - Main process module: `src/main/vietnamese-ime-patcher/`
+
 ## File Organization
 
 ```
@@ -204,6 +219,8 @@ src/
 │   ├── notification/        # Notification system
 │   │   ├── notification-manager.ts
 │   │   ├── secure-storage.ts
+│   ├── vietnamese-ime-patcher/  # Vietnamese IME support (NEW)
+│   │   └── vietnamese-ime-patcher.ts
 │   │   ├── pattern-detector.ts
 │   │   ├── focus-detector.ts        # Window/terminal focus tracking
 │   │   ├── task-tracker.ts          # Task ID deduplication with TTL
@@ -240,23 +257,33 @@ src/
 │   │   │   ├── terminal-action-bar.tsx
 │   │   │   ├── shell-selector-dropdown.tsx  # WSL/shell context menu
 │   │   │   └── index.ts
-│   │   ├── sidebar/         # Project/settings sidebar
-│   │   │   ├── sidebar.tsx
-│   │   │   ├── sidebar-header.tsx      # Logo + collapse toggle
-│   │   │   ├── navigation-item.tsx     # Navigation menu item
-│   │   │   └── user-account-card.tsx   # GitHub account card
-│   │   ├── project-tabs/    # Project tab bar
-│   │   │   ├── project-tabs.tsx
-│   │   │   └── index.ts
-│   │   └── settings/        # Settings panels
-│   │       ├── settings-panel.tsx
-│   │       ├── theme-selector.tsx
-│   │       ├── notification-settings.tsx
-│   │       ├── telegram-config-modal.tsx
-│   │       ├── discord-config-modal.tsx
-│   │       ├── update-settings.tsx      # In-app update management UI
-│   │       ├── settings-typography.tsx  # Shared typography (SettingsTitle, SettingsSubheading)
-│   │       └── index.ts
+│   ├── sidebar/         # Project/settings sidebar
+│   │   ├── sidebar.tsx
+│   │   ├── sidebar-header.tsx      # Logo + collapse toggle
+│   │   ├── navigation-item.tsx     # Navigation menu item
+│   │   └── user-account-card.tsx   # GitHub account card
+│   ├── project-tabs/    # Project tab bar
+│   │   ├── project-tabs.tsx
+│   │   └── index.ts
+│   ├── settings/        # Settings panels
+│   │   ├── settings-panel.tsx
+│   │   ├── theme-selector.tsx
+│   │   ├── toggle-switch.tsx       # Reusable boolean toggle control (NEW)
+│   │   ├── notification-settings.tsx
+│   │   ├── telegram-config-modal.tsx
+│   │   ├── discord-config-modal.tsx
+│   │   ├── update-settings.tsx      # In-app update management UI
+│   │   ├── settings-typography.tsx  # Shared typography (SettingsTitle, SettingsSubheading)
+│   │   └── index.ts
+│   ├── update-banner.tsx            # Visual update state component (NEW)
+│   ├── toolbar/                     # 32px compact header
+│   │   ├── toolbar.tsx
+│   │   ├── toolbar-button.tsx
+│   │   ├── project-dropdown.tsx
+│   │   └── index.ts
+│   ├── git-panel/                   # Git operations UI
+│   ├── github-view/                 # GitHub integration UI
+│   ├── toast-container.tsx          # Toast notifications
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-file-drop.ts       # Drag-drop file paths into terminal
 │   │   ├── use-clipboard-paste.ts # Ctrl+V image paste → temp file → insert path

@@ -40,7 +40,7 @@ src/main/
 │   ├── git-head-watcher.ts   # File watcher for HEAD changes
 │   └── index.ts
 ├── project/
-│   ├── project-store.ts      # electron-store persistence (WSL UNC path conversion)
+│   ├── project-store.ts      # electron-store persistence + WSL UNC path conversion
 │   └── index.ts
 ├── notification/
 │   ├── notification-manager.ts  # Orchestrator
@@ -53,6 +53,9 @@ src/main/
 │   └── clipboard-handler.ts  # Image paste handling
 ├── updater/
 │   ├── auto-updater.ts       # electron-updater wrapper
+│   └── index.ts
+├── vietnamese-ime-patcher/
+│   ├── vietnamese-ime-patcher.ts  # Auto-detect and patch Claude CLI
 │   └── index.ts
 └── ipc/
     ├── handlers.ts           # IPC handler registration
@@ -98,13 +101,15 @@ src/renderer/
 │   │   └── index.ts
 │   ├── settings/             # Settings slide panel (right/bottom)
 │   │   ├── settings-panel.tsx     # Tabbed settings container
-│   │   ├── theme-selector.tsx     # VibeTheme picker (5 themes)
+│   │   ├── theme-selector.tsx     # VibeTheme picker (7 UI + 5 ANSI)
 │   │   ├── terminal-settings.tsx  # Terminal rendering modes
 │   │   ├── notification-settings.tsx  # Telegram/Discord config
 │   │   ├── update-settings.tsx    # Update checker UI
+│   │   ├── toggle-switch.tsx      # Reusable settings control (NEW)
 │   │   ├── telegram-config-modal.tsx
 │   │   ├── discord-config-modal.tsx
 │   │   └── index.ts
+│   ├── update-banner.tsx          # Visual update state component (NEW)
 │   ├── toast-container.tsx        # Toast notifications
 │   └── welcome-screen.tsx         # First-run screen
 ├── hooks/

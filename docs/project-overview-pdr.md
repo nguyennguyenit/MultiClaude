@@ -68,12 +68,12 @@
 | FR-5.5 | Sound presets (default, minimal, retro) | Complete |
 
 #### FR-6: Settings and Themes
-| ID | Requirement | Status |
-|----|-------------|--------|
-| FR-6.1 | 7 color themes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest) | Complete |
-| FR-6.2 | Light/Dark/System mode | Complete |
-| FR-6.3 | Settings modal with tabbed navigation | Complete |
-| FR-6.4 | Terminal rendering mode selector | Complete |
+| ID | Requirement | Status | Notes |
+|----|-------------|--------|-------|
+| FR-6.1 | 7 UI color themes + Light/Dark/System modes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest) | Complete | Applied to app chrome |
+| FR-6.2 | 5 Terminal ANSI palette themes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark) | Complete | xterm.js colors |
+| FR-6.3 | Settings panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | Complete | Tabbed navigation |
+| FR-6.4 | Terminal rendering mode selector (Performance/Balanced/Quality) | Complete | WebGL configuration |
 
 #### FR-7: Auto-Update
 | ID | Requirement | Status |
@@ -82,6 +82,12 @@
 | FR-7.2 | Download with progress indicator | Complete |
 | FR-7.3 | Install and restart | Complete |
 | FR-7.4 | Changelog display from GitHub Releases | Complete |
+
+#### FR-8: Vietnamese IME Support
+| ID | Requirement | Status |
+|----|-------------|--------|
+| FR-8.1 | Auto-detect and patch Claude CLI for Vietnamese IME | Complete |
+| FR-8.2 | Settings toggle to enable/disable auto-patch | Planned |
 
 ### Non-Functional Requirements
 
@@ -166,4 +172,4 @@
 |------|---------|----------|
 | GitHub CLI (gh) | OAuth/repo operations | For GitHub features |
 | Claude Code CLI | Agent execution | For Claude features |
-| Node.js 18+ | Runtime | Required |
+| Node.js 24+ | Runtime | Required (enforced in CI) |

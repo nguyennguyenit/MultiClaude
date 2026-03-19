@@ -246,6 +246,48 @@ Guidelines:
 - Keep shared components simple and focused on single responsibility
 - Use CSS variables for theme-aware styling
 
+### New Shared Components (v3.0.1-beta)
+
+**ToggleSwitch**: Reusable boolean toggle control for settings
+```typescript
+// components/settings/toggle-switch.tsx
+interface ToggleSwitchProps {
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+}
+
+export function ToggleSwitch({ label, checked, onChange, disabled }: ToggleSwitchProps) {
+  return (
+    <div className="flex items-center justify-between">
+      <label className="text-sm font-medium">{label}</label>
+      <button
+        onClick={() => onChange(!checked)}
+        disabled={disabled}
+        aria-pressed={checked}
+        className={`w-10 h-6 rounded-full transition-colors ${
+          checked ? 'bg-[var(--mc-accent)]' : 'bg-[var(--mc-bg-hover)]'
+        }`}
+      />
+    </div>
+  )
+}
+```
+
+**UpdateBanner**: Visual state management for app updates
+```typescript
+// components/update-banner.tsx
+export function UpdateBanner() {
+  const { state: updateState } = useUpdateStore()
+
+  if (updateState.status === 'available') {
+    return <div className="p-3 bg-[var(--mc-accent)]/10">Update available</div>
+  }
+  return null
+}
+```
+
 ### State Management (Zustand)
 
 ```typescript
