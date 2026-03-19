@@ -1,14 +1,27 @@
-<p align="center">
-  <img src="./build/icon.png" alt="MultiClaude" width="120" />
-</p>
+<div align="center">
+  <p>
+    <img src="./build/icon.png" alt="MultiClaude" width="120" />
+  </p>
 
-# MultiClaude 
+  <h1>MultiClaude</h1>
 
-[![Electron 33](https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/) [![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![xterm.js](https://img.shields.io/badge/xterm.js-Terminal-2C2C32?style=flat-square&logo=gnubash&logoColor=white)](https://xtermjs.org/) [![GitHub](https://img.shields.io/badge/GitHub-Integrated-181717?style=flat-square&logo=github&logoColor=white)](https://cli.github.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
+  <p>
+    <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 33" /></a>
+    <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" /></a>
+    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5" /></a>
+    <a href="https://xtermjs.org/"><img src="https://img.shields.io/badge/xterm.js-Terminal-2C2C32?style=flat-square&logo=gnubash&logoColor=white" alt="xterm.js" /></a>
+    <a href="https://cli.github.com/"><img src="https://img.shields.io/badge/GitHub-Integrated-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub Integrated" /></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT" /></a>
+  </p>
 
-**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+  <p>
+    <strong>MultiClaude</strong> is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+  </p>
 
-Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, and repo operations than a raw shell setup.
+  <p>
+    Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, and repo operations than a raw shell setup.
+  </p>
+</div>
 
 ## What Makes It Different
 

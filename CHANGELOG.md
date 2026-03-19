@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v2.0.1 (2026-02-06)
+
+### Bug Fixes
+
+- **UI:** Add ASCII border styles for terminal mode
+- **UI:** Fix titlebar drag regions for proper window dragging
+
 ## v1.1.7-beta.11 (2026-01-18)
 
 ### Improvements
