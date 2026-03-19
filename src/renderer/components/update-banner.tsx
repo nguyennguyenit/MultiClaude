@@ -5,8 +5,9 @@ const GITHUB_REPO = 'nguyennguyenit/MultiClaude'
 
 export function UpdateBanner() {
   const { state, downloadUpdate, installUpdate } = useUpdateStore()
-  const { status, latestVersion, downloadProgress, error } = state
+  const { status, latestVersion, downloadProgress, error, installMode } = state
   const [dismissed, setDismissed] = useState(false)
+  const isManualInstall = installMode === 'open-installer'
 
   const isCodeSignError = status === 'error' && !!error?.includes('GitHub Releases')
 
@@ -37,7 +38,7 @@ export function UpdateBanner() {
             className="update-banner-btn"
             onClick={() => downloadUpdate()}
           >
-            Update Now ↑
+            Download Update
           </button>
         </>
       )}
@@ -59,12 +60,12 @@ export function UpdateBanner() {
       {status === 'ready' && (
         <>
           <span className="update-banner-icon">✅</span>
-          <span className="update-banner-text">Update ready</span>
+          <span className="update-banner-text">{isManualInstall ? 'Installer ready' : 'Update ready'}</span>
           <button
             className="update-banner-btn"
             onClick={() => installUpdate()}
           >
-            Install and Restart
+            {isManualInstall ? 'Install' : 'Install and Restart'}
           </button>
         </>
       )}
