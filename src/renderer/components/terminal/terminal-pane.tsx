@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback, memo, useState } from 'react'
+import { useEffect, useRef, useCallback, memo, useState, useMemo } from 'react'
 import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
 import { useFileDrop } from '../../hooks/use-file-drop'
 import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
+import { useAppStore } from '../../stores'
 
 // Streaming detection constants
 const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
@@ -40,6 +41,10 @@ export const TerminalPane = memo(function TerminalPane({
   const lastOutputTimeRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
+  const restoredInitialOutput = useMemo(
+    () => initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId),
+    [initialOutput, terminalId]
+  )
 
   // Sync editTitle when title prop changes externally
   useEffect(() => {
@@ -257,7 +262,7 @@ export const TerminalPane = memo(function TerminalPane({
           isDropTarget={isDragOver}
           hidden={hidden}
           onInputActivity={onActivate}
-          initialOutput={initialOutput}
+          initialOutput={restoredInitialOutput}
           onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}
           onOutput={handleTerminalOutput}
