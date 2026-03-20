@@ -68,7 +68,7 @@ App
 
 **Layout**:
 - Left group: Add Terminal button (Ctrl+T) + Project dropdown
-- Right group: Git (Ctrl+B), GitHub, Settings, Update indicator (if available)
+- Right group: GitHub (Ctrl+G), Settings, Update indicator (if available)
 - macOS-aware: 72px left padding for traffic lights
 - Drag region behind buttons for window moving
 
@@ -137,9 +137,9 @@ App
 
 ---
 
-### S-03: Git Slide Panel
+### S-03: Git Workspace Content
 
-**State Condition**: `activePanel = 'git'` (toggled via Ctrl+B)
+**State Condition**: rendered when `activePanel = 'github'` (toggled via Ctrl+G)
 
 **Position**: Right edge on landscape (340px wide), bottom edge on portrait (full width)
 
@@ -226,7 +226,7 @@ Each theme includes:
 | `Alt+1-9` | Switch to project 1-9 | Global |
 | `Ctrl+N` / `Ctrl+T` | New terminal | Global |
 | `Ctrl+W` | Close active terminal | Global |
-| `Ctrl+B` | Toggle Git panel | Global |
+| `Ctrl+G` | Toggle GitHub panel | Global |
 | `Ctrl+V` | Paste or paste image as file path | Terminal focused |
 | `Enter` | Save terminal title | During title edit |
 | `Escape` | Cancel terminal title edit | During title edit |
@@ -274,14 +274,14 @@ Each theme includes:
 5. Click close or Ctrl+W to exit
 
 ### CJX-03: Commit Changes (Git Workflow)
-1. Press Ctrl+B to open Git slide panel
-2. Git panel slides in from right (or bottom on mobile)
+1. Press Ctrl+G to open the GitHub slide panel
+2. GitHub panel slides in from right (or bottom on mobile)
 3. Review changed files in "Changes" tab
 4. Click file to view diff in modal
 5. Click "Stage" to stage file
 6. Switch to "Commit" section, write message
 7. Click "Commit" button
-8. Close panel with close button or Ctrl+B again
+8. Close panel with close button or Ctrl+G again
 
 ### CJX-04: Check for Updates
 1. Click toolbar Settings button

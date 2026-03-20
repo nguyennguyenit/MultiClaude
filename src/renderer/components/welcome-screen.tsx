@@ -29,7 +29,7 @@ export function WelcomeScreen({ onAddProject }: WelcomeScreenProps) {
       <div className="welcome-shortcuts">
         <span className="welcome-shortcut"><kbd>Ctrl+T</kbd> new terminal</span>
         <span className="welcome-shortcut-dot">·</span>
-        <span className="welcome-shortcut"><kbd>Ctrl+B</kbd> git panel</span>
+        <span className="welcome-shortcut"><kbd>Ctrl+G</kbd> GitHub panel</span>
         <span className="welcome-shortcut-dot">·</span>
         <span className="welcome-shortcut"><kbd>Alt+1–9</kbd> switch project</span>
       </div>

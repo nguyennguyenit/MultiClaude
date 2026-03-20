@@ -141,6 +141,7 @@ src/
 | Switch to Project 1-9 | Alt+1 to Alt+9 |
 | New Terminal | Ctrl+N or Ctrl+T |
 | Close Active Terminal | Ctrl+W |
+| GitHub Panel | Ctrl+G |
 | Open URL | Click link |
 | Copy | Select text (auto-copies) |
 | Paste | Right-click or Ctrl+V |

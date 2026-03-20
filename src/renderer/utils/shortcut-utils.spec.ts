@@ -41,9 +41,15 @@ describe('shortcut-utils', () => {
 
     expect(getGlobalShortcut(createEvent({
       ctrlKey: true,
+      key: 'g',
+      code: 'KeyG'
+    }))).toEqual({ type: 'toggle-github-panel' })
+
+    expect(getGlobalShortcut(createEvent({
+      ctrlKey: true,
       key: 'b',
       code: 'KeyB'
-    }))).toEqual({ type: 'toggle-git-panel' })
+    }))).toBeNull()
   })
 
   it('marks terminal-hosted global shortcuts for xterm bypass', () => {
