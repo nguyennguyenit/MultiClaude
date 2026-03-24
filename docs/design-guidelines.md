@@ -32,7 +32,7 @@ MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-
 
 **Toolbar** (32px compact header):
 - Left: Add Terminal button + Project dropdown
-- Right: Git panel (Ctrl+B), GitHub panel, Settings, Update indicator
+- Right: GitHub panel (Ctrl+G), Settings, Update indicator
 - No activity bar or traditional sidebar header
 - macOS-aware: Adds 72px padding for traffic light buttons
 
@@ -56,7 +56,7 @@ MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-
 | Alt+1-9 | Switch to project |
 | Ctrl+N/T | New terminal |
 | Ctrl+W | Close active terminal |
-| Ctrl+B | Toggle Git panel |
+| Ctrl+G | Toggle GitHub panel |
 
 **Note**: Escape key handling is managed by `shortcut-utils.ts` to prevent leakage during project switching.
 

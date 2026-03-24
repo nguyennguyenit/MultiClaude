@@ -29,7 +29,7 @@ function App() {
   const setActiveTerminal = useAppStore((state) => state.setActiveTerminal)
   const switchToProject = useAppStore((state) => state.switchToProject)
 
-  // Active slide panel: 'git' | 'github' | 'settings' | null (Phase 4 adds actual panels)
+  // Active slide panel: 'github' | 'settings' | null
   const [activePanel, setActivePanel] = useState<string | null>(null)
 
   const togglePanel = useCallback((panel: string) => {
@@ -240,7 +240,7 @@ function App() {
     onAddTerminal: handleAddTerminal,
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
-    onToggleGitPanel: () => togglePanel('github')
+    onToggleGitHubPanel: () => togglePanel('github')
   })
 
 

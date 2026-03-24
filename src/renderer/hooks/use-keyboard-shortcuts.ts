@@ -6,7 +6,7 @@ interface KeyboardShortcutsOptions {
   onAddTerminal: () => void
   onCloseTerminal: () => void
   onSelectProject?: (id: string) => void
-  onToggleGitPanel?: () => void
+  onToggleGitHubPanel?: () => void
 }
 
 /**
@@ -14,13 +14,13 @@ interface KeyboardShortcutsOptions {
  * - Alt+1~9: Switch to project by index
  * - Ctrl+N/T: Create new terminal
  * - Ctrl+W: Close active terminal
- * - Ctrl+B: Toggle Git panel
+ * - Ctrl+G: Toggle GitHub panel
  */
 export function useKeyboardShortcuts({
   onAddTerminal,
   onCloseTerminal,
   onSelectProject,
-  onToggleGitPanel
+  onToggleGitHubPanel
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,13 +48,13 @@ export function useKeyboardShortcuts({
         case 'close-terminal':
           onCloseTerminal()
           return
-        case 'toggle-git-panel':
-          onToggleGitPanel?.()
+        case 'toggle-github-panel':
+          onToggleGitHubPanel?.()
           return
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitPanel])
+  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitHubPanel])
 }

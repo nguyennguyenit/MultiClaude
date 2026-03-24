@@ -374,16 +374,17 @@ export function useTerminal({
 
     terminal.open(container)
 
-    // Load web links addon for Ctrl+Click URL opening
+    // Load web links addon so plain left-click opens safe URLs in the default browser.
     const webLinksAddon = new WebLinksAddon(
       (event, uri) => {
-        // Only open on Ctrl+Click (Windows/Linux) or Cmd+Click (macOS)
-        if (event.ctrlKey || event.metaKey) {
-          if (isAllowedExternalUrl(uri)) {
-            window.electron.app.openExternal(uri)
-          } else {
-            useToastStore.getState().addToast('Only http/https URLs can be opened', 'info')
-          }
+        if (event.button !== 0) {
+          return
+        }
+
+        if (isAllowedExternalUrl(uri)) {
+          window.electron.app.openExternal(uri)
+        } else {
+          useToastStore.getState().addToast('Only http/https URLs can be opened', 'info')
         }
       }
     )

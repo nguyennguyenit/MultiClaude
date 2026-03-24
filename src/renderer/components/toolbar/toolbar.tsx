@@ -95,7 +95,7 @@ export function Toolbar({
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
         <ToolbarButton
           icon={<IconGitHub />}
-          title="GitHub Panel (Ctrl+B)"
+          title="GitHub Panel (Ctrl+G)"
           onClick={onToggleGitHub}
           active={activePanel === 'github'}
         />

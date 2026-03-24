@@ -86,15 +86,14 @@ MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop app
 
 #### Toolbar & UI Components (VibeTerminal v1.2)
 - **Toolbar** (32px compact header replacing activity bar + project tabs):
-  - **toolbar.tsx**: Main toolbar with left (add terminal + project dropdown) and right (Git, GitHub, Settings, Update) groups
+  - **toolbar.tsx**: Main toolbar with left (add terminal + project dropdown) and right (GitHub, Settings, Update) groups
   - **toolbar-button.tsx**: Reusable icon button with optional badge/highlight
   - **project-dropdown.tsx**: Project selector dropdown with add project button
   - Features: macOS traffic light padding (72px left), drag region behind buttons
-  - Keyboard shortcuts: Ctrl+T (new terminal), Ctrl+B (toggle Git panel)
+  - Keyboard shortcuts: Ctrl+T (new terminal), Ctrl+G (toggle GitHub panel)
 - **Slide Panels** (modal dialogs replaced with side panels):
   - Position: Right edge on landscape (340px wide), bottom edge on portrait
-  - Git Panel: Accessed via Ctrl+B, toggles git-panel.tsx content
-  - GitHub Panel: Accessed via toolbar, toggles github-view.tsx content
+  - GitHub Panel: Accessed via Ctrl+G or toolbar, toggles github-view.tsx content
   - Settings Panel: Accessed via toolbar, toggles settings-panel.tsx content
   - Each panel has close button and can be toggled via toolbar or keyboard
 - **App.tsx State Cleanup** (Phase 2 of Terminal Cursor Fix)

@@ -859,6 +859,10 @@ button, input, select, textarea, optgroup, option {
   z-index: 10;
 }
 
+.terminal-status-bar-confirm-open {
+  z-index: 30;
+}
+
 .terminal-count-label {
   font-size: 12px;
   color: var(--text-muted);
@@ -882,6 +886,9 @@ button, input, select, textarea, optgroup, option {
   transition: background var(--transition-fast), color var(--transition-fast);
   white-space: nowrap;
   font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .status-btn:hover {
@@ -898,6 +905,21 @@ button, input, select, textarea, optgroup, option {
   background: rgba(247, 118, 142, 0.12);
   color: #f7768e;
   border-color: rgba(247, 118, 142, 0.4);
+}
+
+.status-btn.confirm {
+  min-width: 88px;
+  font-weight: 500;
+  color: #f7768e;
+  background: rgba(247, 118, 142, 0.08);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: none;
+}
+
+.status-btn.confirm:hover:not(:disabled) {
+  background: rgba(247, 118, 142, 0.14);
+  color: #f7768e;
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
 }
 
 .status-btn.primary {
@@ -1838,28 +1860,63 @@ button, input, select, textarea, optgroup, option {
 }
 
 /* Kill confirm popup */
+.kill-confirm-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.kill-confirm-anchor.is-open {
+  z-index: 1;
+}
+
 .kill-confirm-popup {
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, #000 8%);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 10px;
   padding: 12px;
   z-index: 50;
-  min-width: 180px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 220px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
 .kill-confirm-popup p {
   font-size: 12px;
-  margin-bottom: 8px;
   color: var(--text-primary);
+  line-height: 1.4;
 }
 
 .kill-confirm-btns {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.kill-confirm-btns .status-btn {
+  min-width: 82px;
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.kill-confirm-btns .status-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+}
+
+.kill-confirm-btns .status-btn.confirm {
+  background: rgba(247, 118, 142, 0.08);
+  border-color: rgba(247, 118, 142, 0.55);
+}
+
+.kill-confirm-btns .status-btn.confirm:hover:not(:disabled) {
+  background: rgba(247, 118, 142, 0.14);
+  border-color: rgba(247, 118, 142, 0.78);
 }
 
 /* ============================================
