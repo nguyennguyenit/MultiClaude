@@ -40,6 +40,10 @@ export interface JsonStreamEvent {
   content?: string
   /** Error flag (for tool_result events) */
   is_error?: boolean
+  /** Model name (from result events, e.g. "claude-opus-4-5") */
+  model?: string
+  /** Total session duration in milliseconds (from result events) */
+  duration_ms?: number
 }
 
 // Re-export OutputMode as ParserType for parser-specific usage (alias)

@@ -5,10 +5,13 @@ import { generateTaskEventId } from './parser-utils'
 /**
  * Parses Claude Code --output-format=stream-json NDJSON output.
  * Detects task events from tool_use/tool_result/error events.
+ * Tracks model name and session duration from result events (inspired by ccpoke).
  */
 export class JsonStreamParser extends EventEmitter {
   private buffers: Map<string, string> = new Map()
   private previousTodos: Map<string, Set<string>> = new Map()
+  // Model name per terminal (set from result events)
+  private terminalModels: Map<string, string> = new Map()
 
   parse(terminalId: string, data: string, projectName: string): void {
     // Append to line buffer
@@ -57,6 +60,11 @@ export class JsonStreamParser extends EventEmitter {
       const question = (event.input as Record<string, unknown>)?.question as string || 'Input needed'
       this.emitTaskEvent(terminalId, 'reviewNeeded', question, projectName)
     }
+
+    // Track model and duration from result events (like ccpoke does)
+    if (event.type === 'result' && event.model) {
+      this.terminalModels.set(terminalId, event.model)
+    }
   }
 
   private detectNewlyCompleted(terminalId: string, todos: Array<{content: string, status: string}>): string[] {
@@ -89,12 +97,15 @@ export class JsonStreamParser extends EventEmitter {
   }
 
   private emitTaskEvent(terminalId: string, type: NotificationEventType, taskName: string, projectName: string): void {
+    const model = this.terminalModels.get(terminalId)
     const event: TaskEvent = {
       id: generateTaskEventId(terminalId, type, taskName),
       terminalId,
       type,
       taskName,
       projectName,
+      // Include model in context if available (inspired by ccpoke)
+      context: model ? `model: ${model}` : undefined,
       timestamp: Date.now()
     }
     this.emit('taskEvent', event)
@@ -103,6 +114,7 @@ export class JsonStreamParser extends EventEmitter {
   clearTerminal(terminalId: string): void {
     this.buffers.delete(terminalId)
     this.previousTodos.delete(terminalId)
+    this.terminalModels.delete(terminalId)
   }
 
   /** Clean up stale buffer entries older than 60s (for terminals that weren't properly closed) */
@@ -118,6 +130,10 @@ export class JsonStreamParser extends EventEmitter {
     if (this.previousTodos.size > 100) {
       const entries = Array.from(this.previousTodos.entries())
       this.previousTodos = new Map(entries.slice(-50))
+    }
+    if (this.terminalModels.size > 100) {
+      const entries = Array.from(this.terminalModels.entries())
+      this.terminalModels = new Map(entries.slice(-50))
     }
   }
 }
