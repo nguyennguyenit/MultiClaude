@@ -47,6 +47,20 @@ interface PendingWriteViewportSnapshot {
   savedViewportY: number
 }
 
+interface TerminalDebugSnapshot {
+  baseY: number
+  viewportY: number
+  savedViewportY: number | null
+  isHidden: boolean
+  pendingWriteCount: number
+  isAtBottom: boolean
+  hiddenViewportIntent: UserScrollIntent | null
+  pendingUserScrollIntent: UserScrollIntent | null
+  domScrollTop: number | null
+  domScrollHeight: number | null
+  domClientHeight: number | null
+}
+
 function getPrimaryTerminalFont(): string | null {
   const { pendingSettings } = useSettingsStore.getState()
   const fontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
@@ -140,6 +154,7 @@ export function useTerminal({
   const pendingWriteViewportSnapshotRef = useRef<PendingWriteViewportSnapshot | null>(null)
   const userViewportInteractingRef = useRef(false)  // Track wheel/drag interaction so manual scroll wins during streaming
   const pendingUserScrollIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve manual scroll changes that happen mid-write
+  const hiddenViewportIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve the last hidden-project scroll position across background output
   const followOutputOnNextWriteRef = useRef(false)  // Local input should pull the next output back to the live cursor
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
@@ -158,6 +173,53 @@ export function useTerminal({
   const keyboardEnhancementStateRef = useRef<TerminalKeyboardEnhancementState>(
     useAppStore.getState().getTerminalKeyboardEnhancement(terminalId) ?? INITIAL_KEYBOARD_ENHANCEMENT_STATE
   )
+
+  const registerTerminalDebugHandle = useCallback(() => {
+    if (typeof window === 'undefined') return
+
+    const debugWindow = window as typeof window & {
+      __TERMINAL_DEBUG__?: Record<string, { getSnapshot: () => TerminalDebugSnapshot | null }>
+    }
+
+    debugWindow.__TERMINAL_DEBUG__ ??= {}
+    debugWindow.__TERMINAL_DEBUG__[terminalId] = {
+      getSnapshot: () => {
+        const terminal = terminalRef.current
+        if (!terminal) return null
+
+        const buffer = terminal.buffer.active
+        const viewport = terminal.element?.querySelector('.xterm-viewport') as HTMLElement | null
+
+        return {
+          baseY: buffer.baseY,
+          viewportY: buffer.viewportY,
+          savedViewportY: savedViewportYRef.current,
+          isHidden: isHiddenRef.current,
+          pendingWriteCount: pendingWriteCountRef.current,
+          isAtBottom: isAtBottomRef.current,
+          hiddenViewportIntent: hiddenViewportIntentRef.current,
+          pendingUserScrollIntent: pendingUserScrollIntentRef.current,
+          domScrollTop: viewport?.scrollTop ?? null,
+          domScrollHeight: viewport?.scrollHeight ?? null,
+          domClientHeight: viewport?.clientHeight ?? null
+        }
+      }
+    }
+  }, [terminalId])
+
+  const unregisterTerminalDebugHandle = useCallback(() => {
+    if (typeof window === 'undefined') return
+
+    const debugWindow = window as typeof window & {
+      __TERMINAL_DEBUG__?: Record<string, { getSnapshot: () => TerminalDebugSnapshot | null }>
+    }
+
+    if (!debugWindow.__TERMINAL_DEBUG__) return
+    delete debugWindow.__TERMINAL_DEBUG__[terminalId]
+    if (Object.keys(debugWindow.__TERMINAL_DEBUG__).length === 0) {
+      delete debugWindow.__TERMINAL_DEBUG__
+    }
+  }, [terminalId])
 
   const syncKeyboardEnhancementState = useCallback((nextState: TerminalKeyboardEnhancementState) => {
     if (isTerminalKeyboardEnhancementStateEqual(keyboardEnhancementStateRef.current, nextState)) {
@@ -216,6 +278,32 @@ export function useTerminal({
     }
   }, [])
 
+  const syncViewportState = useCallback((
+    buffer: XTerm['buffer']['active'],
+    hiddenViewportIntent: UserScrollIntent | null = null
+  ) => {
+    const atBottom = hiddenViewportIntent
+      ? hiddenViewportIntent.stickToBottom
+      : isViewportNearBottom(
+        buffer.baseY,
+        buffer.viewportY,
+        TERMINAL_SCROLL_THRESHOLD
+      )
+
+    isAtBottomRef.current = atBottom
+    setIsAtBottom(atBottom)
+    setHasScrollback(buffer.baseY > 0)
+
+    if (hiddenViewportIntent) {
+      savedViewportYRef.current = hiddenViewportIntent.stickToBottom
+        ? buffer.baseY
+        : hiddenViewportIntent.viewportY
+      return
+    }
+
+    savedViewportYRef.current = buffer.viewportY
+  }, [])
+
   // Repaint visible rows after renderer/visibility transitions.
   const refreshVisibleRows = useCallback(() => {
     const terminal = terminalRef.current
@@ -271,7 +359,7 @@ export function useTerminal({
     if (container.clientWidth === 0 || container.clientHeight === 0) return false
 
     const savedViewportY = terminal.buffer.active.viewportY
-    const shouldRestoreViewport = restoreViewport && !isAtBottomRef.current && savedViewportY > 0
+    const shouldRestoreViewport = restoreViewport && !isAtBottomRef.current && savedViewportY >= 0
 
     try {
       fitAddon.fit()
@@ -307,13 +395,18 @@ export function useTerminal({
     performFit(false)
   }, [performFit])
 
-  const reconcileVisibleTerminal = useCallback((savedViewportY: number | null) => {
+  const reconcileVisibleTerminal = useCallback((
+    savedViewportY: number | null,
+    stickToBottom = false
+  ) => {
     if (!terminalRef.current || disposedRef.current) return
 
     clearTextureAtlas()
     fitVisibleTerminal()
 
-    if (savedViewportY !== null && savedViewportY > 0 && terminalRef.current) {
+    if (stickToBottom && terminalRef.current) {
+      terminalRef.current.scrollToBottom()
+    } else if (savedViewportY !== null && savedViewportY >= 0 && terminalRef.current) {
       terminalRef.current.scrollToLine(savedViewportY)
     }
   }, [clearTextureAtlas, fitVisibleTerminal])
@@ -437,6 +530,13 @@ export function useTerminal({
     // Helper function to check and update scroll position for smart scroll behavior
     const syncScrollPosition = (captureUserIntent = false) => {
       const buffer = terminal.buffer.active
+      const hiddenViewportIntent = isHiddenRef.current ? hiddenViewportIntentRef.current : null
+
+      if (hiddenViewportIntent && !captureUserIntent) {
+        syncViewportState(buffer, hiddenViewportIntent)
+        return
+      }
+
       const atBottom = isViewportNearBottom(
         buffer.baseY,
         buffer.viewportY,
@@ -502,6 +602,7 @@ export function useTerminal({
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
+    registerTerminalDebugHandle()
 
     // Defer WebGL addon, fit, and initialOutput to ensure terminal is fully initialized
     // Use setTimeout to run after xterm's internal setTimeout completes
@@ -762,7 +863,19 @@ export function useTerminal({
       pendingWriteCountRef.current = Math.max(0, pendingWriteCountRef.current - 1)
       const terminal = terminalRef.current
       if (!terminal) return
-      if (pendingWriteCountRef.current > 0) return
+
+      const hiddenViewportIntent = isHiddenRef.current ? hiddenViewportIntentRef.current : null
+      if (pendingWriteCountRef.current > 0) {
+        if (hiddenViewportIntent?.stickToBottom) {
+          terminal.scrollToBottom()
+        } else if (hiddenViewportIntent?.viewportY !== null && hiddenViewportIntent?.viewportY !== undefined) {
+          terminal.scrollToLine(hiddenViewportIntent.viewportY)
+        }
+
+        const buffer = terminal.buffer.active
+        syncViewportState(buffer, hiddenViewportIntent)
+        return
+      }
 
       const pendingWriteViewportSnapshot = pendingWriteViewportSnapshotRef.current
       pendingWriteViewportSnapshotRef.current = null
@@ -771,7 +884,10 @@ export function useTerminal({
         forceStickToBottom: followOutputOnNextWriteRef.current,
         wasAtBottom: pendingWriteViewportSnapshot?.wasAtBottom ?? true,
         savedViewportY: pendingWriteViewportSnapshot?.savedViewportY ?? terminal.buffer.active.viewportY,
-        pendingUserScrollIntent: pendingUserScrollIntentRef.current
+        currentBaseY: terminal.buffer.active.baseY,
+        pendingUserScrollIntent: isHiddenRef.current
+          ? hiddenViewportIntentRef.current
+          : pendingUserScrollIntentRef.current
       })
       followOutputOnNextWriteRef.current = false
       pendingUserScrollIntentRef.current = null
@@ -783,20 +899,13 @@ export function useTerminal({
       }
 
       const buffer = terminal.buffer.active
-      const atBottom = isViewportNearBottom(
-        buffer.baseY,
-        buffer.viewportY,
-        TERMINAL_SCROLL_THRESHOLD
-      )
-      isAtBottomRef.current = atBottom
-      setIsAtBottom(atBottom)
-      setHasScrollback(buffer.baseY > 0)
+      syncViewportState(buffer, isHiddenRef.current ? hiddenViewportIntentRef.current : null)
     })
 
     // NOTE: Removed auto cursor restore - it interferes with Claude Code CLI's cursor positioning
     // Claude Code manages its own cursor via escape sequences for status line rendering
     return visibleData
-  }, [processKeyboardEnhancementOutput])
+  }, [processKeyboardEnhancementOutput, syncViewportState])
 
   // Fit terminal to container (with safety check for initialization)
   const fit = useCallback(() => {
@@ -840,13 +949,33 @@ export function useTerminal({
 
   // Scroll terminal to the first line in the scrollback buffer.
   const scrollToTop = useCallback(() => {
-    terminalRef.current?.scrollToLine(0)
-  }, [])
+    const terminal = terminalRef.current
+    if (!terminal) return
+
+    terminal.scrollToLine(0)
+    hiddenViewportIntentRef.current = createUserScrollIntent(
+      terminal.buffer.active.baseY,
+      terminal.buffer.active.viewportY,
+      TERMINAL_SCROLL_THRESHOLD
+    )
+    pendingUserScrollIntentRef.current = hiddenViewportIntentRef.current
+    syncViewportState(terminal.buffer.active, isHiddenRef.current ? hiddenViewportIntentRef.current : null)
+  }, [syncViewportState])
 
   // Scroll terminal to bottom (for UI button)
   const scrollToBottom = useCallback(() => {
-    terminalRef.current?.scrollToBottom()
-  }, [])
+    const terminal = terminalRef.current
+    if (!terminal) return
+
+    terminal.scrollToBottom()
+    hiddenViewportIntentRef.current = createUserScrollIntent(
+      terminal.buffer.active.baseY,
+      terminal.buffer.active.viewportY,
+      TERMINAL_SCROLL_THRESHOLD
+    )
+    pendingUserScrollIntentRef.current = hiddenViewportIntentRef.current
+    syncViewportState(terminal.buffer.active, isHiddenRef.current ? hiddenViewportIntentRef.current : null)
+  }, [syncViewportState])
 
   const getViewportSnapshot = useCallback(() => {
     const terminal = terminalRef.current
@@ -934,6 +1063,7 @@ export function useTerminal({
       pendingWriteCountRef.current = 0
       pendingWriteViewportSnapshotRef.current = null
       pendingUserScrollIntentRef.current = null
+      hiddenViewportIntentRef.current = null
       followOutputOnNextWriteRef.current = false
       clearUserViewportInteraction()
 
@@ -957,6 +1087,7 @@ export function useTerminal({
       webglAddonRef.current = null
       scrollDisposableRef.current = null
       viewportListenersRef.current = null
+      unregisterTerminalDebugHandle()
 
       if (viewportListeners) {
         for (const listener of viewportListeners) {
@@ -1140,14 +1271,17 @@ export function useTerminal({
 
     // SAVE scroll position when becoming hidden (synchronously before display:none takes effect)
     if (!wasHidden && isHidden && terminalRef.current) {
-      savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
+      const buffer = terminalRef.current.buffer.active
+      savedViewportYRef.current = buffer.viewportY
+      hiddenViewportIntentRef.current = createUserScrollIntent(
+        buffer.baseY,
+        buffer.viewportY,
+        TERMINAL_SCROLL_THRESHOLD
+      )
     }
 
     // RESTORE scroll position and cursor when becoming visible
     if (wasHidden && !isHidden && isActive && terminalRef.current) {
-      // Capture saved viewport line position at the moment of transition
-      const savedViewportY = savedViewportYRef.current
-
       // Cancellation flag - set to true when effect cleanup runs
       // This prevents orphaned recursive timers from executing
       let cancelled = false
@@ -1155,9 +1289,14 @@ export function useTerminal({
       const restoreScrollAndCursor = () => {
         if (cancelled || disposedRef.current || !terminalRef.current) return
 
+        const hiddenViewportIntent = hiddenViewportIntentRef.current
+        const savedViewportY = hiddenViewportIntent?.stickToBottom
+          ? null
+          : hiddenViewportIntent?.viewportY ?? savedViewportYRef.current
+
         // Refit and repaint after project switch so renderer changes and any
         // hidden-layout drift do not leave stale TUI fragments on screen.
-        reconcileVisibleTerminal(savedViewportY)
+        reconcileVisibleTerminal(savedViewportY, hiddenViewportIntent?.stickToBottom ?? false)
 
         // 2. Focus terminal - let CLI manage its own cursor
         terminalRef.current.focus()

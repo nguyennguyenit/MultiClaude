@@ -169,7 +169,7 @@ export const TerminalGrid = memo(function TerminalGrid({
                             terminalId={terminal.id}
                             title={terminal.title}
                             isActive={terminal.id === activeTerminalId}
-                            hidden={!group.isActive || terminal.id !== activeTerminalId}
+                            hidden={!group.isActive}
                             isClaudeMode={terminal.isClaudeMode}
                             onActivate={() => onTerminalClick(terminal.id)}
                             onClose={() => onCloseTerminal?.(terminal.id)}

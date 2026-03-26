@@ -34,6 +34,7 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 80,
       pendingUserScrollIntent: {
         viewportY: 75,
         stickToBottom: false
@@ -45,6 +46,7 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 80,
       pendingUserScrollIntent: {
         viewportY: null,
         stickToBottom: true
@@ -56,8 +58,18 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 40,
       pendingUserScrollIntent: null
     })).toBe(40)
+  })
+
+  it('preserves the same absolute viewport line while new output is appended below it', () => {
+    expect(resolveViewportRestoreTarget({
+      wasAtBottom: false,
+      savedViewportY: 75,
+      currentBaseY: 160,
+      pendingUserScrollIntent: null
+    })).toBe(75)
   })
 
   it('forces bottom-follow mode after local input requests live output', () => {
@@ -65,6 +77,7 @@ describe('terminal-scroll-utils', () => {
       forceStickToBottom: true,
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 40,
       pendingUserScrollIntent: {
         viewportY: 12,
         stickToBottom: false
@@ -76,6 +89,7 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: true,
       savedViewportY: 40,
+      currentBaseY: 40,
       pendingUserScrollIntent: null
     })).toBeNull()
   })

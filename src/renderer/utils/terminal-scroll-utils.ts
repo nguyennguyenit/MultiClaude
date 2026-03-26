@@ -7,6 +7,10 @@ export interface UserScrollIntent {
 
 export type ViewportRestoreTarget = number | 'bottom' | null
 
+function clampViewportY(viewportY: number, baseY: number): number {
+  return Math.max(0, Math.min(viewportY, baseY))
+}
+
 export function isPointerOnViewportScrollbar({
   clientX,
   viewportClientWidth,
@@ -46,11 +50,13 @@ export function resolveViewportRestoreTarget({
   forceStickToBottom = false,
   wasAtBottom,
   savedViewportY,
+  currentBaseY,
   pendingUserScrollIntent
 }: {
   forceStickToBottom?: boolean
   wasAtBottom: boolean
   savedViewportY: number
+  currentBaseY: number
   pendingUserScrollIntent: UserScrollIntent | null
 }): ViewportRestoreTarget {
   if (forceStickToBottom) {
@@ -58,11 +64,19 @@ export function resolveViewportRestoreTarget({
   }
 
   if (pendingUserScrollIntent) {
-    return pendingUserScrollIntent.stickToBottom ? 'bottom' : pendingUserScrollIntent.viewportY
+    if (pendingUserScrollIntent.stickToBottom) {
+      return 'bottom'
+    }
+
+    if (pendingUserScrollIntent.viewportY === null) {
+      return null
+    }
+
+    return clampViewportY(pendingUserScrollIntent.viewportY, currentBaseY)
   }
 
   if (!wasAtBottom && savedViewportY >= 0) {
-    return savedViewportY
+    return clampViewportY(savedViewportY, currentBaseY)
   }
 
   return null
