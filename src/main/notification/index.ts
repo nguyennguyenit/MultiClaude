@@ -8,5 +8,7 @@ export { PlainTextParser } from './plain-text-parser'
 export { FocusDetector } from './focus-detector'
 export { TaskTracker } from './task-tracker'
 export { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
+export { TelegramPoller } from './telegram-poller'
+export { TelegramCommandRouter } from './telegram-command-router'
 // Deprecated: PatternDetector replaced by OutputParser in Phase 4
 export { PatternDetector } from './pattern-detector'
