@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and upload (e.g. v3.1.0-beta.1)'
+        required: true
 
 permissions:
   contents: write
@@ -73,7 +78,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="${{ github.event.inputs.tag || '' }}"
+          if [ -z "$TAG" ]; then TAG="${GITHUB_REF#refs/tags/}"; fi
           echo "Uploading artifacts to release $TAG..."
           for file in artifacts/*; do
             if [ -f "$file" ]; then
