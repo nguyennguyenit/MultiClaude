@@ -27,8 +27,53 @@ const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string 
   { id: 'quality', name: 'Quality', description: 'WebGL always, best visual quality' }
 ]
 
+const CLAUDE_RENDERER_HELPER_COPY = {
+  performance: {
+    badge: 'GPU unavailable',
+    description: 'Performance mode disables GPU rendering for all terminals.',
+    tooltip: 'Switch to Balanced or Quality to choose whether Claude terminals can use GPU rendering.',
+    toggleDescription: 'Unavailable in Performance mode because GPU rendering is off for all terminals.',
+    disabled: true
+  },
+  safe: {
+    badge: 'Claude-safe mode',
+    description: 'Claude terminals stay on the safer canvas renderer.',
+    tooltip: 'Balanced and Quality still use WebGL for non-Claude terminals. Turn on the experimental switch below to let Claude terminals use GPU rendering too.',
+    toggleDescription: 'Experimental. When disabled, Claude terminals always use the safer canvas renderer.',
+    disabled: false
+  },
+  followMode: {
+    badge: 'Claude follows mode',
+    description: 'Claude terminals use the selected render mode.',
+    tooltip: 'Performance keeps canvas everywhere. Balanced uses WebGL for the active terminal. Quality uses WebGL for all visible terminals.',
+    toggleDescription: 'Experimental. When enabled, Claude terminals use the selected GPU render mode.',
+    disabled: false
+  }
+} as const
+
+export function getClaudeRendererControlState(
+  terminalRenderMode: TerminalRenderMode,
+  gpuRendererForClaudeTerminals: boolean | undefined
+) {
+  if (terminalRenderMode === 'performance') {
+    return CLAUDE_RENDERER_HELPER_COPY.performance
+  }
+
+  return gpuRendererForClaudeTerminals
+    ? CLAUDE_RENDERER_HELPER_COPY.followMode
+    : CLAUDE_RENDERER_HELPER_COPY.safe
+}
+
 export function TerminalSettings() {
-  const { pendingSettings, wslInfo, setTerminalLimit, setTerminalRenderMode, setWindowsShell, setVietnameseImeFix } = useSettingsStore()
+  const {
+    pendingSettings,
+    wslInfo,
+    setTerminalLimit,
+    setTerminalRenderMode,
+    setGpuRendererForClaudeTerminals,
+    setWindowsShell,
+    setVietnameseImeFix
+  } = useSettingsStore()
   const { addToast } = useToastStore()
   const { terminalLimit } = pendingSettings
 
@@ -115,6 +160,10 @@ export function TerminalSettings() {
   const showShellSettings = wslInfo !== null
 
   const currentShellKey = getShellKey(pendingSettings.windowsShell || { type: 'cmd' })
+  const claudeRendererHelper = getClaudeRendererControlState(
+    pendingSettings.terminalRenderMode,
+    pendingSettings.gpuRendererForClaudeTerminals
+  )
 
   return (
     <div className="flex flex-col gap-6 pb-16 max-w-2xl">
@@ -243,6 +292,36 @@ export function TerminalSettings() {
               </button>
             )
           })}
+        </div>
+
+        <div
+          title={claudeRendererHelper.tooltip}
+          className="flex items-start gap-3 rounded-xl border border-[var(--mc-border)]/70 bg-[var(--mc-bg-hover)]/70 px-3.5 py-3"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30">
+            {claudeRendererHelper.badge}
+          </span>
+          <p className="text-xs leading-relaxed text-[var(--mc-text-muted)]">
+            {claudeRendererHelper.description}
+          </p>
+        </div>
+
+        <div className="pt-2 border-t border-[var(--mc-border)]/70 flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <ToggleSwitch
+              checked={Boolean(pendingSettings.gpuRendererForClaudeTerminals)}
+              onChange={setGpuRendererForClaudeTerminals}
+              disabled={claudeRendererHelper.disabled}
+            />
+            <div>
+              <p className="text-sm font-medium text-[var(--mc-text-primary)]">
+                Use GPU renderer for Claude terminals
+              </p>
+              <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
+                {claudeRendererHelper.toggleDescription}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

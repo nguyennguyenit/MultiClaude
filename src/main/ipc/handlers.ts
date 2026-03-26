@@ -113,6 +113,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  terminalManager.on('stateChange', ({ terminalId, isClaudeMode }) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_STATE_CHANGE, { terminalId, isClaudeMode })
+    }
+  })
+
   // Terminal handlers
   safeHandle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
     const terminal = terminalManager.create(options)

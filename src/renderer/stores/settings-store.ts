@@ -52,6 +52,7 @@ interface SettingsState {
   setGlassmorphismEnabled: (enabled: boolean) => void
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
+  setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setWindowsShell: (shell: WindowsShell) => void
   setUiStyle: (style: UiStyle) => void
   setModernFontFamily: (fontId: AppFontId) => void
@@ -82,6 +83,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.themeMode !== b.themeMode) return false
   if (a.colorTheme !== b.colorTheme) return false
   if (a.terminalRenderMode !== b.terminalRenderMode) return false
+  if (a.gpuRendererForClaudeTerminals !== b.gpuRendererForClaudeTerminals) return false
   if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
   if (a.uiStyle !== b.uiStyle) return false
   if (a.modernFontFamily !== b.modernFontFamily) return false
@@ -124,9 +126,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   pendingSettings: DEFAULT_SETTINGS,
   /**
    * @deprecated Use pendingSettings for preview state or savedSettings for persisted state.
-   * This alias always returns pendingSettings for backward compatibility with legacy code.
+   * Kept as a synchronized alias for backward compatibility with legacy code.
    */
-  get settings() { return get().pendingSettings },
+  settings: DEFAULT_SETTINGS,
   hasUnsavedChanges: false,
   wslInfo: null,
   gitPanelOpen: false,
@@ -167,6 +169,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setTerminalRenderMode: (mode) => {
     const pending = { ...get().pendingSettings, terminalRenderMode: mode }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setGpuRendererForClaudeTerminals: (enabled) => {
+    const pending = { ...get().pendingSettings, gpuRendererForClaudeTerminals: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
@@ -356,3 +366,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   }
 }))
+
+useSettingsStore.subscribe((state) => {
+  if (state.settings !== state.pendingSettings) {
+    useSettingsStore.setState({ settings: state.pendingSettings })
+  }
+})

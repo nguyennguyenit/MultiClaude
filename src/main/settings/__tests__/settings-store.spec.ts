@@ -18,4 +18,13 @@ describe('SettingsStore', () => {
 
     expect(updated.terminalFontFamily).toBe('jetbrains-mono')
   })
+
+  it('persists the Claude GPU renderer override flag', () => {
+    const store = new SettingsStore()
+
+    const updated = store.setSettings({ gpuRendererForClaudeTerminals: true } as never)
+
+    expect((updated as { gpuRendererForClaudeTerminals?: boolean }).gpuRendererForClaudeTerminals).toBe(true)
+    expect((store.getSettings() as { gpuRendererForClaudeTerminals?: boolean }).gpuRendererForClaudeTerminals).toBe(true)
+  })
 })

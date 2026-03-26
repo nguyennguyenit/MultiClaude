@@ -14,6 +14,7 @@ interface PTYProcess {
   pty: pty.IPty
   metadata: Terminal
   outputBuffer: string
+  inputBuffer: string
   lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
   destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
@@ -204,6 +205,45 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
+  private setClaudeMode(term: PTYProcess): void {
+    if (term.metadata.isClaudeMode && term.metadata.allowTitleUpdate) return
+
+    term.metadata.isClaudeMode = true
+    // Enable title updates once Claude is running (activity started)
+    term.metadata.allowTitleUpdate = true
+    this.emit('stateChange', { terminalId: term.id, isClaudeMode: true })
+  }
+
+  private processInputForClaudeMode(term: PTYProcess, data: string): void {
+    if (term.metadata.isClaudeMode) return
+
+    for (const char of data) {
+      if (char === '\r' || char === '\n') {
+        const command = term.inputBuffer.trim()
+        term.inputBuffer = ''
+
+        if (/^claude(?:\s|$)/.test(command)) {
+          this.setClaudeMode(term)
+        }
+        continue
+      }
+
+      if (char === '\u007f' || char === '\b') {
+        term.inputBuffer = term.inputBuffer.slice(0, -1)
+        continue
+      }
+
+      // Only keep printable command input. This avoids escape-sequence noise from
+      // cursor/navigation keys while still catching direct `claude` launches.
+      if (char >= ' ' || char === '\t') {
+        term.inputBuffer += char
+        if (term.inputBuffer.length > 1024) {
+          term.inputBuffer = term.inputBuffer.slice(-1024)
+        }
+      }
+    }
+  }
+
   create(options: { cwd?: string; projectId?: string; shell?: WindowsShell } = {}): Terminal {
     const id = this.generateId()
     const cwd = options.cwd || os.homedir()
@@ -238,6 +278,7 @@ export class TerminalManager extends EventEmitter {
       pty: ptyProcess,
       metadata: terminal,
       outputBuffer: '',
+      inputBuffer: '',
       lastOutputAt: 0,
       oscBuffer: ''
     }
@@ -276,6 +317,7 @@ export class TerminalManager extends EventEmitter {
       return false
     }
     try {
+      this.processInputForClaudeMode(term, data)
       term.pty.write(data)
       return true
     } catch (error) {
@@ -414,9 +456,7 @@ export class TerminalManager extends EventEmitter {
     command += '\n'
 
     term.pty.write(command)
-    term.metadata.isClaudeMode = true
-    // Enable title updates once Claude is running (activity started)
-    term.metadata.allowTitleUpdate = true
+    this.setClaudeMode(term)
     return true
   }
 

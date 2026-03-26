@@ -22,6 +22,7 @@ function App() {
   const addTerminal = useAppStore((state) => state.addTerminal)
   const removeTerminal = useAppStore((state) => state.removeTerminal)
   const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
+  const updateTerminalClaudeMode = useAppStore((state) => state.updateTerminalClaudeMode)
   const addProject = useAppStore((state) => state.addProject)
   const removeProject = useAppStore((state) => state.removeProject)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -369,6 +370,13 @@ function App() {
     })
     return unsubscribe
   }, [updateTerminalTitle])
+
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onStateChange(({ terminalId, isClaudeMode }) => {
+      updateTerminalClaudeMode(terminalId, isClaudeMode)
+    })
+    return unsubscribe
+  }, [updateTerminalClaudeMode])
 
   // Save session before close
   useEffect(() => {

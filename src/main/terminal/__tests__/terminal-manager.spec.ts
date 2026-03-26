@@ -95,6 +95,27 @@ describe('TerminalManager', () => {
       expect(mockPty.write).toHaveBeenCalledWith('test')
     })
 
+    it('marks a terminal as Claude mode when the user launches claude manually', () => {
+      const term = manager.create()
+
+      manager.write(term.id, 'claude')
+      manager.write(term.id, '\r')
+
+      expect(manager.get(term.id)?.isClaudeMode).toBe(true)
+    })
+
+    it('enables title updates and emits stateChange when claude is launched manually', () => {
+      const term = manager.create()
+      const stateChangeListener = vi.fn()
+      manager.on('stateChange', stateChangeListener)
+
+      manager.write(term.id, 'claude --resume session-123')
+      manager.write(term.id, '\r')
+
+      expect(manager.get(term.id)?.allowTitleUpdate).toBe(true)
+      expect(stateChangeListener).toHaveBeenCalledWith({ terminalId: term.id, isClaudeMode: true })
+    })
+
     it('returns false for non-existent terminal', () => {
       expect(manager.write('invalid', 'test')).toBe(false)
     })

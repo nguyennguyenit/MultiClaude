@@ -287,6 +287,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   colorTheme: 'tokyo-night',
   terminalLimit: { preset: 9 },
   terminalRenderMode: 'balanced',
+  gpuRendererForClaudeTerminals: false,
   glassmorphismEnabled: false,
   terminalFontFamily: 'jetbrains-mono',
   windowsShell: { type: 'cmd' },

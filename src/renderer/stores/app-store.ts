@@ -27,6 +27,7 @@ interface AppState {
   removeTerminal: (id: string) => void
   setActiveTerminal: (id: string | null) => void
   updateTerminalTitle: (id: string, title: string) => void
+  updateTerminalClaudeMode: (id: string, isClaudeMode: boolean) => void
   getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void
   getTerminalKeyboardEnhancement: (id: string) => TerminalKeyboardEnhancementState | null
@@ -143,6 +144,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       terminals: state.terminals.map((t) =>
         t.id === id ? { ...t, title } : t
+      )
+    })),
+
+  updateTerminalClaudeMode: (id, isClaudeMode) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, isClaudeMode } : t
       )
     })),
 

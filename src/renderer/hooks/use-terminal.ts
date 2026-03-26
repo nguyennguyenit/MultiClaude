@@ -95,11 +95,20 @@ function getCurrentTerminalTheme() {
  * Determine if WebGL should be used based on render mode, active state, and hidden state
  * Hidden terminals never use WebGL to save GPU resources
  */
-function shouldUseWebGL(isActive: boolean, isHidden: boolean): boolean {
+function shouldUseWebGL(terminalId: string, isActive: boolean, isHidden: boolean): boolean {
   // Never use WebGL for hidden terminals (saves GPU resources)
   if (isHidden) return false
 
-  const mode = useSettingsStore.getState().settings.terminalRenderMode ?? 'balanced'
+  const { pendingSettings } = useSettingsStore.getState()
+  const isClaudeTerminal = useAppStore.getState().terminals.some(
+    terminal => terminal.id === terminalId && terminal.isClaudeMode
+  )
+
+  if (isClaudeTerminal && !pendingSettings.gpuRendererForClaudeTerminals) {
+    return false
+  }
+
+  const mode = pendingSettings.terminalRenderMode ?? 'balanced'
   switch (mode) {
     case 'performance':
       return false
@@ -218,6 +227,41 @@ export function useTerminal({
       // Ignore refresh errors during initialization/teardown races
     }
   }, [])
+
+  const reconcileWebGL = useCallback(() => {
+    if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
+
+    const needsWebGL = shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)
+    const hasWebGL = webglAddonRef.current !== null
+
+    if (needsWebGL && !hasWebGL) {
+      webglLoadingRef.current = true
+      requestAnimationFrame(() => {
+        if (disposedRef.current || !terminalRef.current) {
+          webglLoadingRef.current = false
+          return
+        }
+        try {
+          const webglAddon = new WebglAddon()
+          webglAddonRef.current = webglAddon
+          terminalRef.current.loadAddon(webglAddon)
+          attachContextLostListener(webglAddon)
+          refreshVisibleRows()
+        } catch (e) {
+          console.warn('WebGL addon failed to load:', e)
+        }
+        webglLoadingRef.current = false
+      })
+    } else if (!needsWebGL && hasWebGL) {
+      try {
+        webglAddonRef.current?.dispose()
+      } catch {
+        // Ignore disposal errors
+      }
+      webglAddonRef.current = null
+      refreshVisibleRows()
+    }
+  }, [attachContextLostListener, refreshVisibleRows, terminalId])
 
   const performFit = useCallback((restoreViewport = true) => {
     const terminal = terminalRef.current
@@ -466,7 +510,7 @@ export function useTerminal({
       if (disposedRef.current || !terminalRef.current) return
 
       // Conditionally load WebGL based on render mode setting
-      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+      if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -845,7 +889,7 @@ export function useTerminal({
       terminalRef.current.refresh(0, terminalRef.current.rows - 1)
 
       // 3. Re-init WebGL if needed
-      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+      if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -1001,7 +1045,7 @@ export function useTerminal({
         terminalRef.current.refresh(0, terminalRef.current.rows - 1)
 
         // Reload WebGL addon with new theme
-        if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+        if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
           try {
             const webglAddon = new WebglAddon()
             webglAddonRef.current = webglAddon
@@ -1044,45 +1088,8 @@ export function useTerminal({
       webglToggleTimerRef.current = null
     }
 
-    const toggleWebGL = () => {
-      if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
-
-      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
-      const hasWebGL = webglAddonRef.current !== null
-
-      if (needsWebGL && !hasWebGL) {
-        // Load WebGL addon with guard
-        webglLoadingRef.current = true
-        requestAnimationFrame(() => {
-          if (disposedRef.current || !terminalRef.current) {
-            webglLoadingRef.current = false
-            return
-          }
-          try {
-            const webglAddon = new WebglAddon()
-            webglAddonRef.current = webglAddon
-            terminalRef.current.loadAddon(webglAddon)
-            attachContextLostListener(webglAddon)
-            refreshVisibleRows()
-          } catch (e) {
-            console.warn('WebGL addon failed to load:', e)
-          }
-          webglLoadingRef.current = false
-        })
-      } else if (!needsWebGL && hasWebGL) {
-        // Dispose WebGL addon
-        try {
-          webglAddonRef.current?.dispose()
-        } catch {
-          // Ignore disposal errors
-        }
-        webglAddonRef.current = null
-        refreshVisibleRows()
-      }
-    }
-
     // Debounce toggle to handle rapid tab switching
-    webglToggleTimerRef.current = setTimeout(toggleWebGL, WEBGL_TOGGLE_DEBOUNCE)
+    webglToggleTimerRef.current = setTimeout(reconcileWebGL, WEBGL_TOGGLE_DEBOUNCE)
 
     return () => {
       if (webglToggleTimerRef.current) {
@@ -1090,47 +1097,40 @@ export function useTerminal({
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive, isHidden, attachContextLostListener, refreshVisibleRows])
+  }, [isActive, isHidden, reconcileWebGL])
 
   // React to render mode setting changes
   useEffect(() => {
     const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
       if (!terminalRef.current || disposedRef.current) return
-      if (state.settings.terminalRenderMode === prevState.settings.terminalRenderMode) return
+      const renderModeChanged =
+        state.pendingSettings.terminalRenderMode !== prevState.pendingSettings.terminalRenderMode
+      const claudeGpuOverrideChanged =
+        state.pendingSettings.gpuRendererForClaudeTerminals !== prevState.pendingSettings.gpuRendererForClaudeTerminals
 
-      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
-      const hasWebGL = webglAddonRef.current !== null
-
-      if (needsWebGL && !hasWebGL && !webglLoadingRef.current) {
-        webglLoadingRef.current = true
-        requestAnimationFrame(() => {
-          if (disposedRef.current || !terminalRef.current) {
-            webglLoadingRef.current = false
-            return
-          }
-          try {
-            const webglAddon = new WebglAddon()
-            webglAddonRef.current = webglAddon
-            terminalRef.current.loadAddon(webglAddon)
-            attachContextLostListener(webglAddon)
-            refreshVisibleRows()
-          } catch (e) {
-            console.warn('WebGL addon failed to load:', e)
-          }
-          webglLoadingRef.current = false
-        })
-      } else if (!needsWebGL && hasWebGL) {
-        try {
-          webglAddonRef.current?.dispose()
-        } catch {
-          // Ignore disposal errors
-        }
-        webglAddonRef.current = null
-        refreshVisibleRows()
+      if (!renderModeChanged && !claudeGpuOverrideChanged) {
+        return
       }
+
+      reconcileWebGL()
     })
     return unsubscribe
-  }, [attachContextLostListener, refreshVisibleRows])
+  }, [reconcileWebGL])
+
+  useEffect(() => {
+    const unsubscribe = useAppStore.subscribe((state, prevState) => {
+      if (!terminalRef.current || disposedRef.current) return
+
+      const nextClaudeMode = state.terminals.find((terminal) => terminal.id === terminalId)?.isClaudeMode ?? false
+      const prevClaudeMode = prevState.terminals.find((terminal) => terminal.id === terminalId)?.isClaudeMode ?? false
+
+      if (nextClaudeMode === prevClaudeMode) return
+
+      reconcileWebGL()
+    })
+
+    return unsubscribe
+  }, [reconcileWebGL, terminalId])
 
   // Visibility transition: save scroll when hiding, restore scroll and cursor when showing
   // Uses useLayoutEffect to capture scroll position BEFORE browser paints display:none

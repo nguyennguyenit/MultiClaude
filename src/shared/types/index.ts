@@ -237,6 +237,7 @@ export interface AppSettings {
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
+  gpuRendererForClaudeTerminals?: boolean
   glassmorphismEnabled: boolean
   // Terminal content font family (xterm)
   terminalFontFamily: TerminalFontId
