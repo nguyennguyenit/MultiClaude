@@ -148,13 +148,24 @@ export class TelegramNotifier {
 
   static async test(botToken: string, chatId: string): Promise<NotificationTestResult> {
     try {
-      const notifier = new TelegramNotifier(botToken, chatId)
-      const success = await notifier.send('🔔 *MultiClaude*: Test notification successful\\!')
-      return success
-        ? { success: true }
-        : { success: false, error: 'Failed to send message. Check token and chat ID.' }
+      const response = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: '🔔 MultiClaude: Test notification successful!',
+            disable_web_page_preview: true
+          })
+        }
+      )
+
+      const data = (await response.json()) as { ok: boolean; description?: string }
+      if (data.ok) return { success: true }
+      return { success: false, error: data.description ?? 'Failed to send message. Check token and chat ID.' }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: `Network error: ${String(error)}` }
     }
   }
 }

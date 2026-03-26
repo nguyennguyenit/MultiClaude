@@ -128,7 +128,9 @@ export function NotificationSettings() {
               <div className="flex items-center gap-2">
                 <p className="text-base font-semibold text-[var(--mc-text-primary)]">Telegram</p>
                 {settings.telegramConfigured && (
-                  <span className="text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">Active</span>
+                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${settings.telegramEnabled ? 'text-green-400 bg-green-400/10' : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-hover)]'}`}>
+                    {settings.telegramEnabled ? 'Active' : settings.telegramConfigured ? 'Configured' : null}
+                  </span>
                 )}
               </div>
               <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">Send notifications to a Telegram chat</p>
@@ -176,7 +178,9 @@ export function NotificationSettings() {
             <div className="flex items-center gap-2">
               <p className="text-base font-semibold text-[var(--mc-text-primary)]">Discord</p>
               {settings.discordConfigured && (
-                <span className="text-[10px] uppercase font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">Active</span>
+                <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${settings.discordEnabled ? 'text-green-400 bg-green-400/10' : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-hover)]'}`}>
+                  {settings.discordEnabled ? 'Active' : settings.discordConfigured ? 'Configured' : null}
+                </span>
               )}
             </div>
             <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">Send notifications to a Discord channel</p>

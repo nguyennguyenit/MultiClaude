@@ -110,6 +110,7 @@ export interface ElectronAPI {
   notification: {
     getSettings: () => Promise<NotificationSettings>
     setSettings: (settings: Partial<NotificationSettings>) => Promise<NotificationSettings>
+    getTelegram: () => Promise<{ botToken: string; chatId: string } | null>
     setTelegram: (botToken: string, chatId: string) => Promise<boolean>
     setDiscord: (webhookUrl: string) => Promise<boolean>
     getTelegramStatus: () => Promise<boolean>
@@ -277,6 +278,7 @@ const api: ElectronAPI = {
   notification: {
     getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS),
     setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_SETTINGS, settings),
+    getTelegram: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM),
     setTelegram: (botToken, chatId) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, { botToken, chatId }),
     setDiscord: (webhookUrl) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_DISCORD, { webhookUrl }),
     getTelegramStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS),

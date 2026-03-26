@@ -446,6 +446,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return true
   })
 
+  safeHandle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM, () => {
+    return notificationManager.getTelegramCredentials()
+  })
+
   safeHandle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, () => {
     return notificationManager.getSettings().telegramConfigured
   })

@@ -80,6 +80,7 @@ export const IPC_CHANNELS = {
   NOTIFICATION_SET_SETTINGS: 'notification:set-settings',
   NOTIFICATION_SET_TELEGRAM: 'notification:set-telegram',
   NOTIFICATION_SET_DISCORD: 'notification:set-discord',
+  NOTIFICATION_GET_TELEGRAM: 'notification:get-telegram',
   NOTIFICATION_GET_TELEGRAM_STATUS: 'notification:get-telegram-status',
   NOTIFICATION_GET_DISCORD_STATUS: 'notification:get-discord-status',
   NOTIFICATION_TEST_TELEGRAM: 'notification:test-telegram',

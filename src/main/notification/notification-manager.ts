@@ -277,8 +277,13 @@ export class NotificationManager extends EventEmitter {
   }
 
   // Telegram methods
+  getTelegramCredentials(): { botToken: string; chatId: string } | null {
+    return this.storage.getTelegram()
+  }
+
   setTelegram(botToken: string, chatId: string): void {
     this.storage.setTelegram(botToken, chatId)
+    this.settings.telegramEnabled = true
   }
 
   clearTelegram(): void {
