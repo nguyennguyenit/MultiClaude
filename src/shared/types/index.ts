@@ -45,6 +45,7 @@ export interface TerminalSession {
   projectId?: string
   claudeSessionId?: string
   outputBuffer: string
+  lastOutputAt?: number
 }
 
 // Per-project terminal layout types

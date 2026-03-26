@@ -177,7 +177,7 @@ export class NotificationManager extends EventEmitter {
   }
 
   getRemoteControlStatus(): RemoteControlStatus {
-    return this.poller ? 'connected' : 'disconnected'
+    return this.poller ? this.poller.getStatus() : 'disconnected'
   }
 
   // Process terminal output through the parser

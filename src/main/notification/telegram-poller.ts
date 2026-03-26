@@ -36,6 +36,10 @@ export class TelegramPoller {
     this.statusHandler = handler
   }
 
+  getStatus(): RemoteControlStatus {
+    return this.currentStatus
+  }
+
   /** Start the polling loop. Skips stale queued messages from while app was offline. */
   async start(): Promise<void> {
     if (this.running) return

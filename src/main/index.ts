@@ -130,6 +130,9 @@ app.whenReady().then(() => {
     if (terminalManager) {
       terminalManager.emit('system-suspend')
     }
+    if (notificationManager) {
+      notificationManager.emit('system-suspend')
+    }
   })
 
   powerMonitor.on('resume', () => {
@@ -138,6 +141,9 @@ app.whenReady().then(() => {
     setTimeout(() => {
       if (terminalManager) {
         terminalManager.emit('system-resume')
+      }
+      if (notificationManager) {
+        notificationManager.emit('system-resume')
       }
       // Notify renderer to refresh terminal connections if needed
       if (mainWindow && !mainWindow.isDestroyed()) {

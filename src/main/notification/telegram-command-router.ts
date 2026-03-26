@@ -4,6 +4,8 @@ import type { ProjectStore } from '../project/project-store'
 const DEFAULT_TAIL_LINES = 20
 const SEND_OUTPUT_DELAY_MS = 2000
 const SEND_OUTPUT_LINES = 5
+const BUSY_THRESHOLD_MS = 3000
+const TELEGRAM_MSG_LIMIT = 4096
 
 type SendReply = (text: string) => Promise<boolean>
 
@@ -99,6 +101,12 @@ export class TelegramCommandRouter {
       return
     }
 
+    // Check if terminal is busy (received output within last 3 seconds)
+    if (this.isTerminalBusy(terminal.id)) {
+      await this.sendReply(`⏳ Terminal ${index} is busy, try again later`)
+      return
+    }
+
     const ok = this.terminalManager.write(terminal.id, text + '\n')
     if (!ok) {
       await this.sendReply(`Failed to write to terminal ${index}`)
@@ -160,7 +168,16 @@ export class TelegramCommandRouter {
       return
     }
 
-    await this.sendReply(`📄 Terminal ${index} — last ${lineCount} lines:\n\n\`\`\`\n${output}\n\`\`\``)
+    const msg = `📄 Terminal ${index} — last ${lineCount} lines:\n\n\`\`\`\n${output}\n\`\`\``
+    if (msg.length > TELEGRAM_MSG_LIMIT) {
+      // Truncate output to fit Telegram limit, keeping header
+      const header = `📄 Terminal ${index} — last ${lineCount} lines:\n\n\`\`\`\n`
+      const footer = '\n```'
+      const maxOutput = TELEGRAM_MSG_LIMIT - header.length - footer.length - 20
+      await this.sendReply(header + output.slice(-maxOutput) + '\n\\.\\.\\.' + footer)
+    } else {
+      await this.sendReply(msg)
+    }
   }
 
   private async handleProject(args: string[]): Promise<void> {
@@ -192,6 +209,14 @@ export class TelegramCommandRouter {
 
     this.projectStore.setActiveProjectId(project.id)
     await this.sendReply(`✅ Switched to project: ${this.esc(project.name)}`)
+  }
+
+  /** Check if terminal received output within last BUSY_THRESHOLD_MS */
+  private isTerminalBusy(terminalId: string): boolean {
+    const sessions = this.terminalManager.getSessions()
+    const session = sessions.find((s: { id: string; lastOutputAt?: number }) => s.id === terminalId)
+    if (!session?.lastOutputAt) return false
+    return (Date.now() - session.lastOutputAt) < BUSY_THRESHOLD_MS
   }
 
   private resolveTerminal(index: number) {
