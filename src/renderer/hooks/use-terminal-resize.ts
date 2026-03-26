@@ -5,51 +5,74 @@ function sumFlex(arr: number[]): number {
   return arr.reduce((a, b) => a + b, 0)
 }
 
+const DEFAULT_PROJECT_ID = '__default_project__'
+
+interface ResizeSnapshot {
+  rowFlex: number[]
+  colFlex: Map<number, number[]>
+}
+
+function createDefaultSnapshot(numRows: number): ResizeSnapshot {
+  return {
+    rowFlex: Array(numRows).fill(1),
+    colFlex: new Map()
+  }
+}
+
+function getResizeKey(projectId: string | null, layoutKey: string): string {
+  return `${projectId ?? DEFAULT_PROJECT_ID}:${layoutKey}`
+}
+
 /**
  * Manages drag-to-resize state for a terminal grid.
  * Tracks row heights and per-row column widths as flex values.
- * Resets to equal distribution when the grid layout changes.
+ * Stores resize snapshots per project and grid shape so switching projects
+ * does not reset the user's manual pane sizes.
  */
 export function useTerminalResize(
+  projectId: string | null,
   numRows: number,
   numColsPerRow: number[],
   containerRef: React.RefObject<HTMLElement | null>
 ) {
-  const [rowFlex, setRowFlex] = useState<number[]>(() => Array(numRows).fill(1))
-  const [colFlex, setColFlex] = useState<Map<number, number[]>>(new Map())
-
-  // Keep refs in sync for use inside event handlers without stale closures
-  const rowFlexRef = useRef(rowFlex)
-  rowFlexRef.current = rowFlex
-
-  const colFlexRef = useRef(colFlex)
-  colFlexRef.current = colFlex
-
-  // Reset to equal distribution when grid layout changes
   const layoutKey = `${numRows}/${numColsPerRow.join(',')}`
+  const resizeKey = getResizeKey(projectId, layoutKey)
+  const [snapshots, setSnapshots] = useState<Map<string, ResizeSnapshot>>(new Map())
+
+  const activeSnapshot = snapshots.get(resizeKey) ?? createDefaultSnapshot(numRows)
+  const snapshotRef = useRef(activeSnapshot)
+  snapshotRef.current = activeSnapshot
+
+  // Clean up impossible snapshots if row count for the current layout reaches zero.
   useEffect(() => {
-    setRowFlex(Array(numRows).fill(1))
-    setColFlex(new Map())
-  }, [layoutKey, numRows]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (numRows !== 0) return
+
+    setSnapshots((prev) => {
+      if (!prev.has(resizeKey)) return prev
+      const next = new Map(prev)
+      next.delete(resizeKey)
+      return next
+    })
+  }, [numRows, resizeKey])
 
   /** Get flex value for a row (defaults to 1 if not set) */
   const getRowFlex = useCallback((i: number): number => {
-    const flex = rowFlexRef.current
+    const flex = snapshotRef.current.rowFlex
     return (flex.length > i ? flex[i] : undefined) ?? 1
   }, [])
 
   /** Get flex value for a cell (defaults to 1 if not set) */
   const getColFlex = useCallback((rowIdx: number, colIdx: number): number => {
     const numCols = numColsPerRow[rowIdx] ?? 1
-    const flex = colFlexRef.current.get(rowIdx)
+    const flex = snapshotRef.current.colFlex.get(rowIdx)
     return (flex && flex.length === numCols ? flex[colIdx] : undefined) ?? 1
   }, [numColsPerRow])
 
   /** Start dragging the horizontal divider between row[rowIndex] and row[rowIndex+1] */
   const startRowResize = useCallback((rowIndex: number, startY: number) => {
-    const initial = rowFlexRef.current.length === numRows
-      ? [...rowFlexRef.current]
-      : Array(numRows).fill(1)
+    const initial = snapshotRef.current.rowFlex.length === numRows
+      ? [...snapshotRef.current.rowFlex]
+      : createDefaultSnapshot(numRows).rowFlex
 
     const onMove = (e: PointerEvent) => {
       const container = containerRef.current
@@ -62,7 +85,15 @@ export function useTerminalResize(
       const updated = [...initial]
       updated[rowIndex] = Math.max(0.1, initial[rowIndex] + dFlex)
       updated[rowIndex + 1] = Math.max(0.1, initial[rowIndex + 1] - dFlex)
-      setRowFlex(updated)
+      setSnapshots((prev) => {
+        const current = prev.get(resizeKey) ?? createDefaultSnapshot(numRows)
+        const next = new Map(prev)
+        next.set(resizeKey, {
+          rowFlex: updated,
+          colFlex: current.colFlex
+        })
+        return next
+      })
     }
 
     const onUp = () => {
@@ -72,12 +103,12 @@ export function useTerminalResize(
 
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
-  }, [numRows, containerRef])
+  }, [numRows, containerRef, resizeKey])
 
   /** Start dragging the vertical divider between col[colIndex] and col[colIndex+1] in a row */
   const startColResize = useCallback((rowIndex: number, colIndex: number, startX: number) => {
     const numCols = numColsPerRow[rowIndex] ?? 1
-    const initial = colFlexRef.current.get(rowIndex)?.slice() ?? Array(numCols).fill(1)
+    const initial = snapshotRef.current.colFlex.get(rowIndex)?.slice() ?? Array(numCols).fill(1)
 
     const onMove = (e: PointerEvent) => {
       const container = containerRef.current
@@ -90,7 +121,17 @@ export function useTerminalResize(
       const updated = [...initial]
       updated[colIndex] = Math.max(0.1, initial[colIndex] + dFlex)
       updated[colIndex + 1] = Math.max(0.1, initial[colIndex + 1] - dFlex)
-      setColFlex(prev => new Map(prev).set(rowIndex, updated))
+      setSnapshots((prev) => {
+        const current = prev.get(resizeKey) ?? createDefaultSnapshot(numRows)
+        const next = new Map(prev)
+        const nextColFlex = new Map(current.colFlex)
+        nextColFlex.set(rowIndex, updated)
+        next.set(resizeKey, {
+          rowFlex: current.rowFlex,
+          colFlex: nextColFlex
+        })
+        return next
+      })
     }
 
     const onUp = () => {
@@ -100,7 +141,7 @@ export function useTerminalResize(
 
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
-  }, [numColsPerRow, containerRef])
+  }, [numColsPerRow, numRows, containerRef, resizeKey])
 
   return { getRowFlex, getColFlex, startRowResize, startColResize }
 }

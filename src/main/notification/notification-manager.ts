@@ -9,6 +9,11 @@ import { FocusDetector } from './focus-detector'
 import { TaskTracker } from './task-tracker'
 import { TelegramNotifier } from './telegram-notifier'
 import { DiscordNotifier } from './discord-notifier'
+import { TelegramPoller } from './telegram-poller'
+import { TelegramCommandRouter } from './telegram-command-router'
+import type { RemoteControlStatus } from '@shared/types'
+import type { TerminalManager } from '../terminal/terminal-manager'
+import type { ProjectStore } from '../project/project-store'
 
 export class NotificationManager extends EventEmitter {
   private settings: NotificationSettings
@@ -21,6 +26,13 @@ export class NotificationManager extends EventEmitter {
 
   // Map terminalId -> projectName for context
   private terminalProjects: Map<string, string> = new Map()
+
+  private poller: TelegramPoller | null = null
+  private commandRouter: TelegramCommandRouter | null = null
+  private terminalManagerRef: TerminalManager | null = null
+  private projectStoreRef: ProjectStore | null = null
+  private suspendHandler: (() => void) | null = null
+  private resumeHandler: (() => void) | null = null
 
   constructor() {
     super()
@@ -50,6 +62,12 @@ export class NotificationManager extends EventEmitter {
   setWindow(window: BrowserWindow): void {
     this.window = window
     this.focusDetector.setWindow(window)
+  }
+
+  /** Store references to managers for remote control command routing */
+  setManagers(terminalManager: TerminalManager, projectStore: ProjectStore): void {
+    this.terminalManagerRef = terminalManager
+    this.projectStoreRef = projectStore
   }
 
   setActiveTerminal(terminalId: string | null): void {
@@ -90,7 +108,76 @@ export class NotificationManager extends EventEmitter {
       this.parser.setMode(partial.outputMode)
     }
 
+    // Sync remote control if relevant settings changed
+    if (partial.remoteControlEnabled !== undefined ||
+        partial.telegramEnabled !== undefined) {
+      this.syncRemoteControl()
+    }
+
     return this.getSettings()
+  }
+
+  /** Start or stop remote control based on settings */
+  syncRemoteControl(): void {
+    const settings = this.getSettings()
+
+    if (settings.remoteControlEnabled && settings.telegramEnabled && settings.telegramConfigured) {
+      this.startRemoteControl()
+    } else {
+      this.stopRemoteControl()
+    }
+  }
+
+  private startRemoteControl(): void {
+    if (this.poller) return // Already running
+
+    const creds = this.storage.getTelegram()
+    if (!creds || !this.terminalManagerRef || !this.projectStoreRef) return
+
+    const notifier = new TelegramNotifier(creds.botToken, creds.chatId)
+    this.commandRouter = new TelegramCommandRouter(
+      this.terminalManagerRef,
+      this.projectStoreRef,
+      (text) => notifier.send(text)
+    )
+
+    this.poller = new TelegramPoller(creds.botToken, creds.chatId)
+    this.poller.onMessage((text) => {
+      this.commandRouter?.handle(text).catch(console.error)
+    })
+    this.poller.onStatusChange((status) => {
+      this.emitRemoteControlStatus(status)
+    })
+
+    // Listen for system suspend/resume
+    this.suspendHandler = () => this.poller?.pause()
+    this.resumeHandler = () => this.poller?.resume()
+    this.on('system-suspend', this.suspendHandler)
+    this.on('system-resume', this.resumeHandler)
+
+    this.poller.start()
+  }
+
+  private stopRemoteControl(): void {
+    if (!this.poller) return
+    if (this.suspendHandler) this.off('system-suspend', this.suspendHandler)
+    if (this.resumeHandler) this.off('system-resume', this.resumeHandler)
+    this.suspendHandler = null
+    this.resumeHandler = null
+    this.poller.stop()
+    this.poller = null
+    this.commandRouter = null
+    this.emitRemoteControlStatus('disconnected')
+  }
+
+  private emitRemoteControlStatus(status: RemoteControlStatus): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, status)
+    }
+  }
+
+  getRemoteControlStatus(): RemoteControlStatus {
+    return this.poller ? this.poller.getStatus() : 'disconnected'
   }
 
   // Process terminal output through the parser
@@ -222,6 +309,7 @@ export class NotificationManager extends EventEmitter {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval)
     }
+    this.stopRemoteControl()
     this.focusDetector.destroy()
     this.taskTracker.clearAll()
     this.terminalProjects.clear()

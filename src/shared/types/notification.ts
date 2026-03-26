@@ -33,6 +33,8 @@ export interface NotificationSettings {
   notifyOnlyBackground: boolean
   /** Include extracted task name in notification message @default true */
   includeTaskSummary: boolean
+  /** Enable Telegram remote control (bidirectional commands) @default false */
+  remoteControlEnabled: boolean
 }
 
 // Telegram credentials (never stored in renderer)
@@ -59,3 +61,6 @@ export interface NotificationTestResult {
   success: boolean
   error?: string
 }
+
+// Remote control connection status
+export type RemoteControlStatus = 'disconnected' | 'connected' | 'reconnecting' | 'error'

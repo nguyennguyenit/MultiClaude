@@ -62,3 +62,7 @@ IPA-WORKFLOW.md
 .claude/skills/ipa-*/
 .claude/skills/lean-*/
 .claude/skills/lean/
+
+# Superpowers skill files (private)
+.superpowers/
+docs/superpowers/

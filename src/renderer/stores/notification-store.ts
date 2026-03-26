@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import type { NotificationSettings, NotificationEvent, SoundPreset } from '@shared/types'
+import type { NotificationSettings, NotificationEvent, SoundPreset, RemoteControlStatus } from '@shared/types'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '@shared/constants'
 
 interface NotificationState {
   settings: NotificationSettings
   isLoading: boolean
+  remoteControlStatus: RemoteControlStatus
   loadSettings: () => Promise<void>
   updateSettings: (partial: Partial<NotificationSettings>) => Promise<void>
   playSound: (type: 'success' | 'error' | 'info') => void
@@ -26,6 +27,7 @@ function getSound(preset: SoundPreset, type: string): HTMLAudioElement {
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   settings: DEFAULT_NOTIFICATION_SETTINGS,
   isLoading: false,
+  remoteControlStatus: 'disconnected',
 
   loadSettings: async () => {
     set({ isLoading: true })
@@ -83,5 +85,20 @@ export function setupNotificationListener(): () => void {
     }
   }
 
-  return window.electron.notification.onEvent(handleEvent)
+  const cleanupEvent = window.electron.notification.onEvent(handleEvent)
+
+  // Listen for remote control status changes
+  const cleanupRemoteStatus = window.electron.notification.onRemoteControlStatus((status) => {
+    useNotificationStore.setState({ remoteControlStatus: status })
+  })
+
+  // Load initial remote control status
+  window.electron.notification.getRemoteControlStatus().then((status) => {
+    useNotificationStore.setState({ remoteControlStatus: status })
+  })
+
+  return () => {
+    cleanupEvent()
+    cleanupRemoteStatus()
+  }
 }

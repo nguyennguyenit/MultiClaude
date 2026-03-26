@@ -14,6 +14,7 @@ interface PTYProcess {
   pty: pty.IPty
   metadata: Terminal
   outputBuffer: string
+  lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
   destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
   suspended?: boolean // True when system is suspended, prevents PTY operations
@@ -237,6 +238,7 @@ export class TerminalManager extends EventEmitter {
       pty: ptyProcess,
       metadata: terminal,
       outputBuffer: '',
+      lastOutputAt: 0,
       oscBuffer: ''
     }
 
@@ -246,6 +248,7 @@ export class TerminalManager extends EventEmitter {
       if (termProcess.suspended || this.systemSuspended) return
 
       termProcess.outputBuffer += data
+      termProcess.lastOutputAt = Date.now()
       if (termProcess.outputBuffer.length > TERMINAL_OUTPUT_BUFFER_MAX) {
         termProcess.outputBuffer = termProcess.outputBuffer.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
       }
@@ -424,7 +427,8 @@ export class TerminalManager extends EventEmitter {
       cwd: t.metadata.cwd,
       projectId: t.metadata.projectId,
       claudeSessionId: t.metadata.claudeSessionId,
-      outputBuffer: t.outputBuffer
+      outputBuffer: t.outputBuffer,
+      lastOutputAt: t.lastOutputAt
     }))
   }
 }

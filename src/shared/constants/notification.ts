@@ -18,7 +18,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   // Enhanced notification tracking defaults
   outputMode: 'auto',
   notifyOnlyBackground: true,
-  includeTaskSummary: true
+  includeTaskSummary: true,
+  remoteControlEnabled: false
 }
 
 // Sound preset definitions
