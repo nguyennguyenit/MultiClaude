@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Page } from '@playwright/test'
 import { test, expect, injectMockProject, WAIT_TIMES } from '../fixtures'
 import { mockProjects } from '../fixtures/test-data'
 
@@ -8,6 +9,16 @@ import { mockProjects } from '../fixtures/test-data'
  * Validates fix for cursor not appearing after project switch.
  */
 test.describe('Project Switching - Cursor Display', () => {
+  async function getRowFlex(page: Page, projectId: string): Promise<number[]> {
+    return page.evaluate((activeProjectId: string) => {
+      const rows = Array.from(
+        document.querySelectorAll(`[aria-label="Terminal grid for project ${activeProjectId}"] .terminal-row`)
+      )
+
+      return rows.map((row) => Number.parseFloat(window.getComputedStyle(row).flexGrow))
+    }, projectId)
+  }
+
   test('input activity marks that terminal as active', async ({ window }) => {
     const [project] = mockProjects
     await injectMockProject(window, [project])
@@ -184,5 +195,94 @@ test.describe('Project Switching - Cursor Display', () => {
       return store?.getState()?.activeProjectId
     })
     expect(activeProjectId).toBe(threeProjects[0].id)
+  })
+
+  test('A resize -> B -> A keeps resized terminal row ratios', async ({ window }) => {
+    const [projectA, projectB] = mockProjects.slice(0, 2)
+    await injectMockProject(window, [projectA, projectB])
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    await window.evaluate((projectId: string) => {
+      interface AppStoreState {
+        setState: (state: Record<string, unknown>) => void
+      }
+
+      const appStore = (window as unknown as { __APP_STORE__?: AppStoreState }).__APP_STORE__
+      const createdAt = new Date().toISOString()
+
+      appStore?.setState({
+        terminals: [
+          {
+            id: 'term-a-1',
+            title: 'Terminal A1',
+            cwd: '/tmp/project-a',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          },
+          {
+            id: 'term-a-2',
+            title: 'Terminal A2',
+            cwd: '/tmp/project-a',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          },
+          {
+            id: 'term-a-3',
+            title: 'Terminal A3',
+            cwd: '/tmp/project-a',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          },
+          {
+            id: 'term-a-4',
+            title: 'Terminal A4',
+            cwd: '/tmp/project-a',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          }
+        ],
+        activeTerminalId: 'term-a-1',
+        lastActiveTerminalByProjectId: {
+          [projectId]: 'term-a-1'
+        }
+      })
+    }, projectA.id)
+
+    await expect(window.locator(`[aria-label="Terminal grid for project ${projectA.id}"] .terminal-row`)).toHaveCount(2)
+
+    const handle = window.locator('.terminal-resize-handle--horizontal').first()
+    const handleBox = await handle.boundingBox()
+    expect(handleBox).not.toBeNull()
+    if (!handleBox) {
+      throw new Error('Expected horizontal resize handle to be visible')
+    }
+
+    const startX = handleBox.x + handleBox.width / 2
+    const startY = handleBox.y + handleBox.height / 2
+
+    await window.mouse.move(startX, startY)
+    await window.mouse.down()
+    await window.mouse.move(startX, startY + 140, { steps: 12 })
+    await window.mouse.up()
+    await window.waitForTimeout(WAIT_TIMES.SHORT)
+
+    const rowFlexBeforeSwitch = await getRowFlex(window, projectA.id)
+    expect(rowFlexBeforeSwitch).toHaveLength(2)
+    expect(Math.abs(rowFlexBeforeSwitch[0] - rowFlexBeforeSwitch[1])).toBeGreaterThan(0.2)
+
+    await window.locator(`[data-testid="project-tab-${projectB.id}"]`).click()
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    await window.locator(`[data-testid="project-tab-${projectA.id}"]`).click()
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    const rowFlexAfterReturn = await getRowFlex(window, projectA.id)
+    expect(rowFlexAfterReturn).toHaveLength(2)
+    expect(rowFlexAfterReturn[0]).toBeCloseTo(rowFlexBeforeSwitch[0], 1)
+    expect(rowFlexAfterReturn[1]).toBeCloseTo(rowFlexBeforeSwitch[1], 1)
   })
 })

@@ -105,6 +105,7 @@ export const TerminalGrid = memo(function TerminalGrid({
   // Resize state: flex values for rows and per-row columns
   const gridContainerRef = useRef<HTMLDivElement>(null)
   const { getRowFlex, getColFlex, startRowResize, startColResize } = useTerminalResize(
+    activeProjectId,
     activeRows.length,
     numColsPerRow,
     gridContainerRef
