@@ -472,6 +472,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     notificationManager.setActiveTerminal(terminalId)
   })
 
+  safeHandle(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, () => {
+    return notificationManager.getRemoteControlStatus()
+  })
+
+  // Pass manager references for remote control
+  notificationManager.setManagers(terminalManager, projectStore)
+
+  // Sync remote control state on startup
+  notificationManager.syncRemoteControl()
+
   // YOLO Mode settings.local.json content
   const yoloSettingsContent = {
     permissions: {

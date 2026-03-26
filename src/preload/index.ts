@@ -24,7 +24,8 @@ import type {
   UpdateState,
   WslInfo,
   WindowsShell,
-  WindowState
+  WindowState,
+  RemoteControlStatus
 } from '@shared/types'
 
 // Type-safe API for renderer
@@ -118,6 +119,8 @@ export interface ElectronAPI {
     clearDiscord: () => Promise<boolean>
     onEvent: (callback: (event: NotificationEvent) => void) => () => void
     setActiveTerminal: (terminalId: string | null) => void
+    onRemoteControlStatus: (callback: (status: RemoteControlStatus) => void) => () => void
+    getRemoteControlStatus: () => Promise<RemoteControlStatus>
   }
   yolo: {
     get: (projectPath: string) => Promise<boolean>
@@ -283,7 +286,13 @@ const api: ElectronAPI = {
     },
     setActiveTerminal: (terminalId: string | null) => {
       ipcRenderer.send(IPC_CHANNELS.NOTIFICATION_SET_ACTIVE_TERMINAL, terminalId)
-    }
+    },
+    onRemoteControlStatus: (callback: (status: import('@shared/types').RemoteControlStatus) => void) => {
+      const handler = (_event: IpcRendererEvent, status: import('@shared/types').RemoteControlStatus) => callback(status)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
+    },
+    getRemoteControlStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS)
   },
   yolo: {
     get: (projectPath) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_GET, projectPath),
