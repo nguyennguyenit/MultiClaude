@@ -57,19 +57,23 @@ multiclaude/
 ## Key Dependencies
 
 ### Main Process
-- `@lydell/node-pty`: Fork of node-pty with better build support
-- `electron-store`: Simple data persistence
+- `@lydell/node-pty`: PTY process spawning with suspend/resume support
+- `electron-store`: Persistence with validation firewall for settings
 - `simple-git`: Git operations wrapper
+- `electron-updater`: Auto-update system
 
-### Renderer Process
-- `@xterm/xterm`: Terminal rendering
-- `@xterm/addon-fit`: Auto-resize terminal
-- `@xterm/addon-webgl`: GPU-accelerated rendering (configurable modes: Performance/Balanced/Quality)
-- `react-resizable-panels`: Auto-split terminal grid layout
-- `zustand`: State management
-- `tailwindcss`: Styling
-- `@fontsource/*`: 10 font families (JetBrains Mono, Source Code Pro, Fira Code, IBM Plex Mono, Space Mono, Geist, Inter, Plus Jakarta Sans, Roboto, Ubuntu)
-- **Node.js**: 24+ (enforced in CI via GitHub Actions)
+### Renderer Process (React 19)
+- `@xterm/xterm`: Terminal rendering with keyboard enhancements
+- `@xterm/addon-fit`: Auto-resize with debounce
+- `@xterm/addon-webgl`: GPU rendering (3 modes: Performance/Balanced/Quality)
+- `zustand`: State management (app + settings stores)
+- `tailwindcss`: Styling with CSS variable overrides
+- `@fontsource/*`: 10 font families with Nerd Font symbol fallbacks
+- **Terminal Features**: OSC parsing (escape sequences), output buffering with intelligent trim, smart scroll with scroll-to-bottom button
+
+### Shared
+- `@shared/types`: Terminal, Project, Settings, NotificationEvent, TerminalLimit, WindowsShell
+- `@shared/constants`: IPC channels, theme definitions, terminal rendering modes
 
 ### Shared Components
 - `ToggleSwitch`: Reusable settings control for boolean toggles
@@ -100,29 +104,38 @@ multiclaude/
 
 ## Architecture Decisions
 
-1. **node-pty in Main Process**: PTY must run in main process (Node.js native module)
-2. **IPC for Terminal Data**: Bidirectional streaming via IPC channels
-3. **JSON Store for Persistence**: Simple file-based storage for sessions/projects
-4. **GitHub CLI for Auth**: Use `gh` CLI for OAuth flow (proven, maintained)
-5. **electron-store for Settings**: Theme/sound preferences persisted via SettingsStore in main process
-6. **Auto-Split Terminal Grid**: All terminals visible simultaneously in resizable grid layout
-7. **PowerShell on Windows**: Prefer pwsh over cmd for better compatibility
-8. **WSL UNC Path Conversion**: Convert `\\wsl$\distro\...` paths to Linux paths for folder operations
+1. **node-pty in Main Process**: Native module requires main process execution
+2. **IPC for Terminal Data**: Bidirectional streaming for PTY I/O and settings
+3. **electron-store Validation**: Firewall in main process validates all settings before persistence
+4. **Dual Settings Architecture**: Pending (preview) + Saved (disk) with deep equality checks
+5. **Terminal Limits**: Configurable per-app, per-project layout respects limit
+6. **System Suspend/Resume**: Pause PTY operations during system sleep to prevent SIGTRAP
+7. **Three Rendering Modes**: Performance (no GPU), Balanced (active only), Quality (always on)
+8. **Claude-safe Mode**: Experimental toggle to keep Claude terminals on canvas renderer
+9. **GitHub CLI for Auth**: Use `gh` CLI for OAuth (proven, maintained)
+10. **Terminal Limit Presets**: 2, 4, 9, or custom (1-99) to manage resource load
+11. **Windows Shell Selection**: cmd, PowerShell (pwsh), or WSL distros with validation
+12. **Smart Terminal Selection**: Remember lastActiveTerminalByProjectId for smooth workflow
 
 ## Terminal Grid Layout
 
-The terminal grid auto-splits based on terminal count:
+The terminal grid auto-splits based on terminal count and respects configured limit:
 
-| Terminals | Layout |
-|-----------|--------|
-| 1 | 1x1 |
-| 2 | 1x2 |
-| 3-4 | 2x2 |
-| 5-6 | 2x3 |
-| 7-9 | 3x3 |
-| 10-12 | 3x4 |
+| Terminals | Layout | Notes |
+|-----------|--------|-------|
+| 1 | 1x1 | Single full-size terminal |
+| 2 | 1x2 | Side-by-side |
+| 3-4 | 2x2 | 2x2 grid |
+| 5-6 | 2x3 | 2 rows x 3 cols |
+| 7-9 | 3x3 | 3x3 grid |
+| 10-12 | 3x4 | 3 rows x 4 cols |
+
+**Terminal Limit**: Configured in Settings (Terminals tab), presets or custom 1-99
+- Limits max concurrent terminals per project
+- Prevents UI lag and resource exhaustion
+- Enforced at spawn time
 
 **Components:**
-- `TerminalGrid`: Calculates grid dimensions, renders nested `react-resizable-panels`
-- `TerminalPane`: Wrapper with click-to-focus, ResizeObserver for debounced fit
-- `TerminalView`: xterm.js renderer with WebGL addon
+- `TerminalGrid`: Calculates dimensions respecting terminal limit; equal-split layout
+- `TerminalPane`: Pane wrapper with click-to-focus, resize observer, bottom tab bar
+- `TerminalView`: xterm.js + WebGL addon with theme colors and keyboard handling
