@@ -1,5 +1,6 @@
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
+import Store from 'electron-store'
 import type { NotificationSettings, NotificationEventType, NotificationEvent } from '@shared/types'
 import type { TaskEvent } from '@shared/types/notification-events'
 import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS } from '@shared/constants'
@@ -15,9 +16,25 @@ import type { RemoteControlStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
 
+// Keys to persist (exclude computed fields like telegramConfigured/discordConfigured)
+type PersistableKey = 'onTaskComplete' | 'onTaskFailed' | 'onReviewNeeded' |
+  'soundEnabled' | 'soundPreset' | 'telegramEnabled' | 'discordEnabled' |
+  'outputMode' | 'notifyOnlyBackground' | 'includeTaskSummary' | 'remoteControlEnabled'
+
+const PERSISTABLE_KEYS: PersistableKey[] = [
+  'onTaskComplete', 'onTaskFailed', 'onReviewNeeded',
+  'soundEnabled', 'soundPreset', 'telegramEnabled', 'discordEnabled',
+  'outputMode', 'notifyOnlyBackground', 'includeTaskSummary', 'remoteControlEnabled'
+]
+
+interface NotificationStoreSchema {
+  notificationSettings: Partial<NotificationSettings>
+}
+
 export class NotificationManager extends EventEmitter {
   private settings: NotificationSettings
   private storage: SecureStorage
+  private store: Store<NotificationStoreSchema>
   private parser: OutputParser
   private focusDetector: FocusDetector
   private taskTracker: TaskTracker
@@ -37,12 +54,19 @@ export class NotificationManager extends EventEmitter {
   constructor() {
     super()
     this.storage = new SecureStorage()
+    this.store = new Store<NotificationStoreSchema>({
+      name: 'multiclaude-notification-settings',
+      defaults: { notificationSettings: {} }
+    })
     this.parser = new OutputParser()
     this.focusDetector = new FocusDetector()
     this.taskTracker = new TaskTracker()
 
+    // Load persisted settings, merge with defaults and computed fields
+    const persisted = this.store.get('notificationSettings', {})
     this.settings = {
       ...DEFAULT_NOTIFICATION_SETTINGS,
+      ...persisted,
       telegramConfigured: this.storage.hasTelegram(),
       discordConfigured: this.storage.hasDiscord()
     }
@@ -102,6 +126,15 @@ export class NotificationManager extends EventEmitter {
 
   updateSettings(partial: Partial<NotificationSettings>): NotificationSettings {
     this.settings = { ...this.settings, ...partial }
+
+    // Persist user-configurable fields to disk
+    const toPersist: Partial<NotificationSettings> = {}
+    for (const key of PERSISTABLE_KEYS) {
+      if (key in this.settings) {
+        (toPersist as Record<string, unknown>)[key] = this.settings[key]
+      }
+    }
+    this.store.set('notificationSettings', toPersist)
 
     // Update parser mode if changed
     if (partial.outputMode) {
