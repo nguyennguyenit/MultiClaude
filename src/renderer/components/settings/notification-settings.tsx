@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNotificationStore } from '../../stores/notification-store'
 import { TelegramConfigModal } from './telegram-config-modal'
 import { DiscordConfigModal } from './discord-config-modal'
@@ -8,32 +8,28 @@ import { SettingsTitle } from './settings-typography'
 import { ToggleSwitch } from './toggle-switch'
 
 export function NotificationSettings() {
-  const { settings, loadSettings, updateSettings, remoteControlStatus } = useNotificationStore()
+  const { pendingSettings, updateSettings, refreshIntegrationSettings, remoteControlStatus } = useNotificationStore()
   const [telegramModalOpen, setTelegramModalOpen] = useState(false)
   const [discordModalOpen, setDiscordModalOpen] = useState(false)
 
-  useEffect(() => {
-    loadSettings()
-  }, [loadSettings])
-
   const handleTelegramSave = async (botToken: string, chatId: string) => {
     await window.electron.notification.setTelegram(botToken, chatId)
-    await loadSettings()
+    await refreshIntegrationSettings()
   }
 
   const handleTelegramClear = async () => {
     await window.electron.notification.clearTelegram()
-    await loadSettings()
+    await refreshIntegrationSettings()
   }
 
   const handleDiscordSave = async (webhookUrl: string) => {
     await window.electron.notification.setDiscord(webhookUrl)
-    await loadSettings()
+    await refreshIntegrationSettings()
   }
 
   const handleDiscordClear = async () => {
     await window.electron.notification.clearDiscord()
-    await loadSettings()
+    await refreshIntegrationSettings()
   }
 
   return (
@@ -47,19 +43,19 @@ export function NotificationSettings() {
         <ToggleRow
           label="On Task Complete"
           description="Notify when a long-running task finishes successfully"
-          checked={settings.onTaskComplete}
+          checked={pendingSettings.onTaskComplete}
           onChange={(v) => updateSettings({ onTaskComplete: v })}
         />
         <ToggleRow
           label="On Task Failed"
           description="Notify when a task encounters an error"
-          checked={settings.onTaskFailed}
+          checked={pendingSettings.onTaskFailed}
           onChange={(v) => updateSettings({ onTaskFailed: v })}
         />
         <ToggleRow
           label="On Review Needed"
           description="Notify when a task requires manual confirmation"
-          checked={settings.onReviewNeeded}
+          checked={pendingSettings.onReviewNeeded}
           onChange={(v) => updateSettings({ onReviewNeeded: v })}
         />
       </div>
@@ -72,7 +68,7 @@ export function NotificationSettings() {
             <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">How the app detects completion</p>
           </div>
           <select
-            value={settings.outputMode}
+            value={pendingSettings.outputMode}
             onChange={(e) => updateSettings({ outputMode: e.target.value as OutputMode })}
             className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px] text-[var(--mc-text-primary)]"
           >
@@ -84,26 +80,26 @@ export function NotificationSettings() {
         <ToggleRow
           label="Only When Background"
           description="Skip notifications if the terminal is focused"
-          checked={settings.notifyOnlyBackground}
+          checked={pendingSettings.notifyOnlyBackground}
           onChange={(v) => updateSettings({ notifyOnlyBackground: v })}
         />
         <ToggleRow
           label="Include Task Summary"
           description="Show command output summary in the notification"
-          checked={settings.includeTaskSummary}
+          checked={pendingSettings.includeTaskSummary}
           onChange={(v) => updateSettings({ includeTaskSummary: v })}
         />
         <div className="flex flex-col gap-3">
           <ToggleRow
             label="Enable Sound"
-            checked={settings.soundEnabled}
+            checked={pendingSettings.soundEnabled}
             onChange={(v) => updateSettings({ soundEnabled: v })}
           />
-          {settings.soundEnabled && (
+          {pendingSettings.soundEnabled && (
             <div className="flex items-center justify-between pl-1">
               <p className="text-sm text-[var(--mc-text-secondary)]">Sound Preset</p>
               <select
-                value={settings.soundPreset}
+                value={pendingSettings.soundPreset}
                 onChange={(e) => updateSettings({ soundPreset: e.target.value as SoundPreset })}
                 className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)] min-w-[140px] text-[var(--mc-text-primary)]"
               >
@@ -127,9 +123,9 @@ export function NotificationSettings() {
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-base font-semibold text-[var(--mc-text-primary)]">Telegram</p>
-                {settings.telegramConfigured && (
-                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${settings.telegramEnabled ? 'text-green-400 bg-green-400/10' : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-hover)]'}`}>
-                    {settings.telegramEnabled ? 'Active' : settings.telegramConfigured ? 'Configured' : null}
+                {pendingSettings.telegramConfigured && (
+                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${pendingSettings.telegramEnabled ? 'text-green-400 bg-green-400/10' : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-hover)]'}`}>
+                    {pendingSettings.telegramEnabled ? 'Active' : pendingSettings.telegramConfigured ? 'Configured' : null}
                   </span>
                 )}
               </div>
@@ -138,9 +134,9 @@ export function NotificationSettings() {
           </div>
           <div className="flex items-center gap-3">
             <ToggleSwitch
-              checked={settings.telegramEnabled}
+              checked={pendingSettings.telegramEnabled}
               onChange={(v) => updateSettings({ telegramEnabled: v })}
-              disabled={!settings.telegramConfigured}
+              disabled={!pendingSettings.telegramConfigured}
             />
             <button
               onClick={() => setTelegramModalOpen(true)}
@@ -152,7 +148,7 @@ export function NotificationSettings() {
         </div>
 
         {/* Remote Control toggle - only show when Telegram is configured and enabled */}
-        {settings.telegramConfigured && settings.telegramEnabled && (
+        {pendingSettings.telegramConfigured && pendingSettings.telegramEnabled && (
           <div className="flex items-center justify-between pl-11">
             <div>
               <div className="flex items-center gap-2">
@@ -162,7 +158,7 @@ export function NotificationSettings() {
               <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">Control terminals from Telegram</p>
             </div>
             <ToggleSwitch
-              checked={settings.remoteControlEnabled}
+              checked={pendingSettings.remoteControlEnabled}
               onChange={(v) => updateSettings({ remoteControlEnabled: v })}
             />
           </div>
@@ -177,9 +173,9 @@ export function NotificationSettings() {
           <div>
             <div className="flex items-center gap-2">
               <p className="text-base font-semibold text-[var(--mc-text-primary)]">Discord</p>
-              {settings.discordConfigured && (
-                <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${settings.discordEnabled ? 'text-green-400 bg-green-400/10' : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-hover)]'}`}>
-                  {settings.discordEnabled ? 'Active' : settings.discordConfigured ? 'Configured' : null}
+              {pendingSettings.discordConfigured && (
+                <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${pendingSettings.discordEnabled ? 'text-green-400 bg-green-400/10' : 'text-[var(--mc-text-muted)] bg-[var(--mc-bg-hover)]'}`}>
+                  {pendingSettings.discordEnabled ? 'Active' : pendingSettings.discordConfigured ? 'Configured' : null}
                 </span>
               )}
             </div>
@@ -188,9 +184,9 @@ export function NotificationSettings() {
         </div>
         <div className="flex items-center gap-3">
           <ToggleSwitch
-            checked={settings.discordEnabled}
+            checked={pendingSettings.discordEnabled}
             onChange={(v) => updateSettings({ discordEnabled: v })}
-            disabled={!settings.discordConfigured}
+            disabled={!pendingSettings.discordConfigured}
           />
           <button
             onClick={() => setDiscordModalOpen(true)}
@@ -207,14 +203,14 @@ export function NotificationSettings() {
         onClose={() => setTelegramModalOpen(false)}
         onSave={handleTelegramSave}
         onClear={handleTelegramClear}
-        isConfigured={settings.telegramConfigured}
+        isConfigured={pendingSettings.telegramConfigured}
       />
       <DiscordConfigModal
         isOpen={discordModalOpen}
         onClose={() => setDiscordModalOpen(false)}
         onSave={handleDiscordSave}
         onClear={handleDiscordClear}
-        isConfigured={settings.discordConfigured}
+        isConfigured={pendingSettings.discordConfigured}
       />
     </div>
   )

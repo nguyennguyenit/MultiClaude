@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSettingsStore } from '../../stores'
+import { useNotificationStore, useSettingsStore } from '../../stores'
 import { SettingsSidebar, type SettingsTab } from './settings-sidebar'
 import { ThemeSelector } from './theme-selector'
 import { TerminalSettings } from './terminal-settings'
@@ -15,11 +15,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
   const [isSaving, setIsSaving] = useState(false)
   const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
+  const {
+    saveSettings: saveNotificationSettings,
+    cancelSettings: cancelNotificationSettings,
+    hasUnsavedChanges: hasUnsavedNotificationChanges,
+    loadSettings: loadNotificationSettings
+  } = useNotificationStore()
+  const hasAnyUnsavedChanges = hasUnsavedChanges || hasUnsavedNotificationChanges
 
   const handleCancel = useCallback(() => {
     cancelSettings()
+    cancelNotificationSettings()
     onClose()
-  }, [cancelSettings, onClose])
+  }, [cancelNotificationSettings, cancelSettings, onClose])
 
   // ESC key to close (cancel changes)
   useEffect(() => {
@@ -30,10 +38,26 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return () => window.removeEventListener('keydown', handleEsc)
   }, [isOpen, handleCancel])
 
+  useEffect(() => {
+    if (isOpen) {
+      void loadNotificationSettings()
+    }
+  }, [isOpen, loadNotificationSettings])
+
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await saveSettings()
+      const saveOperations: Promise<void>[] = []
+
+      if (hasUnsavedChanges) {
+        saveOperations.push(saveSettings())
+      }
+
+      if (hasUnsavedNotificationChanges) {
+        saveOperations.push(saveNotificationSettings())
+      }
+
+      await Promise.all(saveOperations)
       onClose()
     } catch (err) {
       console.error('Failed to save settings:', err)
@@ -103,7 +127,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <button
             data-testid="settings-save-button"
             onClick={handleSave}
-            disabled={!hasUnsavedChanges || isSaving}
+            disabled={!hasAnyUnsavedChanges || isSaving}
             className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
           >
@@ -125,16 +149,38 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
   const [isSaving, setIsSaving] = useState(false)
   const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
+  const {
+    saveSettings: saveNotificationSettings,
+    cancelSettings: cancelNotificationSettings,
+    hasUnsavedChanges: hasUnsavedNotificationChanges,
+    loadSettings: loadNotificationSettings
+  } = useNotificationStore()
+  const hasAnyUnsavedChanges = hasUnsavedChanges || hasUnsavedNotificationChanges
 
   const handleCancel = useCallback(() => {
     cancelSettings()
+    cancelNotificationSettings()
     onClose()
-  }, [cancelSettings, onClose])
+  }, [cancelNotificationSettings, cancelSettings, onClose])
+
+  useEffect(() => {
+    void loadNotificationSettings()
+  }, [loadNotificationSettings])
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await saveSettings()
+      const saveOperations: Promise<void>[] = []
+
+      if (hasUnsavedChanges) {
+        saveOperations.push(saveSettings())
+      }
+
+      if (hasUnsavedNotificationChanges) {
+        saveOperations.push(saveNotificationSettings())
+      }
+
+      await Promise.all(saveOperations)
       onClose()
     } catch (err) {
       console.error('Failed to save settings:', err)
@@ -191,7 +237,7 @@ export function SettingsPanelContent({ onClose }: SettingsPanelContentProps) {
         <button
           data-testid="settings-save-button"
           onClick={handleSave}
-          disabled={!hasUnsavedChanges || isSaving}
+          disabled={!hasAnyUnsavedChanges || isSaving}
           className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           style={{ padding: '8px 20px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
         >

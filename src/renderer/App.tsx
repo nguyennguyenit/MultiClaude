@@ -8,7 +8,7 @@ import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
-import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { joinPathsForTerminal } from './utils'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
@@ -38,6 +38,7 @@ function App() {
   }, [])
 
   const { pendingSettings, loadSettings, detectWsl, getTerminalLimitValue } = useSettingsStore()
+  const loadNotificationSettings = useNotificationStore((state) => state.loadSettings)
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -248,6 +249,7 @@ function App() {
   // Load settings and detect WSL on mount
   useEffect(() => {
     loadSettings()
+    loadNotificationSettings()
     detectWsl()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
