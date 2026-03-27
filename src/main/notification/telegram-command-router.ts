@@ -1,5 +1,6 @@
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
+import type { Project, Terminal } from '@shared/types'
 
 const DEFAULT_TAIL_LINES = 20
 const SEND_OUTPUT_DELAY_MS = 2000
@@ -8,6 +9,7 @@ const BUSY_THRESHOLD_MS = 3000
 const TELEGRAM_MSG_LIMIT = 4096
 
 type SendReply = (text: string) => Promise<boolean>
+type TerminalQueryResult = { terminal: Terminal | null; error?: string }
 
 /**
  * Parses Telegram commands and dispatches to TerminalManager/ProjectStore.
@@ -60,9 +62,9 @@ export class TelegramCommandRouter {
       '🤖 *MultiClaude Remote Control*',
       '',
       '`/status` — List terminals',
-      '`/send <id> <text>` — Send input to terminal',
-      '`/kill <id>` — Kill terminal',
-      '`/tail <id> [n]` — View last N lines \\(default 20\\)',
+      '`/send <index|title> <text>` — Send input to terminal',
+      '`/kill <index|title>` — Kill terminal',
+      '`/tail <index|title> [n]` — View last N lines \\(default 20\\)',
       '`/project [name]` — Switch or list projects',
       '`/help` — Show this message'
     ]
@@ -70,17 +72,31 @@ export class TelegramCommandRouter {
   }
 
   private async handleStatus(): Promise<void> {
-    const terminals = this.terminalManager.list()
+    const { terminals, activeProject } = this.getScopedTerminals()
     if (terminals.length === 0) {
+      if (activeProject) {
+        await this.sendReply(`📋 No terminals running in project ${this.esc(activeProject.name)}`)
+        return
+      }
+
       await this.sendReply('📋 No terminals running')
       return
     }
 
-    const lines = [`📋 *Terminals* \\(${terminals.length}\\)`, '']
+    const lines = [`📋 *Terminals* \\(${terminals.length}\\)`]
+    if (activeProject) {
+      lines.push(`📁 *Project:* ${this.esc(activeProject.name)}`)
+    }
+    lines.push('')
+
     terminals.forEach((term, i) => {
       const index = i + 1
       const mode = term.isClaudeMode ? '🟢' : '⚪'
-      lines.push(`${index}️⃣ ${mode} ${this.esc(term.title)}`)
+      const projectName = !activeProject && term.projectId
+        ? this.projectStore.getProject(term.projectId)?.name
+        : null
+      const projectSuffix = projectName ? ` \\(${this.esc(projectName)}\\)` : ''
+      lines.push(`${index}️⃣ ${mode} ${this.esc(term.title)}${projectSuffix}`)
     })
 
     await this.sendReply(lines.join('\n'))
@@ -88,26 +104,32 @@ export class TelegramCommandRouter {
 
   private async handleSend(args: string[]): Promise<void> {
     if (args.length < 2) {
-      await this.sendReply('Usage: `/send <id> <text>`')
+      await this.sendReply('Usage: `/send <index|title> <text>`')
       return
     }
 
-    const index = parseInt(args[0], 10)
-    const text = args.slice(1).join(' ')
-    const terminal = this.resolveTerminal(index)
+    const { terminals } = this.getScopedTerminals()
+    const parsed = this.parseSendTarget(args, terminals)
 
-    if (!terminal) {
-      await this.sendReply(`Terminal ${args[0]} not found\\. Use /status`)
+    if (parsed.error) {
+      await this.sendReply(parsed.error)
       return
     }
+
+    if (!parsed.terminal) {
+      await this.sendReply(`Terminal ${this.esc(parsed.query)} not found\\. Use /status`)
+      return
+    }
+
+    const index = terminals.findIndex(term => term.id === parsed.terminal?.id) + 1
 
     // Check if terminal is busy (received output within last 3 seconds)
-    if (this.isTerminalBusy(terminal.id)) {
+    if (this.isTerminalBusy(parsed.terminal.id)) {
       await this.sendReply(`⏳ Terminal ${index} is busy, try again later`)
       return
     }
 
-    const ok = this.terminalManager.write(terminal.id, text + '\n')
+    const ok = this.terminalManager.write(parsed.terminal.id, parsed.text + '\n')
     if (!ok) {
       await this.sendReply(`Failed to write to terminal ${index}`)
       return
@@ -115,8 +137,8 @@ export class TelegramCommandRouter {
 
     // Wait briefly then show recent output
     await this.sleep(SEND_OUTPUT_DELAY_MS)
-    const output = this.getTerminalOutput(terminal.id, SEND_OUTPUT_LINES)
-    const reply = [`✅ Sent to terminal ${index} \\(${this.esc(terminal.title)}\\)`]
+    const output = this.getTerminalOutput(parsed.terminal.id, SEND_OUTPUT_LINES)
+    const reply = [`✅ Sent to terminal ${index} \\(${this.esc(parsed.terminal.title)}\\)`]
     if (output) {
       reply.push('', '```', output, '```')
     }
@@ -126,52 +148,64 @@ export class TelegramCommandRouter {
 
   private async handleKill(args: string[]): Promise<void> {
     if (args.length < 1) {
-      await this.sendReply('Usage: `/kill <id>`')
+      await this.sendReply('Usage: `/kill <index|title>`')
       return
     }
 
-    const index = parseInt(args[0], 10)
-    const terminal = this.resolveTerminal(index)
+    const { terminals } = this.getScopedTerminals()
+    const query = args.join(' ')
+    const resolved = this.resolveTerminal(query, terminals)
 
-    if (!terminal) {
-      await this.sendReply(`Terminal ${args[0]} not found\\. Use /status`)
+    if (resolved.error) {
+      await this.sendReply(resolved.error)
       return
     }
 
-    const ok = this.terminalManager.destroy(terminal.id)
+    if (!resolved.terminal) {
+      await this.sendReply(`Terminal ${this.esc(query)} not found\\. Use /status`)
+      return
+    }
+
+    const index = terminals.findIndex(term => term.id === resolved.terminal?.id) + 1
+    const ok = this.terminalManager.destroy(resolved.terminal.id)
     if (!ok) {
       await this.sendReply(`Failed to kill terminal ${index}`)
       return
     }
 
-    await this.sendReply(`🗑️ Terminal ${index} \\(${this.esc(terminal.title)}\\) killed`)
+    await this.sendReply(`🗑️ Terminal ${index} \\(${this.esc(resolved.terminal.title)}\\) killed`)
   }
 
   private async handleTail(args: string[]): Promise<void> {
     if (args.length < 1) {
-      await this.sendReply('Usage: `/tail <id> [lines]`')
+      await this.sendReply('Usage: `/tail <index|title> [lines]`')
       return
     }
 
-    const index = parseInt(args[0], 10)
-    const lineCount = args[1] ? parseInt(args[1], 10) : DEFAULT_TAIL_LINES
-    const terminal = this.resolveTerminal(index)
+    const { terminals } = this.getScopedTerminals()
+    const parsed = this.parseTailTarget(args, terminals)
 
-    if (!terminal) {
-      await this.sendReply(`Terminal ${args[0]} not found\\. Use /status`)
+    if (parsed.error) {
+      await this.sendReply(parsed.error)
       return
     }
 
-    const output = this.getTerminalOutput(terminal.id, lineCount)
+    if (!parsed.terminal) {
+      await this.sendReply(`Terminal ${this.esc(parsed.query)} not found\\. Use /status`)
+      return
+    }
+
+    const index = terminals.findIndex(term => term.id === parsed.terminal?.id) + 1
+    const output = this.getTerminalOutput(parsed.terminal.id, parsed.lineCount)
     if (!output) {
       await this.sendReply(`📄 Terminal ${index} — no output`)
       return
     }
 
-    const msg = `📄 Terminal ${index} — last ${lineCount} lines:\n\n\`\`\`\n${output}\n\`\`\``
+    const msg = `📄 Terminal ${index} — last ${parsed.lineCount} lines:\n\n\`\`\`\n${output}\n\`\`\``
     if (msg.length > TELEGRAM_MSG_LIMIT) {
       // Truncate output to fit Telegram limit, keeping header
-      const header = `📄 Terminal ${index} — last ${lineCount} lines:\n\n\`\`\`\n`
+      const header = `📄 Terminal ${index} — last ${parsed.lineCount} lines:\n\n\`\`\`\n`
       const footer = '\n```'
       const maxOutput = TELEGRAM_MSG_LIMIT - header.length - footer.length - 20
       await this.sendReply(header + output.slice(-maxOutput) + '\n\\.\\.\\.' + footer)
@@ -219,10 +253,149 @@ export class TelegramCommandRouter {
     return (Date.now() - session.lastOutputAt) < BUSY_THRESHOLD_MS
   }
 
-  private resolveTerminal(index: number) {
+  private getScopedTerminals(): { terminals: Terminal[]; activeProject: Project | null } {
     const terminals = this.terminalManager.list()
-    if (isNaN(index) || index < 1 || index > terminals.length) return null
-    return { ...terminals[index - 1], id: terminals[index - 1].id }
+    const activeProjectId = this.projectStore.getActiveProjectId()
+
+    if (!activeProjectId) {
+      return { terminals, activeProject: null }
+    }
+
+    const activeProject = this.projectStore.getProject(activeProjectId)
+    if (!activeProject) {
+      return { terminals, activeProject: null }
+    }
+
+    return {
+      terminals: terminals.filter(term => term.projectId === activeProjectId),
+      activeProject
+    }
+  }
+
+  private resolveTerminal(query: string, terminals: Terminal[]): TerminalQueryResult {
+    const trimmed = query.trim()
+    if (!trimmed) return { terminal: null }
+
+    if (/^\d+$/.test(trimmed)) {
+      const index = parseInt(trimmed, 10)
+      if (index < 1 || index > terminals.length) {
+        return { terminal: null }
+      }
+
+      return { terminal: terminals[index - 1] }
+    }
+
+    const normalized = trimmed.toLowerCase()
+    const matches = terminals.filter(term => (
+      term.id.toLowerCase() === normalized || term.title.toLowerCase() === normalized
+    ))
+
+    if (matches.length > 1) {
+      return {
+        terminal: null,
+        error: `Multiple terminals match ${this.esc(trimmed)}\\. Use /status and target by index\\.`
+      }
+    }
+
+    return { terminal: matches[0] ?? null }
+  }
+
+  private parseSendTarget(
+    args: string[],
+    terminals: Terminal[]
+  ): { terminal: Terminal | null; text: string; query: string; error?: string } {
+    if (/^\d+$/.test(args[0])) {
+      const query = args[0]
+      const resolved = this.resolveTerminal(query, terminals)
+      return {
+        terminal: resolved.terminal,
+        text: args.slice(1).join(' ').trim(),
+        query,
+        error: resolved.error
+      }
+    }
+
+    const fullQuery = args.join(' ')
+    const fullMatch = this.resolveTerminal(fullQuery, terminals)
+
+    for (let prefixLength = args.length - 1; prefixLength >= 1; prefixLength -= 1) {
+      const query = args.slice(0, prefixLength).join(' ')
+      const resolved = this.resolveTerminal(query, terminals)
+
+      if (resolved.error) {
+        return { terminal: null, text: '', query, error: resolved.error }
+      }
+
+      if (resolved.terminal) {
+        return {
+          terminal: resolved.terminal,
+          text: args.slice(prefixLength).join(' ').trim(),
+          query
+        }
+      }
+    }
+
+    if (fullMatch.error) {
+      return { terminal: null, text: '', query: fullQuery, error: fullMatch.error }
+    }
+
+    if (fullMatch.terminal) {
+      return {
+        terminal: null,
+        text: '',
+        query: fullQuery,
+        error: 'Usage: `/send <index|title> <text>`'
+      }
+    }
+
+    return { terminal: null, text: '', query: fullQuery }
+  }
+
+  private parseTailTarget(
+    args: string[],
+    terminals: Terminal[]
+  ): { terminal: Terminal | null; lineCount: number; query: string; error?: string } {
+    if (/^\d+$/.test(args[0])) {
+      const query = args[0]
+      const resolved = this.resolveTerminal(query, terminals)
+      const lineCount = args[1] && /^\d+$/.test(args[1])
+        ? Math.max(1, parseInt(args[1], 10))
+        : DEFAULT_TAIL_LINES
+
+      return {
+        terminal: resolved.terminal,
+        lineCount,
+        query,
+        error: resolved.error
+      }
+    }
+
+    const fullQuery = args.join(' ')
+    const fullMatch = this.resolveTerminal(fullQuery, terminals)
+    if (fullMatch.error) {
+      return { terminal: null, lineCount: DEFAULT_TAIL_LINES, query: fullQuery, error: fullMatch.error }
+    }
+
+    if (fullMatch.terminal) {
+      return {
+        terminal: fullMatch.terminal,
+        lineCount: DEFAULT_TAIL_LINES,
+        query: fullQuery
+      }
+    }
+
+    if (args.length > 1 && /^\d+$/.test(args[args.length - 1])) {
+      const query = args.slice(0, -1).join(' ')
+      const resolved = this.resolveTerminal(query, terminals)
+      return {
+        terminal: resolved.terminal,
+        lineCount: Math.max(1, parseInt(args[args.length - 1], 10)),
+        query,
+        error: resolved.error
+      }
+    }
+
+    return { terminal: null, lineCount: DEFAULT_TAIL_LINES, query: fullQuery }
   }
 
   private getTerminalOutput(terminalId: string, lineCount: number): string | null {

@@ -66,6 +66,18 @@ describe('TerminalManager', () => {
       expect(term2.title).toBe('Terminal 2')
     })
 
+    it('does not reuse a default title after a terminal is destroyed', () => {
+      manager.create()
+      const term2 = manager.create()
+      const term3 = manager.create()
+
+      manager.destroy(term2.id)
+
+      const term4 = manager.create()
+      expect(term3.title).toBe('Terminal 3')
+      expect(term4.title).toBe('Terminal 4')
+    })
+
     it('creates terminal with custom cwd', () => {
       const term = manager.create({ cwd: '/custom/path' })
       expect(term.cwd).toBe('/custom/path')

@@ -26,6 +26,7 @@ export class TerminalManager extends EventEmitter {
   private shell: string
   private resolvedWindowsPowerShellCommand: string | null = null
   private systemSuspended = false // Track system suspend state
+  private nextTerminalNumber = 1
 
   constructor() {
     super()
@@ -265,7 +266,7 @@ export class TerminalManager extends EventEmitter {
 
     const terminal: Terminal = {
       id,
-      title: `Terminal ${this.terminals.size + 1}`,
+      title: `Terminal ${this.nextTerminalNumber++}`,
       cwd,
       isClaudeMode: false,
       projectId: options.projectId,
