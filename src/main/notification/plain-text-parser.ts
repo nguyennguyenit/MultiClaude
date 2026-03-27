@@ -1,72 +1,55 @@
 import { EventEmitter } from 'events'
-import type { TaskEvent, NotificationEventType } from '@shared/types'
-import { ENHANCED_DETECTION_PATTERNS } from '@shared/constants'
+import type { TaskEvent } from '@shared/types'
 import { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
 
 /**
- * Enhanced plain text parser with named capture groups for task name extraction.
- * Fallback when stream-json mode is not available.
+ * Detects approval prompts from raw terminal output.
+ * Only handles `reviewNeeded` — taskComplete and taskFailed are now
+ * sourced from JSONL transcripts via ClaudeLogWatcher (clean, no ANSI codes).
+ *
+ * These prompts don't appear in JSONL because the session is still running
+ * when Claude Code asks for user confirmation.
  */
+const REVIEW_PATTERN = /\[Y\/n\]|\(y\/N\)|approve|allow\s+(?:this\s+)?tool|waiting\s+for\s+(?:your\s+)?(?:input|response|confirmation)/i
+
 export class PlainTextParser extends EventEmitter {
   private debounceMap: Map<string, number> = new Map()
-  private debounceMs = 5000
+  private readonly debounceMs = 5000
 
   parse(terminalId: string, data: string, projectName: string): void {
-    // Guard against ReDoS by limiting input length
     const safeData = data.length > MAX_REGEX_INPUT_LENGTH
       ? data.slice(0, MAX_REGEX_INPUT_LENGTH)
       : data
 
-    // Check each pattern
-    for (const [type, pattern] of Object.entries(ENHANCED_DETECTION_PATTERNS)) {
-      const match = safeData.match(pattern)
-      if (match) {
-        const key = `${terminalId}:${type}`
-        const now = Date.now()
-        const lastEmit = this.debounceMap.get(key) || 0
+    if (!REVIEW_PATTERN.test(safeData)) return
 
-        if (now - lastEmit > this.debounceMs) {
-          this.debounceMap.set(key, now)
+    const key = `${terminalId}:reviewNeeded`
+    const now = Date.now()
+    if (now - (this.debounceMap.get(key) ?? 0) <= this.debounceMs) return
 
-          // Extract task name from named groups or full match
-          const taskName = match.groups?.taskName || (match.groups?.exitCode
-            ? `Exit code ${match.groups.exitCode}`
-            : match[0].slice(0, 100))
+    this.debounceMap.set(key, now)
 
-          this.emitTaskEvent(terminalId, type as NotificationEventType, taskName, projectName)
-        }
-      }
-    }
-  }
-
-  private emitTaskEvent(terminalId: string, type: NotificationEventType, taskName: string, projectName: string): void {
     const event: TaskEvent = {
-      id: generateTaskEventId(terminalId, type, taskName),
+      id: generateTaskEventId(terminalId, 'reviewNeeded', 'approval'),
       terminalId,
-      type,
-      taskName,
+      type: 'reviewNeeded',
+      taskName: 'Waiting for approval',
       projectName,
-      timestamp: Date.now()
+      timestamp: now
     }
     this.emit('taskEvent', event)
   }
 
   clearTerminal(terminalId: string): void {
-    // Clear debounce entries for this terminal
-    for (const [key] of this.debounceMap) {
-      if (key.startsWith(`${terminalId}:`)) {
-        this.debounceMap.delete(key)
-      }
+    for (const key of this.debounceMap.keys()) {
+      if (key.startsWith(`${terminalId}:`)) this.debounceMap.delete(key)
     }
   }
 
-  /** Clean up stale debounce entries older than 60s */
   cleanup(): void {
     const now = Date.now()
     for (const [key, time] of this.debounceMap) {
-      if (now - time > 60000) {
-        this.debounceMap.delete(key)
-      }
+      if (now - time > 60000) this.debounceMap.delete(key)
     }
   }
 }

@@ -12,6 +12,7 @@ import { TelegramNotifier } from './telegram-notifier'
 import { DiscordNotifier } from './discord-notifier'
 import { TelegramPoller } from './telegram-poller'
 import { TelegramCommandRouter } from './telegram-command-router'
+import { ClaudeLogWatcher } from './claude-log-watcher'
 import type { RemoteControlStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
@@ -40,8 +41,9 @@ export class NotificationManager extends EventEmitter {
   private taskTracker: TaskTracker
   private window: BrowserWindow | null = null
   private cleanupInterval: NodeJS.Timeout | null = null
+  private logWatcher: ClaudeLogWatcher
 
-  // Map terminalId -> projectName for context
+  // Map terminalId -> projectName for context (used by OutputParser path)
   private terminalProjects: Map<string, string> = new Map()
 
   private poller: TelegramPoller | null = null
@@ -61,6 +63,7 @@ export class NotificationManager extends EventEmitter {
     this.parser = new OutputParser()
     this.focusDetector = new FocusDetector()
     this.taskTracker = new TaskTracker()
+    this.logWatcher = new ClaudeLogWatcher()
 
     // Load persisted settings, merge with defaults and computed fields
     const persisted = this.store.get('notificationSettings', {})
@@ -71,8 +74,13 @@ export class NotificationManager extends EventEmitter {
       discordConfigured: this.storage.hasDiscord()
     }
 
-    // Listen for task events from parser
+    // Listen for task events from terminal output parser (reviewNeeded only)
     this.parser.on('taskEvent', (event: TaskEvent) => {
+      this.handleTaskEvent(event)
+    })
+
+    // Listen for task completion events from JSONL transcript watcher
+    this.logWatcher.on('taskEvent', (event: TaskEvent) => {
       this.handleTaskEvent(event)
     })
 
@@ -100,6 +108,15 @@ export class NotificationManager extends EventEmitter {
 
   setTerminalProject(terminalId: string, projectName: string): void {
     this.terminalProjects.set(terminalId, projectName)
+  }
+
+  /**
+   * Register the working directory for a terminal.
+   * Starts watching ~/.claude/projects/<hash>/ for JSONL transcript events.
+   * Call this when a terminal is created with a known CWD.
+   */
+  registerTerminalCwd(terminalId: string, cwd: string): void {
+    this.logWatcher.register(cwd)
   }
 
   clearTerminal(terminalId: string): void {
@@ -354,5 +371,6 @@ export class NotificationManager extends EventEmitter {
     this.focusDetector.destroy()
     this.taskTracker.clearAll()
     this.terminalProjects.clear()
+    this.logWatcher.destroy()
   }
 }
