@@ -14,10 +14,12 @@ import {
   processTerminalKeyboardEnhancementData,
   type TerminalKeyboardEnhancementState
 } from '../utils/keyboard-enhancement-utils'
+import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
 import {
   createUserScrollIntent,
   isPointerOnViewportScrollbar,
   isViewportNearBottom,
+  resolveFitViewportRestoreTarget,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD,
   type UserScrollIntent
@@ -359,7 +361,7 @@ export function useTerminal({
     if (container.clientWidth === 0 || container.clientHeight === 0) return false
 
     const savedViewportY = terminal.buffer.active.viewportY
-    const shouldRestoreViewport = restoreViewport && !isAtBottomRef.current && savedViewportY >= 0
+    const wasAtBottom = isAtBottomRef.current
 
     try {
       fitAddon.fit()
@@ -370,8 +372,17 @@ export function useTerminal({
 
     refreshVisibleRows()
 
-    if (shouldRestoreViewport && terminalRef.current) {
-      terminalRef.current.scrollToLine(savedViewportY)
+    const restoreTarget = resolveFitViewportRestoreTarget({
+      restoreViewport,
+      wasAtBottom,
+      savedViewportY,
+      currentBaseY: terminal.buffer.active.baseY
+    })
+
+    if (restoreTarget === 'bottom' && terminalRef.current) {
+      terminalRef.current.scrollToBottom()
+    } else if (typeof restoreTarget === 'number' && terminalRef.current) {
+      terminalRef.current.scrollToLine(restoreTarget)
     }
 
     return true
@@ -639,7 +650,7 @@ export function useTerminal({
 
       // Restore output AFTER WebGL init to prevent race condition
       if (initialOutput) {
-        terminal.write(initialOutput, () => {
+        terminal.write(stripLeakedTerminalResponses(initialOutput), () => {
           requestAnimationFrame(restoreInitialViewport)
         })
       } else {
@@ -840,7 +851,7 @@ export function useTerminal({
     const terminal = terminalRef.current
     if (!terminal) return ''
 
-    const visibleData = processKeyboardEnhancementOutput(data)
+    const visibleData = stripLeakedTerminalResponses(processKeyboardEnhancementOutput(data))
     if (!visibleData) return ''
 
     // Save scroll state BEFORE write (xterm auto-scrolls on write)

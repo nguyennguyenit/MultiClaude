@@ -81,3 +81,29 @@ export function resolveViewportRestoreTarget({
 
   return null
 }
+
+export function resolveFitViewportRestoreTarget({
+  restoreViewport,
+  wasAtBottom,
+  savedViewportY,
+  currentBaseY
+}: {
+  restoreViewport: boolean
+  wasAtBottom: boolean
+  savedViewportY: number
+  currentBaseY: number
+}): ViewportRestoreTarget {
+  if (!restoreViewport) {
+    return null
+  }
+
+  if (wasAtBottom) {
+    return 'bottom'
+  }
+
+  if (savedViewportY >= 0) {
+    return clampViewportY(savedViewportY, currentBaseY)
+  }
+
+  return null
+}

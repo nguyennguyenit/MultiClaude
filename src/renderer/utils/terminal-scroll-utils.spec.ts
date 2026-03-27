@@ -3,6 +3,7 @@ import {
   createUserScrollIntent,
   isPointerOnViewportScrollbar,
   isViewportNearBottom,
+  resolveFitViewportRestoreTarget,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD
 } from './terminal-scroll-utils'
@@ -117,5 +118,32 @@ describe('terminal-scroll-utils', () => {
       viewportOffsetWidth: 400,
       viewportRight: 400
     })).toBe(false)
+  })
+
+  it('keeps bottom-following panes pinned to live output after fit changes the viewport size', () => {
+    expect(resolveFitViewportRestoreTarget({
+      restoreViewport: true,
+      wasAtBottom: true,
+      savedViewportY: 0,
+      currentBaseY: 14
+    })).toBe('bottom')
+  })
+
+  it('restores the saved viewport line after fit when the user was reading scrollback', () => {
+    expect(resolveFitViewportRestoreTarget({
+      restoreViewport: true,
+      wasAtBottom: false,
+      savedViewportY: 42,
+      currentBaseY: 100
+    })).toBe(42)
+  })
+
+  it('skips viewport restoration when fit is explicitly told not to preserve it', () => {
+    expect(resolveFitViewportRestoreTarget({
+      restoreViewport: false,
+      wasAtBottom: true,
+      savedViewportY: 0,
+      currentBaseY: 14
+    })).toBeNull()
   })
 })

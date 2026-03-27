@@ -35,6 +35,30 @@ test.describe('Project Switching - Cursor Display', () => {
     }, projectId)
   }
 
+  async function getTerminalViewportMetricsByTerminalId(page: Page, terminalId: string): Promise<{
+    scrollTop: number
+    scrollHeight: number
+    clientHeight: number
+    bottomGap: number
+  }> {
+    return page.evaluate((activeTerminalId: string) => {
+      const viewport = document.querySelector(
+        `[data-terminal-id="${activeTerminalId}"] .xterm-viewport`
+      ) as HTMLElement | null
+
+      if (!viewport) {
+        throw new Error(`Viewport not found for terminal ${activeTerminalId}`)
+      }
+
+      return {
+        scrollTop: viewport.scrollTop,
+        scrollHeight: viewport.scrollHeight,
+        clientHeight: viewport.clientHeight,
+        bottomGap: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
+      }
+    }, terminalId)
+  }
+
   async function getTerminalDebugSnapshot(page: Page, terminalId: string): Promise<{
     baseY: number
     viewportY: number
@@ -388,6 +412,52 @@ test.describe('Project Switching - Cursor Display', () => {
 
     expect(afterReturn.bottomGap).toBeLessThan(100)
     expect(afterReturnDebug?.isAtBottom).toBe(true)
+  })
+
+  test.skip(isCI, 'PTY-backed viewport preservation E2E is unreliable on CI')
+  test('adding a terminal keeps the previously bottom-following pane anchored when resize introduces scrollback', async ({ window }) => {
+    const [project] = mockProjects
+    await injectMockProject(window, [project])
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    await addTerminal(window)
+    await addTerminal(window)
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    const [terminalA] = await getProjectTerminalIds(window, project.id)
+    expect(terminalA).toBeTruthy()
+    if (!terminalA) {
+      throw new Error('Expected first terminal in the active project')
+    }
+
+    await window.locator(`[data-terminal-id="${terminalA}"]`).click()
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    await window.evaluate((id: string) => {
+      (globalThis as typeof globalThis & {
+        window: Window & { electron: { terminal: { write: (terminalId: string, data: string) => void } } }
+      }).window.electron.terminal.write(id, 'seq 1 20\n')
+    }, terminalA)
+
+    await expect.poll(async () => {
+      const metrics = await getTerminalViewportMetricsByTerminalId(window, terminalA)
+      return metrics.bottomGap
+    }, { timeout: 5000 }).toBeLessThan(50)
+
+    const beforeAdd = await getTerminalViewportMetricsByTerminalId(window, terminalA)
+    const beforeAddDebug = await getTerminalDebugSnapshot(window, terminalA)
+
+    expect(beforeAdd.bottomGap).toBeLessThan(50)
+    expect(beforeAddDebug?.isAtBottom).toBe(true)
+
+    await addTerminal(window)
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+    const afterAdd = await getTerminalViewportMetricsByTerminalId(window, terminalA)
+    const afterAddDebug = await getTerminalDebugSnapshot(window, terminalA)
+
+    expect(afterAdd.bottomGap).toBeLessThan(120)
+    expect(afterAddDebug?.isAtBottom).toBe(true)
   })
 
   test('inactive terminals in the active project are not treated as hidden', async ({ window }) => {
