@@ -8,7 +8,8 @@ const mockTerminalManager = {
   list: vi.fn<() => Terminal[]>(),
   write: vi.fn<(id: string, data: string) => boolean>(),
   destroy: vi.fn<(id: string) => boolean>(),
-  getSessions: vi.fn()
+  getSessions: vi.fn(),
+  create: vi.fn<(opts: { cwd?: string; projectId?: string }) => { id: string; title: string }>()
 }
 
 const mockProjectStore = {
@@ -26,6 +27,7 @@ describe('TelegramCommandRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSendReply.mockResolvedValue(true)
+    mockTerminalManager.create.mockReturnValue({ id: 'new-term-id', title: 'Terminal 1' })
     mockProjectStore.getProjects.mockReturnValue([])
     mockProjectStore.getProject.mockReturnValue(undefined)
     mockProjectStore.getActiveProjectId.mockReturnValue(null)
@@ -243,6 +245,68 @@ describe('TelegramCommandRouter', () => {
       expect(reply).toContain('Backend')
       expect(reply).toContain('Backend Shell')
       expect(reply).not.toContain('Frontend Shell')
+    })
+  })
+
+  describe('/new', () => {
+    const activeProject: Project = {
+      id: 'proj-1',
+      name: 'MyApp',
+      path: '/Users/plateau/Project/MyApp',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+
+    beforeEach(() => {
+      mockProjectStore.getProjects.mockReturnValue([activeProject])
+      mockProjectStore.getProject.mockReturnValue(activeProject)
+      mockProjectStore.getActiveProjectId.mockReturnValue('proj-1')
+      mockTerminalManager.list.mockReturnValue([])
+    })
+
+    it('creates a shell terminal when called with no args', async () => {
+      await router.handle('/new')
+      expect(mockTerminalManager.create).toHaveBeenCalledWith({
+        cwd: '/Users/plateau/Project/MyApp',
+        projectId: 'proj-1'
+      })
+      expect(mockTerminalManager.write).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+      expect(reply).toContain('MyApp')
+    })
+
+    it('creates terminal and runs claude when arg is claude', async () => {
+      await router.handle('/new claude')
+      expect(mockTerminalManager.create).toHaveBeenCalledWith({
+        cwd: '/Users/plateau/Project/MyApp',
+        projectId: 'proj-1'
+      })
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'claude\n')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('claude')
+    })
+
+    it('creates terminal and runs codex when arg is codex', async () => {
+      await router.handle('/new codex')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'codex\n')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('codex')
+    })
+
+    it('returns error when no active project', async () => {
+      mockProjectStore.getActiveProjectId.mockReturnValue(null)
+      await router.handle('/new')
+      expect(mockTerminalManager.create).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('No active project')
+    })
+
+    it('returns usage error for unknown arg', async () => {
+      await router.handle('/new bash')
+      expect(mockTerminalManager.create).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Usage')
     })
   })
 
