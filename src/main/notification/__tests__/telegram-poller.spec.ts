@@ -96,6 +96,35 @@ describe('TelegramPoller', () => {
       expect(onStatus).toHaveBeenCalledWith('reconnecting')
     })
 
+    it('skips stale queued commands after reconnecting', async () => {
+      const onMessage = vi.fn()
+      poller.onMessage(onMessage)
+
+      vi.spyOn(global, 'fetch')
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 7,
+              message: { chat: { id: 12345 }, text: '/status' }
+            }]
+          })
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [] })
+        } as Response)
+
+      await poller.pollOnce()
+      await poller.pollOnce()
+
+      expect(onMessage).not.toHaveBeenCalled()
+      expect(vi.mocked(fetch).mock.calls[1][0]).toContain('offset=-1&timeout=0')
+      expect(vi.mocked(fetch).mock.calls[2][0]).toContain('offset=8')
+    })
+
     it('reports error status on 401 (invalid token)', async () => {
       const onStatus = vi.fn()
       poller.onStatusChange(onStatus)

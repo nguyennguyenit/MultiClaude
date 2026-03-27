@@ -15,6 +15,7 @@ export class TelegramPoller {
   private botToken: string
   private chatId: string
   private offset = 0
+  private needsResync = false
   private running = false
   private paused = false
   private backoff = INITIAL_BACKOFF_MS
@@ -45,18 +46,7 @@ export class TelegramPoller {
     if (this.running) return
     this.running = true
     this.backoff = INITIAL_BACKOFF_MS
-
-    // Skip stale updates queued while offline (spec: offset=-1 on startup)
-    try {
-      const url = `https://api.telegram.org/bot${this.botToken}/getUpdates?offset=-1&timeout=0`
-      const res = await fetch(url)
-      const data = (await res.json()) as { ok: boolean; result: Array<{ update_id: number }> }
-      if (data.ok && data.result.length > 0) {
-        this.offset = data.result[data.result.length - 1].update_id + 1
-      }
-    } catch {
-      // Ignore — will process from wherever offset is
-    }
+    this.needsResync = true
 
     this.pollLoop()
   }
@@ -65,6 +55,7 @@ export class TelegramPoller {
   stop(): void {
     this.running = false
     this.paused = false
+    this.needsResync = false
     this.abortController?.abort()
     this.abortController = null
     // Always emit disconnected on explicit stop
@@ -83,12 +74,18 @@ export class TelegramPoller {
     if (!this.running) return
     this.paused = false
     this.backoff = INITIAL_BACKOFF_MS
+    this.needsResync = true
     this.pollLoop()
   }
 
   /** Execute a single poll cycle — exposed for testing */
   async pollOnce(): Promise<void> {
     try {
+      if (this.needsResync) {
+        const synced = await this.syncToLatest()
+        if (!synced) return
+      }
+
       this.abortController = new AbortController()
       const url = `https://api.telegram.org/bot${this.botToken}/getUpdates?offset=${this.offset}&timeout=${POLL_TIMEOUT}`
 
@@ -97,10 +94,12 @@ export class TelegramPoller {
       if (!response.ok) {
         if (response.status === 401 || response.status === 404) {
           console.error('[TelegramPoller] Invalid bot token, stopping')
+          this.needsResync = false
           this.setStatus('error')
           this.running = false
           return
         }
+        this.needsResync = true
         this.setStatus('reconnecting')
         return
       }
@@ -114,6 +113,7 @@ export class TelegramPoller {
       }
 
       if (!data.ok || !data.result) {
+        this.needsResync = true
         this.setStatus('reconnecting')
         return
       }
@@ -133,7 +133,47 @@ export class TelegramPoller {
     } catch (error) {
       if ((error as Error).name === 'AbortError') return
       console.error('[TelegramPoller] Poll error:', (error as Error).message)
+      this.needsResync = true
       this.setStatus('reconnecting')
+    }
+  }
+
+  private async syncToLatest(): Promise<boolean> {
+    try {
+      this.abortController = new AbortController()
+      const url = `https://api.telegram.org/bot${this.botToken}/getUpdates?offset=-1&timeout=0`
+      const response = await fetch(url, { signal: this.abortController.signal })
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 404) {
+          console.error('[TelegramPoller] Invalid bot token, stopping')
+          this.needsResync = false
+          this.setStatus('error')
+          this.running = false
+          return false
+        }
+
+        this.setStatus('reconnecting')
+        return false
+      }
+
+      const data = (await response.json()) as { ok: boolean; result: Array<{ update_id: number }> }
+      if (!data.ok || !data.result) {
+        this.setStatus('reconnecting')
+        return false
+      }
+
+      if (data.result.length > 0) {
+        this.offset = data.result[data.result.length - 1].update_id + 1
+      }
+
+      this.needsResync = false
+      return true
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return false
+      console.error('[TelegramPoller] Resync error:', (error as Error).message)
+      this.setStatus('reconnecting')
+      return false
     }
   }
 
