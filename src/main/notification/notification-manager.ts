@@ -316,12 +316,14 @@ export class NotificationManager extends EventEmitter {
 
   setTelegram(botToken: string, chatId: string): void {
     this.storage.setTelegram(botToken, chatId)
-    this.settings.telegramEnabled = true
+    // Use updateSettings to persist telegramEnabled to disk and trigger syncRemoteControl
+    this.updateSettings({ telegramEnabled: true })
   }
 
   clearTelegram(): void {
     this.storage.clearTelegram()
-    this.settings.telegramEnabled = false
+    // Use updateSettings to persist and trigger syncRemoteControl (stops poller)
+    this.updateSettings({ telegramEnabled: false })
   }
 
   async testTelegram(botToken: string, chatId: string) {
@@ -331,11 +333,12 @@ export class NotificationManager extends EventEmitter {
   // Discord methods
   setDiscord(webhookUrl: string): void {
     this.storage.setDiscord(webhookUrl)
+    this.updateSettings({ discordEnabled: true })
   }
 
   clearDiscord(): void {
     this.storage.clearDiscord()
-    this.settings.discordEnabled = false
+    this.updateSettings({ discordEnabled: false })
   }
 
   async testDiscord(webhookUrl: string) {
