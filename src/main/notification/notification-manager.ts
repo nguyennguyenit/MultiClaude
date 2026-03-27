@@ -191,6 +191,9 @@ export class NotificationManager extends EventEmitter {
       (text) => notifier.send(text)
     )
 
+    // Register bot commands for Telegram autocomplete suggestions
+    TelegramNotifier.registerBotCommands(creds.botToken).catch(console.error)
+
     this.poller = new TelegramPoller(creds.botToken, creds.chatId)
     this.poller.onMessage((text) => {
       this.commandRouter?.handle(text).catch(console.error)

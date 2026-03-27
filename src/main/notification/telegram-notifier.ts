@@ -146,6 +146,28 @@ export class TelegramNotifier {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
+  /** Register bot commands with Telegram so users see autocomplete suggestions */
+  static async registerBotCommands(botToken: string): Promise<void> {
+    const commands = [
+      { command: 'status', description: 'List running terminals' },
+      { command: 'send', description: 'Send input to terminal' },
+      { command: 'kill', description: 'Kill a terminal' },
+      { command: 'tail', description: 'View last N lines of terminal output' },
+      { command: 'project', description: 'Switch or list projects' },
+      { command: 'help', description: 'Show available commands' }
+    ]
+
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commands })
+      })
+    } catch (error) {
+      console.error('[TelegramNotifier] Failed to register bot commands:', error)
+    }
+  }
+
   static async test(botToken: string, chatId: string): Promise<NotificationTestResult> {
     try {
       const response = await fetch(
