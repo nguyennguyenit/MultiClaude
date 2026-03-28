@@ -4,6 +4,7 @@ import type { Project, Terminal } from '@shared/types'
 
 const DEFAULT_TAIL_LINES = 20
 const ALLOWED_NEW_COMMANDS = ['claude', 'codex'] as const
+const MAX_REMOTE_TERMINALS = 9
 type AllowedNewCommand = typeof ALLOWED_NEW_COMMANDS[number]
 const SEND_OUTPUT_DELAY_MS = 2000
 const SEND_OUTPUT_LINES = 5
@@ -272,6 +273,12 @@ export class TelegramCommandRouter {
       return
     }
 
+    const { terminals } = this.getScopedTerminals()
+    if (terminals.length >= MAX_REMOTE_TERMINALS) {
+      await this.sendReply(`Terminal limit \\(${MAX_REMOTE_TERMINALS}\\) reached\\. Use /kill to free one first`)
+      return
+    }
+
     // Create the terminal in the project directory
     const terminal = this.terminalManager.create({ cwd: project.path, projectId: activeProjectId })
 
@@ -286,8 +293,7 @@ export class TelegramCommandRouter {
 
     // Build confirmation reply
     const lines = [
-      `✅ ${this.esc(terminal.title)} created in \`${this.esc(project.name)}\``,
-      `📁 ${this.esc(project.path)}`
+      `✅ ${this.esc(terminal.title)} created in \`${this.esc(project.name)}\``
     ]
     if (arg) {
       lines.push(`🟢 Running: ${this.esc(arg)}`)

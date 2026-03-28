@@ -303,6 +303,24 @@ describe('TelegramCommandRouter', () => {
       expect(reply).toContain('codex')
     })
 
+    it('returns error when terminal limit is reached', async () => {
+      // Fill up to the limit with scoped terminals
+      const terminals = Array.from({ length: 9 }, (_, i) => ({
+        id: `uuid-${i}`,
+        title: `Terminal ${i + 1}`,
+        cwd: '/projects/myapp',
+        projectId: 'proj-1',
+        isClaudeMode: false,
+        createdAt: new Date()
+      }))
+      mockTerminalManager.list.mockReturnValue(terminals as Terminal[])
+
+      await router.handle('/new')
+      expect(mockTerminalManager.create).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('limit')
+    })
+
     it('returns error when no active project', async () => {
       mockProjectStore.getActiveProjectId.mockReturnValue(null)
       await router.handle('/new')
