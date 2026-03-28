@@ -154,6 +154,7 @@ export class TelegramNotifier {
       { command: 'kill', description: 'Kill a terminal' },
       { command: 'tail', description: 'View last N lines of terminal output' },
       { command: 'project', description: 'Switch or list projects' },
+      { command: 'new', description: 'Open a new terminal [claude|codex]' },
       { command: 'help', description: 'Show available commands' }
     ]
 

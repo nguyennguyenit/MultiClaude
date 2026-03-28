@@ -70,6 +70,7 @@ export class TelegramCommandRouter {
       '`/kill <index|title>` — Kill terminal',
       '`/tail <index|title> [n]` — View last N lines \\(default 20\\)',
       '`/project [name]` — Switch or list projects',
+      '`/new [claude|codex]` — Open a new terminal',
       '`/help` — Show this message'
     ]
     await this.sendReply(lines.join('\n'))

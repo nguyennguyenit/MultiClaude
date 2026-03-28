@@ -57,6 +57,7 @@ describe('TelegramCommandRouter', () => {
       expect(reply).toContain('/kill')
       expect(reply).toContain('/tail')
       expect(reply).toContain('/project')
+      expect(reply).toContain('/new')
     })
   })
 
