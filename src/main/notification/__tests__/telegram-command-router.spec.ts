@@ -9,7 +9,7 @@ const mockTerminalManager = {
   write: vi.fn<(id: string, data: string) => boolean>(),
   destroy: vi.fn<(id: string) => boolean>(),
   getSessions: vi.fn(),
-  create: vi.fn<(opts: { cwd?: string; projectId?: string }) => { id: string; title: string }>()
+  create: vi.fn<(opts: { cwd?: string; projectId?: string; shell?: unknown }) => Terminal>()
 }
 
 const mockProjectStore = {
@@ -27,7 +27,13 @@ describe('TelegramCommandRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSendReply.mockResolvedValue(true)
-    mockTerminalManager.create.mockReturnValue({ id: 'new-term-id', title: 'Terminal 1' })
+    mockTerminalManager.create.mockReturnValue({
+      id: 'new-term-id',
+      title: 'Terminal 1',
+      cwd: '/projects/myapp',
+      isClaudeMode: false,
+      createdAt: new Date()
+    } as Terminal)
     mockProjectStore.getProjects.mockReturnValue([])
     mockProjectStore.getProject.mockReturnValue(undefined)
     mockProjectStore.getActiveProjectId.mockReturnValue(null)
@@ -252,7 +258,7 @@ describe('TelegramCommandRouter', () => {
     const activeProject: Project = {
       id: 'proj-1',
       name: 'MyApp',
-      path: '/Users/plateau/Project/MyApp',
+      path: '/projects/myapp',
       createdAt: new Date(),
       updatedAt: new Date()
     }
@@ -267,7 +273,7 @@ describe('TelegramCommandRouter', () => {
     it('creates a shell terminal when called with no args', async () => {
       await router.handle('/new')
       expect(mockTerminalManager.create).toHaveBeenCalledWith({
-        cwd: '/Users/plateau/Project/MyApp',
+        cwd: '/projects/myapp',
         projectId: 'proj-1'
       })
       expect(mockTerminalManager.write).not.toHaveBeenCalled()
@@ -279,11 +285,12 @@ describe('TelegramCommandRouter', () => {
     it('creates terminal and runs claude when arg is claude', async () => {
       await router.handle('/new claude')
       expect(mockTerminalManager.create).toHaveBeenCalledWith({
-        cwd: '/Users/plateau/Project/MyApp',
+        cwd: '/projects/myapp',
         projectId: 'proj-1'
       })
       expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'claude\n')
       const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
       expect(reply).toContain('claude')
     })
 
@@ -291,6 +298,7 @@ describe('TelegramCommandRouter', () => {
       await router.handle('/new codex')
       expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'codex\n')
       const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
       expect(reply).toContain('codex')
     })
 
