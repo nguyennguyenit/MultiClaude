@@ -1,6 +1,7 @@
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
 import type { Project, Terminal } from '@shared/types'
+import { cleanTerminalOutput } from './terminal-output-cleaner'
 
 const DEFAULT_TAIL_LINES = 20
 const ALLOWED_NEW_COMMANDS = ['claude', 'codex'] as const
@@ -460,8 +461,7 @@ export class TelegramCommandRouter {
     const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
     if (!session?.outputBuffer) return null
 
-    const clean = session.outputBuffer.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07/g, '')
-    const lines = clean.split('\n').filter((l: string) => l.trim())
+    const lines = cleanTerminalOutput(session.outputBuffer).split('\n')
     const tail = lines.slice(-lineCount)
     return tail.length > 0 ? tail.join('\n') : null
   }
