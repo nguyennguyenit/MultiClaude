@@ -52,6 +52,8 @@ export class TelegramCommandRouter {
         return this.handleTail(args)
       case '/project':
         return this.handleProject(args)
+      case '/new':
+        return this.handleNew(args)
       default:
         await this.sendReply(`Unknown command: ${this.esc(command)}\\. Use /help`)
     }
@@ -243,6 +245,51 @@ export class TelegramCommandRouter {
 
     this.projectStore.setActiveProjectId(project.id)
     await this.sendReply(`✅ Switched to project: ${this.esc(project.name)}`)
+  }
+
+  private async handleNew(args: string[]): Promise<void> {
+    const ALLOWED_COMMANDS = ['claude', 'codex'] as const
+    type AllowedCommand = typeof ALLOWED_COMMANDS[number]
+
+    const arg = args[0]?.toLowerCase()
+
+    // Validate arg — only whitelist or empty allowed
+    if (arg !== undefined && !ALLOWED_COMMANDS.includes(arg as AllowedCommand)) {
+      await this.sendReply('Usage: `/new [claude|codex]`')
+      return
+    }
+
+    // Require active project for cwd scoping
+    const activeProjectId = this.projectStore.getActiveProjectId()
+    if (!activeProjectId) {
+      await this.sendReply('No active project\\. Use /project \\<name\\> first')
+      return
+    }
+
+    const project = this.projectStore.getProject(activeProjectId)
+    if (!project) {
+      await this.sendReply('Active project not found\\. Use /project \\<name\\> first')
+      return
+    }
+
+    // Create the terminal in the project directory
+    const terminal = this.terminalManager.create({ cwd: project.path, projectId: activeProjectId })
+
+    // Optionally launch a whitelisted command
+    if (arg) {
+      this.terminalManager.write(terminal.id, `${arg}\n`)
+    }
+
+    // Build confirmation reply
+    const lines = [
+      `✅ ${this.esc(terminal.title)} created in \`${this.esc(project.name)}\``,
+      `📁 ${this.esc(project.path)}`
+    ]
+    if (arg) {
+      lines.push(`🟢 Running: ${this.esc(arg)}`)
+    }
+
+    await this.sendReply(lines.join('\n'))
   }
 
   /** Check if terminal received output within last BUSY_THRESHOLD_MS */
