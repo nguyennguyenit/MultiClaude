@@ -3,6 +3,8 @@ import type { ProjectStore } from '../project/project-store'
 import type { Project, Terminal } from '@shared/types'
 
 const DEFAULT_TAIL_LINES = 20
+const ALLOWED_NEW_COMMANDS = ['claude', 'codex'] as const
+type AllowedNewCommand = typeof ALLOWED_NEW_COMMANDS[number]
 const SEND_OUTPUT_DELAY_MS = 2000
 const SEND_OUTPUT_LINES = 5
 const BUSY_THRESHOLD_MS = 3000
@@ -248,13 +250,10 @@ export class TelegramCommandRouter {
   }
 
   private async handleNew(args: string[]): Promise<void> {
-    const ALLOWED_COMMANDS = ['claude', 'codex'] as const
-    type AllowedCommand = typeof ALLOWED_COMMANDS[number]
-
     const arg = args[0]?.toLowerCase()
 
     // Validate arg — only whitelist or empty allowed
-    if (arg !== undefined && !ALLOWED_COMMANDS.includes(arg as AllowedCommand)) {
+    if (arg !== undefined && !ALLOWED_NEW_COMMANDS.includes(arg as AllowedNewCommand)) {
       await this.sendReply('Usage: `/new [claude|codex]`')
       return
     }
@@ -277,7 +276,11 @@ export class TelegramCommandRouter {
 
     // Optionally launch a whitelisted command
     if (arg) {
-      this.terminalManager.write(terminal.id, `${arg}\n`)
+      const ok = this.terminalManager.write(terminal.id, `${arg}\n`)
+      if (!ok) {
+        await this.sendReply(`Terminal created but failed to launch ${this.esc(arg)}`)
+        return
+      }
     }
 
     // Build confirmation reply

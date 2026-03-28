@@ -316,6 +316,13 @@ describe('TelegramCommandRouter', () => {
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('Usage')
     })
+
+    it('reports launch failure if write returns false', async () => {
+      mockTerminalManager.write.mockReturnValue(false)
+      await router.handle('/new claude')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('failed to launch')
+    })
   })
 
   describe('unknown command', () => {
