@@ -198,6 +198,9 @@ export class NotificationManager extends EventEmitter {
     this.poller.onMessage((text) => {
       this.commandRouter?.handle(text).catch(console.error)
     })
+    this.poller.onCallback((callbackId, data) => {
+      this.commandRouter?.handleCallback(callbackId, data).catch(console.error)
+    })
     this.poller.onStatusChange((status) => {
       this.emitRemoteControlStatus(status)
     })
@@ -315,7 +318,8 @@ export class NotificationManager extends EventEmitter {
       const creds = this.storage.getTelegram()
       if (creds) {
         const notifier = new TelegramNotifier(creds.botToken, creds.chatId)
-        notifier.sendTaskEvent(event).catch(console.error)
+        const terminalTitle = this.terminalManagerRef?.get(event.terminalId)?.title
+        notifier.sendTaskEvent(event, terminalTitle).catch(console.error)
       }
     }
 
