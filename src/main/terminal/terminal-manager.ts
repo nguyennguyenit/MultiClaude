@@ -306,6 +306,7 @@ export class TerminalManager extends EventEmitter {
     })
 
     this.terminals.set(id, termProcess)
+    this.emit('created', { terminal })
     return terminal
   }
 

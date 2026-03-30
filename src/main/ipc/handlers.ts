@@ -119,6 +119,21 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  // Forward terminal created events (e.g. from Telegram /new command) to renderer
+  terminalManager.on('created', ({ terminal }: { terminal: import('@shared/types').Terminal }) => {
+    if (terminal.cwd) {
+      notificationManager.registerTerminalCwd(terminal.id, terminal.cwd)
+    }
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_CREATED, {
+        ...terminal,
+        createdAt: terminal.createdAt instanceof Date
+          ? terminal.createdAt.toISOString()
+          : terminal.createdAt
+      })
+    }
+  })
+
   // Terminal handlers
   safeHandle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
     const terminal = terminalManager.create(options)

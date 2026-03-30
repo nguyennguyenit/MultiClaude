@@ -380,6 +380,14 @@ function App() {
     return unsubscribe
   }, [updateTerminalClaudeMode])
 
+  // Handle terminals created externally (e.g. via Telegram /new command)
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onCreated((terminal) => {
+      addTerminal(terminal)
+    })
+    return unsubscribe
+  }, [addTerminal])
+
   // Save session before close
   useEffect(() => {
     const handleBeforeUnload = async () => {
