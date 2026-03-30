@@ -64,21 +64,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastActiveTerminalByProjectId: {},
 
   addTerminal: (terminal) =>
-    set((state) => ({
-      terminals: [...state.terminals, terminal],
-      terminalOutputs: {
-        ...state.terminalOutputs,
-        [terminal.id]: ''
-      },
-      terminalKeyboardEnhancements: {
-        ...state.terminalKeyboardEnhancements
-      },
-      activeTerminalId: terminal.id,
-      lastActiveTerminalByProjectId: {
-        ...state.lastActiveTerminalByProjectId,
-        [getTerminalProjectKey(terminal.projectId)]: terminal.id
+    set((state) => {
+      // Guard against duplicate terminal ids (e.g. renderer + 'created' event race)
+      if (state.terminals.some((t) => t.id === terminal.id)) return state
+      return {
+        terminals: [...state.terminals, terminal],
+        terminalOutputs: {
+          ...state.terminalOutputs,
+          [terminal.id]: ''
+        },
+        terminalKeyboardEnhancements: {
+          ...state.terminalKeyboardEnhancements
+        },
+        activeTerminalId: terminal.id,
+        lastActiveTerminalByProjectId: {
+          ...state.lastActiveTerminalByProjectId,
+          [getTerminalProjectKey(terminal.projectId)]: terminal.id
+        }
       }
-    })),
+    }),
 
   removeTerminal: (id) =>
     set((state) => {

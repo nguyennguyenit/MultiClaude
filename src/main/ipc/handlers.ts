@@ -137,10 +137,8 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   // Terminal handlers
   safeHandle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
     const terminal = terminalManager.create(options)
-    // Register CWD with JSONL watcher for clean notification content
-    if (terminal.cwd) {
-      notificationManager.registerTerminalCwd(terminal.id, terminal.cwd)
-    }
+    // Note: registerTerminalCwd is handled by the 'created' event listener above,
+    // which fires for all terminals (both renderer-originated and remote-originated).
     // Serialize Date to ISO string for IPC cloning
     return {
       ...terminal,
