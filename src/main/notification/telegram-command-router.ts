@@ -24,6 +24,8 @@ export class TelegramCommandRouter {
   private projectStore: ProjectStore
   private sendReply: SendReply
 
+  private pendingChat: { terminalId: string } | null = null
+
   constructor(
     terminalManager: TerminalManager,
     projectStore: ProjectStore,
@@ -36,6 +38,22 @@ export class TelegramCommandRouter {
 
   async handle(text: string): Promise<void> {
     const trimmed = text.trim()
+
+    // Chat mode: route non-command text to pending terminal
+    if (this.pendingChat && !trimmed.startsWith('/')) {
+      const { terminalId } = this.pendingChat
+      this.pendingChat = null
+      await this.sendChatInput(terminalId, trimmed)
+      return
+    }
+
+    // /cancel clears pending chat mode
+    if (trimmed === '/cancel') {
+      this.pendingChat = null
+      await this.sendReply('❌ Cancelled')
+      return
+    }
+
     if (!trimmed.startsWith('/')) {
       await this.sendReply(this.esc('Unknown command. Use /help for available commands'))
       return
@@ -136,7 +154,7 @@ export class TelegramCommandRouter {
       return
     }
 
-    const ok = this.terminalManager.write(parsed.terminal.id, parsed.text + '\n')
+    const ok = this.terminalManager.write(parsed.terminal.id, parsed.text + '\r')
     if (!ok) {
       await this.sendReply(`Failed to write to terminal ${index}`)
       return
@@ -301,6 +319,83 @@ export class TelegramCommandRouter {
     }
 
     await this.sendReply(lines.join('\n'))
+  }
+
+  async handleCallback(callbackId: string, data: string): Promise<void> {
+    const colonIdx = data.indexOf(':')
+    if (colonIdx === -1) return
+
+    const action = data.slice(0, colonIdx)
+    const terminalId = data.slice(colonIdx + 1)
+
+    if (action === 'tail') {
+      await this.handleTailById(terminalId)
+    } else if (action === 'chat' || action === 'reply') {
+      const { terminals } = this.getScopedTerminals()
+      const terminal = terminals.find(t => t.id === terminalId)
+      if (!terminal) {
+        await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
+        return
+      }
+      const index = terminals.findIndex(t => t.id === terminalId) + 1
+      this.pendingChat = { terminalId }
+      await this.sendReply(
+        `💬 *Terminal ${index}* \\(${this.esc(terminal.title)}\\) đang chờ input\\.\nNhập lệnh \\(hoặc /cancel để huỷ\\):`
+      )
+    }
+  }
+
+  private async handleTailById(terminalId: string): Promise<void> {
+    const { terminals } = this.getScopedTerminals()
+    const terminal = terminals.find(t => t.id === terminalId)
+    if (!terminal) {
+      await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
+      return
+    }
+    const index = terminals.findIndex(t => t.id === terminalId) + 1
+    const output = this.getTerminalOutput(terminalId, DEFAULT_TAIL_LINES)
+    if (!output) {
+      await this.sendReply(`📄 Terminal ${index} — no output`)
+      return
+    }
+    const msg = `📄 Terminal ${index} — last ${DEFAULT_TAIL_LINES} lines:\n\n\`\`\`\n${output}\n\`\`\``
+    if (msg.length > TELEGRAM_MSG_LIMIT) {
+      const header = `📄 Terminal ${index} — last ${DEFAULT_TAIL_LINES} lines:\n\n\`\`\`\n`
+      const footer = '\n```'
+      const maxOutput = TELEGRAM_MSG_LIMIT - header.length - footer.length - 20
+      await this.sendReply(header + output.slice(-maxOutput) + '\n\\.\\.\\.' + footer)
+    } else {
+      await this.sendReply(msg)
+    }
+  }
+
+  private async sendChatInput(terminalId: string, text: string): Promise<void> {
+    const { terminals } = this.getScopedTerminals()
+    const terminal = terminals.find(t => t.id === terminalId)
+    if (!terminal) {
+      await this.sendReply('⚠️ Terminal not found\\. Chat session expired\\.')
+      return
+    }
+    const index = terminals.findIndex(t => t.id === terminalId) + 1
+
+    if (this.isTerminalBusy(terminalId)) {
+      await this.sendReply(`⏳ Terminal ${index} is busy, try again later`)
+      return
+    }
+
+    const ok = this.terminalManager.write(terminalId, text + '\r')
+    if (!ok) {
+      await this.sendReply(`Failed to write to terminal ${index}`)
+      return
+    }
+
+    await this.sleep(SEND_OUTPUT_DELAY_MS)
+    const output = this.getTerminalOutput(terminalId, SEND_OUTPUT_LINES)
+    const reply = [`✅ Sent to terminal ${index} \\(${this.esc(terminal.title)}\\)`]
+    if (output) {
+      reply.push('', '```', output, '```')
+    }
+    await this.sendReply(reply.join('\n'))
   }
 
   /** Check if terminal received output within last BUSY_THRESHOLD_MS */

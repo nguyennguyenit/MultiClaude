@@ -95,7 +95,7 @@ describe('TelegramCommandRouter', () => {
       ])
 
       await router.handle('/send 1 hello world')
-      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'hello world\n')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'hello world\r')
     })
 
     it('writes text to terminal by title', async () => {
@@ -108,7 +108,7 @@ describe('TelegramCommandRouter', () => {
       ])
 
       await router.handle('/send Terminal 2 pwd')
-      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'pwd\n')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'pwd\r')
     })
 
     it('rejects invalid terminal index', async () => {
@@ -355,6 +355,109 @@ describe('TelegramCommandRouter', () => {
       await router.handle('just some text')
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('/help')
+    })
+  })
+
+  describe('handleCallback', () => {
+    const term: Terminal = {
+      id: 'uuid-1',
+      title: 'Terminal 1',
+      cwd: '/tmp',
+      isClaudeMode: false,
+      createdAt: new Date()
+    }
+
+    beforeEach(() => {
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'line1\nline2\nline3', lastOutputAt: 0 }
+      ])
+    })
+
+    it('tail action sends terminal output', async () => {
+      await router.handleCallback('cq-1', 'tail:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('line3')
+    })
+
+    it('tail action replies not found for unknown terminal', async () => {
+      await router.handleCallback('cq-1', 'tail:unknown-id')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('not found')
+    })
+
+    it('chat action sets pending chat and prompts for input', async () => {
+      await router.handleCallback('cq-2', 'chat:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+      expect(reply).toContain('cancel')
+    })
+
+    it('reply action sets pending chat', async () => {
+      await router.handleCallback('cq-3', 'reply:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+    })
+  })
+
+  describe('chat mode', () => {
+    const term: Terminal = {
+      id: 'uuid-1',
+      title: 'Terminal 1',
+      cwd: '/tmp',
+      isClaudeMode: false,
+      createdAt: new Date()
+    }
+
+    beforeEach(() => {
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output after command', lastOutputAt: 0 }
+      ])
+    })
+
+    it('routes non-command text to pending terminal when chat mode active', async () => {
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output', lastOutputAt: 0 }
+      ])
+
+      await router.handle('ls -la')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'ls -la\r')
+    })
+
+    it('/cancel clears pending chat', async () => {
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+
+      await router.handle('/cancel')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Cancelled')
+      expect(mockTerminalManager.write).not.toHaveBeenCalled()
+    })
+
+    it('after chat input sent, chat mode is cleared', async () => {
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output', lastOutputAt: 0 }
+      ])
+
+      await router.handle('first command')  // sends to terminal, clears pendingChat
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+
+      await router.handle('second command')  // no pending chat → routed as unknown command
+      expect(mockTerminalManager.write).not.toHaveBeenCalled()
     })
   })
 })
