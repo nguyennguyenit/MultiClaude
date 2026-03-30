@@ -1,13 +1,20 @@
-import type { NotificationTestResult, NotificationEventType } from '@shared/types'
+import type { NotificationEventType } from '@shared/types/notification'
 import type { TaskEvent } from '@shared/types/notification-events'
+import type { NotificationTestResult } from '@shared/types'
 
 const TELEGRAM_MAX_LENGTH = 4096
 const TELEGRAM_MAX_RETRIES = 3
 const TELEGRAM_INITIAL_BACKOFF_MS = 1000
+const MAX_FIELD_LENGTH = 256
+
+interface InlineKeyboardButton {
+  text: string
+  callback_data: string
+}
 
 /**
  * Sends Telegram notifications via Bot API.
- * Uses MarkdownV2 formatting, exponential backoff on rate limits, and message pagination.
+ * Uses HTML formatting, exponential backoff on rate limits, and message pagination.
  * Inspired by ccpoke's Telegram integration patterns.
  */
 export class TelegramNotifier {
@@ -28,26 +35,41 @@ export class TelegramNotifier {
     return true
   }
 
-  async sendTaskEvent(event: TaskEvent): Promise<boolean> {
-    return this.send(this.formatTaskEvent(event))
+  async sendTaskEvent(event: TaskEvent, terminalTitle?: string): Promise<boolean> {
+    const text = this.formatTaskEvent(event, terminalTitle)
+    const keyboard = this.buildEventKeyboard(event)
+    const chunks = this.paginateMessage(text)
+    for (let i = 0; i < chunks.length; i++) {
+      const isLast = i === chunks.length - 1
+      const replyMarkup = isLast ? { inline_keyboard: keyboard } : undefined
+      const ok = await this.sendWithRetry(chunks[i], replyMarkup)
+      if (!ok) return false
+    }
+    return true
   }
 
-  private async sendWithRetry(text: string): Promise<boolean> {
+  private async sendWithRetry(
+    text: string,
+    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }
+  ): Promise<boolean> {
     let backoff = TELEGRAM_INITIAL_BACKOFF_MS
 
     for (let attempt = 0; attempt <= TELEGRAM_MAX_RETRIES; attempt++) {
       try {
+        const body: Record<string, unknown> = {
+          chat_id: this.chatId,
+          text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true
+        }
+        if (replyMarkup) body.reply_markup = replyMarkup
+
         const response = await fetch(
           `https://api.telegram.org/bot${this.botToken}/sendMessage`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: this.chatId,
-              text,
-              parse_mode: 'MarkdownV2',
-              disable_web_page_preview: true
-            })
+            body: JSON.stringify(body)
           }
         )
 
@@ -77,9 +99,7 @@ export class TelegramNotifier {
     return false
   }
 
-  private static readonly MAX_FIELD_LENGTH = 200
-
-  private formatTaskEvent(event: TaskEvent): string {
+  private formatTaskEvent(event: TaskEvent, terminalTitle?: string): string {
     const emoji: Record<NotificationEventType, string> = {
       taskComplete: '✅',
       taskFailed: '❌',
@@ -97,27 +117,44 @@ export class TelegramNotifier {
       hour12: false
     })
 
+    const projectName = this.escapeHtml(event.projectName.slice(0, MAX_FIELD_LENGTH))
+    const taskName = this.escapeHtml(event.taskName.slice(0, MAX_FIELD_LENGTH))
+
+    const headerLine = terminalTitle
+      ? `📁 ${projectName}  ·  🖥 ${this.escapeHtml(terminalTitle.slice(0, MAX_FIELD_LENGTH))}`
+      : `📁 <b>Project:</b> ${projectName}`
+
     const lines = [
-      `${emoji[event.type]} *${this.esc(titles[event.type])}*`,
+      `${emoji[event.type]} <b>${titles[event.type]}</b>`,
       '',
-      `📁 *Project:* \`${this.esc(event.projectName.slice(0, TelegramNotifier.MAX_FIELD_LENGTH))}\``,
-      `📝 *Task:* ${this.esc(event.taskName.slice(0, TelegramNotifier.MAX_FIELD_LENGTH))}`
+      headerLine,
+      `📝 <b>Task:</b> ${taskName}`
     ]
 
     if (event.context) {
-      lines.push(
-        `💬 *Context:* ${this.esc(event.context.slice(0, TelegramNotifier.MAX_FIELD_LENGTH))}`
-      )
+      lines.push(`💬 <b>Context:</b> ${this.escapeHtml(event.context.slice(0, MAX_FIELD_LENGTH))}`)
     }
 
-    lines.push('', `_🕐 ${this.esc(time)} · MultiClaude_`)
+    lines.push('', `<i>🕐 ${this.escapeHtml(time)} · MultiClaude</i>`)
 
     return lines.join('\n')
   }
 
-  /** Escape MarkdownV2 special characters per Telegram spec */
-  private esc(text: string): string {
-    return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&')
+  private buildEventKeyboard(event: TaskEvent): InlineKeyboardButton[][] {
+    const chatText = event.type === 'reviewNeeded' ? 'Trả lời 💬' : 'Chat 💬'
+    return [[
+      { text: 'Chi tiết 🔍', callback_data: `tail:${event.terminalId}` },
+      { text: chatText, callback_data: `chat:${event.terminalId}` }
+    ]]
+  }
+
+  /** Escape HTML special characters */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
   }
 
   /** Split message into ≤4096-char chunks at line boundaries */
