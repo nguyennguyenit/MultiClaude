@@ -149,4 +149,85 @@ describe('TelegramPoller', () => {
       expect(onStatus).toHaveBeenCalledWith('disconnected')
     })
   })
+
+  describe('callback_query', () => {
+    it('calls onCallback for whitelisted chat callback', async () => {
+      const onCallback = vi.fn()
+      poller.onCallback(onCallback)
+
+      vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 10,
+              callback_query: {
+                id: 'cq-123',
+                from: { id: 12345 },
+                data: 'tail:term-abc',
+                message: { message_id: 99, chat: { id: 12345 } }
+              }
+            }]
+          })
+        } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true }) } as Response)
+
+      await poller.pollOnce()
+      expect(onCallback).toHaveBeenCalledWith('cq-123', 'tail:term-abc')
+    })
+
+    it('ignores callback_query from non-whitelisted chat', async () => {
+      const onCallback = vi.fn()
+      poller.onCallback(onCallback)
+
+      vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 11,
+              callback_query: {
+                id: 'cq-456',
+                from: { id: 99999 },
+                data: 'tail:term-abc',
+                message: { message_id: 99, chat: { id: 99999 } }
+              }
+            }]
+          })
+        } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true }) } as Response)
+
+      await poller.pollOnce()
+      expect(onCallback).not.toHaveBeenCalled()
+    })
+
+    it('answers callback query even when chat is not whitelisted', async () => {
+      vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 12,
+              callback_query: {
+                id: 'cq-789',
+                from: { id: 99999 },
+                data: 'tail:term-abc',
+                message: { message_id: 99, chat: { id: 99999 } }
+              }
+            }]
+          })
+        } as Response)
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true }) } as Response)
+
+      await poller.pollOnce()
+
+      const answerCall = vi.mocked(fetch).mock.calls[1]
+      expect(answerCall[0]).toContain('answerCallbackQuery')
+      const answerBody = JSON.parse(answerCall[1]?.body as string)
+      expect(answerBody.callback_query_id).toBe('cq-789')
+    })
+  })
 })

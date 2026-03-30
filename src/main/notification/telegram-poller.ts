@@ -5,6 +5,7 @@ const MAX_BACKOFF_MS = 30_000
 const INITIAL_BACKOFF_MS = 1000
 
 type MessageHandler = (text: string) => void
+type CallbackHandler = (callbackId: string, data: string) => void
 type StatusHandler = (status: RemoteControlStatus) => void
 
 /**
@@ -21,6 +22,7 @@ export class TelegramPoller {
   private backoff = INITIAL_BACKOFF_MS
   private abortController: AbortController | null = null
   private messageHandler: MessageHandler | null = null
+  private callbackHandler: CallbackHandler | null = null
   private statusHandler: StatusHandler | null = null
   private currentStatus: RemoteControlStatus = 'disconnected'
 
@@ -31,6 +33,10 @@ export class TelegramPoller {
 
   onMessage(handler: MessageHandler): void {
     this.messageHandler = handler
+  }
+
+  onCallback(handler: CallbackHandler): void {
+    this.callbackHandler = handler
   }
 
   onStatusChange(handler: StatusHandler): void {
@@ -109,6 +115,12 @@ export class TelegramPoller {
         result: Array<{
           update_id: number
           message?: { chat: { id: number }; text?: string }
+          callback_query?: {
+            id: string
+            from: { id: number }
+            data?: string
+            message?: { message_id: number; chat: { id: number } }
+          }
         }>
       }
 
@@ -120,6 +132,18 @@ export class TelegramPoller {
 
       for (const update of data.result) {
         this.offset = update.update_id + 1
+
+        if (update.callback_query) {
+          const cq = update.callback_query
+          const cqChatId = cq.message?.chat?.id
+          if (cqChatId && String(cqChatId) === String(this.chatId) && cq.data) {
+            this.callbackHandler?.(cq.id, cq.data)
+          }
+          // Must answer every callback query — dismisses button loading spinner
+          this.answerCallbackQuery(cq.id).catch(() => {})
+          continue
+        }
+
         const msgChatId = update.message?.chat?.id
         if (!msgChatId || String(msgChatId) !== String(this.chatId)) continue
         const text = update.message?.text
@@ -135,6 +159,18 @@ export class TelegramPoller {
       console.error('[TelegramPoller] Poll error:', (error as Error).message)
       this.needsResync = true
       this.setStatus('reconnecting')
+    }
+  }
+
+  private async answerCallbackQuery(callbackQueryId: string): Promise<void> {
+    try {
+      await fetch(`https://api.telegram.org/bot${this.botToken}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callbackQueryId })
+      })
+    } catch {
+      // Ignore — button spinner auto-dismisses after Telegram timeout
     }
   }
 
