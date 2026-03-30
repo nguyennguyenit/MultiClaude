@@ -203,7 +203,7 @@ describe('TelegramPoller', () => {
       expect(onCallback).not.toHaveBeenCalled()
     })
 
-    it('answers callback query even when chat is not whitelisted', async () => {
+    it('does not answer callback query when chat is not whitelisted', async () => {
       vi.spyOn(global, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -220,14 +220,12 @@ describe('TelegramPoller', () => {
             }]
           })
         } as Response)
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true }) } as Response)
 
       await poller.pollOnce()
 
-      const answerCall = vi.mocked(fetch).mock.calls[1]
-      expect(answerCall[0]).toContain('answerCallbackQuery')
-      const answerBody = JSON.parse(answerCall[1]?.body as string)
-      expect(answerBody.callback_query_id).toBe('cq-789')
+      // Only the getUpdates call should have been made — no answerCallbackQuery for unauthorized chat
+      expect(vi.mocked(fetch).mock.calls).toHaveLength(1)
+      expect(String(vi.mocked(fetch).mock.calls[0][0])).not.toContain('answerCallbackQuery')
     })
   })
 })

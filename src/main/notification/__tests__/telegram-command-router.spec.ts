@@ -289,7 +289,7 @@ describe('TelegramCommandRouter', () => {
         cwd: '/projects/myapp',
         projectId: 'proj-1'
       })
-      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'claude\n')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'claude\r')
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('Terminal 1')
       expect(reply).toContain('claude')
@@ -297,7 +297,7 @@ describe('TelegramCommandRouter', () => {
 
     it('creates terminal and runs codex when arg is codex', async () => {
       await router.handle('/new codex')
-      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'codex\n')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'codex\r')
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('Terminal 1')
       expect(reply).toContain('codex')

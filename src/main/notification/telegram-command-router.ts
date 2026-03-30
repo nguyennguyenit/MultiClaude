@@ -17,7 +17,7 @@ type TerminalQueryResult = { terminal: Terminal | null; error?: string }
 
 /**
  * Parses Telegram commands and dispatches to TerminalManager/ProjectStore.
- * Responds via sendReply callback (TelegramNotifier.send).
+ * Responds via sendReply callback (TelegramNotifier.sendMarkdown — MarkdownV2 format).
  */
 export class TelegramCommandRouter {
   private terminalManager: TerminalManager
@@ -303,7 +303,7 @@ export class TelegramCommandRouter {
 
     // Optionally launch a whitelisted command
     if (arg) {
-      const ok = this.terminalManager.write(terminal.id, `${arg}\n`)
+      const ok = this.terminalManager.write(terminal.id, `${arg}\r`)
       if (!ok) {
         await this.sendReply(`Terminal created but failed to launch ${this.esc(arg)}`)
         return

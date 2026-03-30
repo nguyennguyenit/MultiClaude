@@ -35,6 +35,16 @@ export class TelegramNotifier {
     return true
   }
 
+  /** Send text using MarkdownV2 parse mode (for command replies with backticks, bold, etc.) */
+  async sendMarkdown(text: string): Promise<boolean> {
+    const chunks = this.paginateMessage(text)
+    for (const chunk of chunks) {
+      const ok = await this.sendWithRetry(chunk, undefined, 'MarkdownV2')
+      if (!ok) return false
+    }
+    return true
+  }
+
   async sendTaskEvent(event: TaskEvent, terminalTitle?: string): Promise<boolean> {
     const text = this.formatTaskEvent(event, terminalTitle)
     const keyboard = this.buildEventKeyboard(event)
@@ -50,7 +60,8 @@ export class TelegramNotifier {
 
   private async sendWithRetry(
     text: string,
-    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }
+    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] },
+    parseMode: 'HTML' | 'MarkdownV2' = 'HTML'
   ): Promise<boolean> {
     let backoff = TELEGRAM_INITIAL_BACKOFF_MS
 
@@ -59,7 +70,7 @@ export class TelegramNotifier {
         const body: Record<string, unknown> = {
           chat_id: this.chatId,
           text,
-          parse_mode: 'HTML',
+          parse_mode: parseMode,
           disable_web_page_preview: true
         }
         if (replyMarkup) body.reply_markup = replyMarkup

@@ -136,11 +136,13 @@ export class TelegramPoller {
         if (update.callback_query) {
           const cq = update.callback_query
           const cqChatId = cq.message?.chat?.id
-          if (cqChatId && String(cqChatId) === String(this.chatId) && cq.data) {
-            this.callbackHandler?.(cq.id, cq.data)
+          if (cqChatId && String(cqChatId) === String(this.chatId)) {
+            if (cq.data) {
+              this.callbackHandler?.(cq.id, cq.data)
+            }
+            // Must answer every callback query — dismisses button loading spinner
+            this.answerCallbackQuery(cq.id).catch(() => {})
           }
-          // Must answer every callback query — dismisses button loading spinner
-          this.answerCallbackQuery(cq.id).catch(() => {})
           continue
         }
 

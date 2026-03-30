@@ -188,7 +188,7 @@ export class NotificationManager extends EventEmitter {
     this.commandRouter = new TelegramCommandRouter(
       this.terminalManagerRef,
       this.projectStoreRef,
-      (text) => notifier.send(text)
+      (text) => notifier.sendMarkdown(text)
     )
 
     // Register bot commands for Telegram autocomplete suggestions
