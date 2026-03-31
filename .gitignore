@@ -41,6 +41,7 @@ plans/
 # Claude Code local commands
 .claude/commands/
 .claude/settings.local.json
+.claude/session-state/
 
 # Local feature planning folder
 new-feature/
