@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events'
 import type { TaskEvent } from '@shared/types'
 import { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
+import { cleanTerminalOutput } from './terminal-output-cleaner'
 
 /**
  * Detects approval prompts from raw terminal output.
@@ -9,17 +10,31 @@ import { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
  *
  * These prompts don't appear in JSONL because the session is still running
  * when Claude Code asks for user confirmation.
+ *
+ * Maintains a rolling buffer of recent lines per terminal to extract
+ * meaningful context (tool name, question) from surrounding output.
  */
 const REVIEW_PATTERN = /\[Y\/n\]|\(y\/N\)|approve|allow\s+(?:this\s+)?tool|waiting\s+for\s+(?:your\s+)?(?:input|response|confirmation)/i
+
+/** Matches "Allow `tool` to run" or "Allow tool to run" patterns */
+const TOOL_APPROVAL_PATTERN = /[Aa]llow\s+[`']?(\w[\w-]*)[`']?\s+to\s+(?:run|execute)/
+
+/** Lines to keep per terminal for context extraction */
+const BUFFER_SIZE = 5
 
 export class PlainTextParser extends EventEmitter {
   private debounceMap: Map<string, number> = new Map()
   private readonly debounceMs = 5000
+  /** Rolling buffer of recent clean lines per terminal */
+  private lineBuffers: Map<string, string[]> = new Map()
 
   parse(terminalId: string, data: string, projectName: string): void {
     const safeData = data.length > MAX_REGEX_INPUT_LENGTH
       ? data.slice(0, MAX_REGEX_INPUT_LENGTH)
       : data
+
+    // Update rolling buffer with clean lines from this chunk
+    this.updateBuffer(terminalId, safeData)
 
     if (!REVIEW_PATTERN.test(safeData)) return
 
@@ -33,14 +48,49 @@ export class PlainTextParser extends EventEmitter {
       id: generateTaskEventId(terminalId, 'reviewNeeded', 'approval'),
       terminalId,
       type: 'reviewNeeded',
-      taskName: 'Waiting for approval',
+      taskName: this.extractContext(terminalId),
       projectName,
       timestamp: now
     }
     this.emit('taskEvent', event)
   }
 
+  /** Add clean lines from raw data to the terminal's rolling buffer */
+  private updateBuffer(terminalId: string, raw: string): void {
+    const clean = cleanTerminalOutput(raw)
+    const newLines = clean.split('\n').filter(l => l.trim().length > 3)
+    if (newLines.length === 0) return
+
+    const buffer = this.lineBuffers.get(terminalId) || []
+    buffer.push(...newLines)
+    if (buffer.length > BUFFER_SIZE) buffer.splice(0, buffer.length - BUFFER_SIZE)
+    this.lineBuffers.set(terminalId, buffer)
+  }
+
+  /**
+   * Extract a meaningful task name from recent terminal lines.
+   * Priority: tool name from "Allow X to run" > last non-trivial line > fallback.
+   */
+  private extractContext(terminalId: string): string {
+    const buffer = this.lineBuffers.get(terminalId) || []
+
+    // Scan buffer in reverse for tool approval pattern
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      const toolMatch = buffer[i].match(TOOL_APPROVAL_PATTERN)
+      if (toolMatch) return `${toolMatch[1]} requires approval`
+    }
+
+    // Fallback: last line that isn't the review prompt itself
+    for (let i = buffer.length - 1; i >= 0; i--) {
+      const line = buffer[i].trim()
+      if (line.length > 5 && !REVIEW_PATTERN.test(line)) return line.slice(0, 100)
+    }
+
+    return 'Waiting for approval'
+  }
+
   clearTerminal(terminalId: string): void {
+    this.lineBuffers.delete(terminalId)
     for (const key of this.debounceMap.keys()) {
       if (key.startsWith(`${terminalId}:`)) this.debounceMap.delete(key)
     }

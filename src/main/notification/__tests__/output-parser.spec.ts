@@ -233,6 +233,58 @@ describe('PlainTextParser', () => {
       expect(events[0].projectName).toBe('MyProject')
     })
   })
+
+  describe('context extraction', () => {
+    let parser: PlainTextParser
+    let events: TaskEvent[]
+
+    beforeEach(() => {
+      parser = new PlainTextParser()
+      events = []
+      parser.on('taskEvent', (e: TaskEvent) => events.push(e))
+    })
+
+    it('extracts tool name from "Allow `bash` to run" pattern', () => {
+      parser.parse('term1', 'Allow `bash` to run the command?\n[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('bash requires approval')
+    })
+
+    it('extracts tool name from "Allow npm to run" without backticks', () => {
+      parser.parse('term1', 'Allow npm to run scripts?\n[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('npm requires approval')
+    })
+
+    it('uses last meaningful line as fallback when no tool pattern found', () => {
+      parser.parse('term1', 'Running lint check\nSome important context\n[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('Some important context')
+    })
+
+    it('falls back to "Waiting for approval" when only the prompt line is present', () => {
+      parser.parse('term1', '[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('Waiting for approval')
+    })
+
+    it('uses buffer from previous parse calls for context extraction', () => {
+      // First chunk: context (no [Y/n], no emit)
+      parser.parse('term1', 'Allow `npm` to execute scripts', 'Proj')
+      expect(events).toHaveLength(0)
+
+      // Reset debounce so second parse on same terminal fires
+      ;(parser as unknown as { debounceMap: Map<string, number> }).debounceMap.set('term1:reviewNeeded', 0)
+
+      // Second chunk: the actual prompt
+      parser.parse('term1', '[Y/n]', 'Proj')
+      expect(events).toHaveLength(1)
+      expect(events[0].taskName).toBe('npm requires approval')
+    })
+
+    it('does not bleed buffer between different terminals', () => {
+      parser.parse('term1', 'Allow `bash` to run something', 'Proj')
+      // term2 gets [Y/n] with no prior buffer
+      parser.parse('term2', '[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('Waiting for approval')
+    })
+  })
 })
 
 describe('OutputParser', () => {
