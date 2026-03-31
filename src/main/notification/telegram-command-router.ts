@@ -331,7 +331,8 @@ export class TelegramCommandRouter {
     if (action === 'tail') {
       await this.handleTailById(terminalId)
     } else if (action === 'chat' || action === 'reply') {
-      const { terminals } = this.getScopedTerminals()
+      // Use all terminals (not scoped) — callback has exact terminalId, no ambiguity
+      const terminals = this.terminalManager.list()
       const terminal = terminals.find(t => t.id === terminalId)
       if (!terminal) {
         await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
@@ -346,7 +347,8 @@ export class TelegramCommandRouter {
   }
 
   private async handleTailById(terminalId: string): Promise<void> {
-    const { terminals } = this.getScopedTerminals()
+    // Use all terminals (not scoped) — called from callback with exact terminalId
+    const terminals = this.terminalManager.list()
     const terminal = terminals.find(t => t.id === terminalId)
     if (!terminal) {
       await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
