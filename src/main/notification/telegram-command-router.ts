@@ -1,7 +1,8 @@
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
-import type { Project, Terminal } from '@shared/types'
+import type { Project, Terminal, NotificationEventType } from '@shared/types'
 import { cleanTerminalOutput } from './terminal-output-cleaner'
+import { buildDetailSummary } from './terminal-summary-formatter'
 
 const DEFAULT_TAIL_LINES = 20
 const ALLOWED_NEW_COMMANDS = ['claude', 'codex'] as const
@@ -329,7 +330,18 @@ export class TelegramCommandRouter {
     const terminalId = data.slice(colonIdx + 1)
 
     if (action === 'tail') {
-      await this.handleTailById(terminalId)
+      // Support both legacy "tail:terminalId" and new "tail:eventType:terminalId"
+      const rest = data.slice(colonIdx + 1)
+      const secondColon = rest.indexOf(':')
+      const knownTypes = new Set<string>(['reviewNeeded', 'taskComplete', 'taskFailed'])
+
+      if (secondColon !== -1 && knownTypes.has(rest.slice(0, secondColon))) {
+        const eventType = rest.slice(0, secondColon) as NotificationEventType
+        const tId = rest.slice(secondColon + 1)
+        await this.handleTailById(tId, eventType)
+      } else {
+        await this.handleTailById(rest)
+      }
     } else if (action === 'chat' || action === 'reply') {
       // Use all terminals (not scoped) — callback has exact terminalId, no ambiguity
       const terminals = this.terminalManager.list()
@@ -346,7 +358,7 @@ export class TelegramCommandRouter {
     }
   }
 
-  private async handleTailById(terminalId: string): Promise<void> {
+  private async handleTailById(terminalId: string, eventType?: NotificationEventType): Promise<void> {
     // Use all terminals (not scoped) — called from callback with exact terminalId
     const terminals = this.terminalManager.list()
     const terminal = terminals.find(t => t.id === terminalId)
@@ -355,20 +367,37 @@ export class TelegramCommandRouter {
       return
     }
     const index = terminals.findIndex(t => t.id === terminalId) + 1
-    const output = this.getTerminalOutput(terminalId, DEFAULT_TAIL_LINES)
-    if (!output) {
+    const rawOutput = this.getRawTerminalOutput(terminalId)
+    if (!rawOutput) {
       await this.sendReply(`📄 Terminal ${index} — no output`)
       return
     }
-    const msg = `📄 Terminal ${index} — last ${DEFAULT_TAIL_LINES} lines:\n\n\`\`\`\n${output}\n\`\`\``
-    if (msg.length > TELEGRAM_MSG_LIMIT) {
-      const header = `📄 Terminal ${index} — last ${DEFAULT_TAIL_LINES} lines:\n\n\`\`\`\n`
-      const footer = '\n```'
-      const maxOutput = TELEGRAM_MSG_LIMIT - header.length - footer.length - 20
-      await this.sendReply(header + output.slice(-maxOutput) + '\n\\.\\.\\.' + footer)
-    } else {
-      await this.sendReply(msg)
+
+    const summary = buildDetailSummary(rawOutput)
+    const lines: string[] = [
+      `📄 *Terminal ${index}* — ${this.esc(terminal.title)}`,
+      ''
+    ]
+
+    if (summary.question) {
+      lines.push('❓ *Đang chờ:*')
+      lines.push(this.esc(summary.question))
+      lines.push('')
     }
+
+    if (summary.activityLines.length > 0) {
+      lines.push('📋 *Hoạt động gần đây:*')
+      for (const line of summary.activityLines) {
+        lines.push(this.esc(line))
+      }
+    }
+
+    if (!summary.question && summary.activityLines.length === 0) {
+      lines.push('_\\(no meaningful output\\)_')
+    }
+
+    const msg = lines.join('\n')
+    await this.sendReply(msg.length > TELEGRAM_MSG_LIMIT ? msg.slice(0, TELEGRAM_MSG_LIMIT) : msg)
   }
 
   private async sendChatInput(terminalId: string, text: string): Promise<void> {
@@ -561,6 +590,13 @@ export class TelegramCommandRouter {
     const lines = cleanTerminalOutput(session.outputBuffer).split('\n')
     const tail = lines.slice(-lineCount)
     return tail.length > 0 ? tail.join('\n') : null
+  }
+
+  /** Returns raw output buffer for smart summary (no pre-cleaning, formatter handles it) */
+  private getRawTerminalOutput(terminalId: string): string | null {
+    const sessions = this.terminalManager.getSessions()
+    const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
+    return session?.outputBuffer ?? null
   }
 
   private esc(text: string): string {

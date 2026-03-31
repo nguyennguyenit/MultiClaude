@@ -370,14 +370,29 @@ describe('TelegramCommandRouter', () => {
     beforeEach(() => {
       mockTerminalManager.list.mockReturnValue([term])
       mockTerminalManager.getSessions.mockReturnValue([
-        { id: 'uuid-1', outputBuffer: 'line1\nline2\nline3', lastOutputAt: 0 }
+        { id: 'uuid-1', outputBuffer: 'File checked\nline2\nline3', lastOutputAt: 0 }
       ])
     })
 
-    it('tail action sends terminal output', async () => {
+    it('tail action (legacy format) shows smart summary with terminal title', async () => {
       await router.handleCallback('cq-1', 'tail:uuid-1')
       const reply = mockSendReply.mock.calls[0][0]
-      expect(reply).toContain('line3')
+      expect(reply).toContain('Terminal 1')
+    })
+
+    it('tail action (new format with event type) shows smart summary', async () => {
+      await router.handleCallback('cq-1', 'tail:reviewNeeded:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+    })
+
+    it('tail action with review prompt shows Đang chờ section', async () => {
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'File exists\nWhich approach? [Y/n]', lastOutputAt: 0 }
+      ])
+      await router.handleCallback('cq-1', 'tail:reviewNeeded:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Đang chờ')
     })
 
     it('tail action replies not found for unknown terminal', async () => {
