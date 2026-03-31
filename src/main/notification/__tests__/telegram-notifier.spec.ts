@@ -99,7 +99,7 @@ describe('TelegramNotifier', () => {
       expect(body.reply_markup).toBeDefined()
       const buttons = body.reply_markup.inline_keyboard[0]
       expect(buttons[0].text).toBe('Chi tiết 🔍')
-      expect(buttons[0].callback_data).toBe('tail:term-1')
+      expect(buttons[0].callback_data).toBe('tail:taskComplete:term-1')
       expect(buttons[1].text).toBe('Chat 💬')
       expect(buttons[1].callback_data).toBe('chat:term-1')
     })
@@ -112,6 +112,7 @@ describe('TelegramNotifier', () => {
       const body = JSON.parse(options?.body as string)
 
       const buttons = body.reply_markup.inline_keyboard[0]
+      expect(buttons[0].callback_data).toBe('tail:reviewNeeded:term-1')
       expect(buttons[1].text).toBe('Trả lời 💬')
     })
 
