@@ -164,38 +164,17 @@ describe('PlainTextParser', () => {
     parser.on('taskEvent', (e: TaskEvent) => events.push(e))
   })
 
-  describe('Task completion detection', () => {
-    it('extracts task name from checkmark pattern', () => {
+  describe('non-review lines', () => {
+    it('ignores completed task lines because completion events come from JSONL', () => {
       parser.parse('term1', '✓ Fixed the login bug', 'TestProject')
 
-      expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('taskComplete')
-      expect(events[0].taskName).toBe('Fixed the login bug')
+      expect(events).toHaveLength(0)
     })
 
-    it('handles completed suffix', () => {
-      parser.parse('term1', '✓ Build process (completed)', 'Proj')
-
-      expect(events).toHaveLength(1)
-      expect(events[0].taskName).toBe('Build process')
-    })
-  })
-
-  describe('Task failure detection', () => {
-    it('extracts task name from X pattern', () => {
-      parser.parse('term1', '✗ Database migration failed', 'TestProject')
-
-      expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('taskFailed')
-      expect(events[0].taskName).toBe('Database migration failed')
-    })
-
-    it('extracts exit code', () => {
+    it('ignores failure lines because failure events come from JSONL', () => {
       parser.parse('term1', 'Process exited with code 1', 'Proj')
 
-      expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('taskFailed')
-      expect(events[0].taskName).toBe('Exit code 1')
+      expect(events).toHaveLength(0)
     })
   })
 
@@ -217,8 +196,8 @@ describe('PlainTextParser', () => {
 
   describe('Debouncing', () => {
     it('debounces same event type within 5 seconds', () => {
-      parser.parse('term1', '✓ Task done', 'Proj')
-      parser.parse('term1', '✓ Task done again', 'Proj')
+      parser.parse('term1', 'Allow this tool? [Y/n]', 'Proj')
+      parser.parse('term1', 'waiting for your confirmation', 'Proj')
 
       expect(events).toHaveLength(1) // Second ignored due to debounce
     })
@@ -308,10 +287,10 @@ describe('OutputParser', () => {
 
     it('uses text parser in plain-text mode', () => {
       parser.setMode('plain-text')
-      parser.parse('term1', '✓ Task completed', 'Proj')
+      parser.parse('term1', 'Allow this tool? [Y/n]', 'Proj')
 
       expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('taskComplete')
+      expect(events[0].type).toBe('reviewNeeded')
     })
   })
 
