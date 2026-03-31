@@ -1,3 +1,4 @@
+import path from 'path'
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
 import Store from 'electron-store'
@@ -117,6 +118,7 @@ export class NotificationManager extends EventEmitter {
    */
   registerTerminalCwd(terminalId: string, cwd: string): void {
     this.logWatcher.register(cwd)
+    this.setTerminalProject(terminalId, path.basename(cwd))
   }
 
   clearTerminal(terminalId: string): void {

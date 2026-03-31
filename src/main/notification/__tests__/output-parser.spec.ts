@@ -223,6 +223,16 @@ describe('PlainTextParser', () => {
       expect(events).toHaveLength(1) // Second ignored due to debounce
     })
   })
+
+  describe('project name propagation', () => {
+    it('uses provided projectName in emitted event', () => {
+      const parser = new PlainTextParser()
+      const events: TaskEvent[] = []
+      parser.on('taskEvent', (e: TaskEvent) => events.push(e))
+      parser.parse('term1', 'Allow tool to run? [Y/n]', 'MyProject')
+      expect(events[0].projectName).toBe('MyProject')
+    })
+  })
 })
 
 describe('OutputParser', () => {
