@@ -8,6 +8,8 @@ import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@sha
 import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
 
 const DESTROY_TIMEOUT_MS = 3000
+// Max exited terminals to keep for notification button lookups
+const MAX_GHOST_TERMINALS = 20
 
 interface PTYProcess {
   id: string
@@ -23,6 +25,8 @@ interface PTYProcess {
 
 export class TerminalManager extends EventEmitter {
   private terminals: Map<string, PTYProcess> = new Map()
+  // Ghost cache: preserves exited terminal state for Telegram notification button lookups
+  private exitedTerminals: Map<string, TerminalSession> = new Map()
   private shell: string
   private resolvedWindowsPowerShellCommand: string | null = null
   private systemSuspended = false // Track system suspend state
@@ -302,6 +306,19 @@ export class TerminalManager extends EventEmitter {
 
     ptyProcess.onExit(({ exitCode }) => {
       this.emit('exit', { terminalId: id, exitCode })
+      // Save to ghost cache before removing — allows Telegram buttons to still work
+      this.exitedTerminals.set(id, {
+        id,
+        title: termProcess.metadata.title,
+        cwd: termProcess.metadata.cwd,
+        projectId: termProcess.metadata.projectId,
+        claudeSessionId: termProcess.metadata.claudeSessionId,
+        outputBuffer: termProcess.outputBuffer,
+        lastOutputAt: termProcess.lastOutputAt
+      })
+      if (this.exitedTerminals.size > MAX_GHOST_TERMINALS) {
+        this.exitedTerminals.delete(this.exitedTerminals.keys().next().value!)
+      }
       this.terminals.delete(id)
     })
 
@@ -472,5 +489,10 @@ export class TerminalManager extends EventEmitter {
       outputBuffer: t.outputBuffer,
       lastOutputAt: t.lastOutputAt
     }))
+  }
+
+  /** Returns cached session data for an exited terminal (for notification button fallback) */
+  getExitedSession(id: string): TerminalSession | undefined {
+    return this.exitedTerminals.get(id)
   }
 }

@@ -347,7 +347,9 @@ export class TelegramCommandRouter {
       const terminals = this.terminalManager.list()
       const terminal = terminals.find(t => t.id === terminalId)
       if (!terminal) {
-        await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
+        const ghost = this.terminalManager.getExitedSession(terminalId)
+        const title = ghost ? `_${this.esc(ghost.title)}_` : 'này'
+        await this.sendReply(`⚠️ Terminal ${title} đã đóng\\. Không thể chat\\.`)
         return
       }
       const index = terminals.findIndex(t => t.id === terminalId) + 1
@@ -362,22 +364,26 @@ export class TelegramCommandRouter {
     // Use all terminals (not scoped) — called from callback with exact terminalId
     const terminals = this.terminalManager.list()
     const terminal = terminals.find(t => t.id === terminalId)
-    if (!terminal) {
+
+    // Fallback: terminal may have exited after notification was sent
+    const ghost = terminal ? null : this.terminalManager.getExitedSession(terminalId)
+    if (!terminal && !ghost) {
       await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
       return
     }
-    const index = terminals.findIndex(t => t.id === terminalId) + 1
+
+    const title = terminal?.title ?? ghost!.title
+    const index = terminal ? terminals.findIndex(t => t.id === terminalId) + 1 : null
+    const label = index ? `*Terminal ${index}* — ${this.esc(title)}` : `*${this.esc(title)}* _\\(đã đóng\\)_`
+
     const rawOutput = this.getRawTerminalOutput(terminalId)
     if (!rawOutput) {
-      await this.sendReply(`📄 Terminal ${index} — no output`)
+      await this.sendReply(`📄 ${label} — no output`)
       return
     }
 
     const summary = buildDetailSummary(rawOutput)
-    const lines: string[] = [
-      `📄 *Terminal ${index}* — ${this.esc(terminal.title)}`,
-      ''
-    ]
+    const lines: string[] = [`📄 ${label}`, '']
 
     if (summary.question) {
       lines.push('❓ *Đang chờ:*')
@@ -596,7 +602,9 @@ export class TelegramCommandRouter {
   private getRawTerminalOutput(terminalId: string): string | null {
     const sessions = this.terminalManager.getSessions()
     const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
-    return session?.outputBuffer ?? null
+    if (session?.outputBuffer) return session.outputBuffer
+    // Fallback: exited terminal ghost cache
+    return this.terminalManager.getExitedSession(terminalId)?.outputBuffer ?? null
   }
 
   private esc(text: string): string {

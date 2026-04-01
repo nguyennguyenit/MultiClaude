@@ -9,6 +9,7 @@ const mockTerminalManager = {
   write: vi.fn<(id: string, data: string) => boolean>(),
   destroy: vi.fn<(id: string) => boolean>(),
   getSessions: vi.fn(),
+  getExitedSession: vi.fn(),
   create: vi.fn<(opts: { cwd?: string; projectId?: string; shell?: unknown }) => Terminal>()
 }
 
