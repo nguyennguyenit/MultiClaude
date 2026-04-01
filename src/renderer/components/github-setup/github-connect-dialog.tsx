@@ -395,6 +395,10 @@ export function GitHubConnectDialog({
         )
 
       case 'branch-select':
+        {
+          const hasSingleBranch = branches.length <= 1
+          const activeBranchName = branches[0]?.name || selectedBranch || 'main'
+
         return (
           <>
             {/* Step indicator */}
@@ -433,18 +437,36 @@ export function GitHubConnectDialog({
 
             {/* Branch selector */}
             <div className="mb-3">
-              <label className="text-xs text-[var(--mc-text-muted)] block mb-1">Base Branch</label>
-              <select
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--mc-accent)]"
-              >
-                {branches.map((branch) => (
-                  <option key={branch.name} value={branch.name}>
-                    {branch.name} {branch.current ? '★ Recommended' : ''}
-                  </option>
-                ))}
-              </select>
+              <label className="github-connect-field-label">Base Branch</label>
+              {hasSingleBranch ? (
+                <>
+                  <div className="github-connect-branch-card">
+                    <div className="github-connect-branch-card-main">
+                      <span className="github-connect-branch-card-icon" aria-hidden="true">
+                        <BranchIcon />
+                      </span>
+                      <div className="github-connect-branch-card-copy">
+                        <span className="github-connect-branch-card-title">{activeBranchName}</span>
+                        <span className="github-connect-branch-card-subtitle">Only local branch available</span>
+                      </div>
+                    </div>
+                    <span className="github-connect-branch-card-badge">Ready to push</span>
+                  </div>
+                  <p className="github-connect-branch-helper">This repository currently exposes a single local branch for setup.</p>
+                </>
+              ) : (
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="github-connect-branch-select"
+                >
+                  {branches.map((branch) => (
+                    <option key={branch.name} value={branch.name}>
+                      {branch.name} {branch.current ? '★ Recommended' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Info text */}
@@ -453,17 +475,18 @@ export function GitHubConnectDialog({
             </p>
 
             {/* Collapsible "Why push?" section */}
-            <div className="mb-4 p-3 bg-[var(--mc-bg-primary)] rounded border border-[var(--mc-border)]">
+            <div className="github-connect-why-panel">
               <button
+                type="button"
                 onClick={() => setShowWhyBranch(!showWhyBranch)}
-                className="flex items-center gap-1 text-xs text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] w-full text-left"
+                className="github-connect-why-toggle"
               >
                 <InfoIcon />
                 Why push to remote?
                 <ChevronIcon expanded={showWhyBranch} />
               </button>
               {showWhyBranch && (
-                <p className="text-xs text-[var(--mc-text-muted)] mt-2 leading-relaxed">
+                <p className="github-connect-why-copy">
                   Pushing your code to GitHub enables collaboration, backup, and version control.
                   This creates a remote copy of your work that can be accessed from anywhere.
                 </p>
@@ -491,6 +514,7 @@ export function GitHubConnectDialog({
             </div>
           </>
         )
+        }
     }
   }
 
