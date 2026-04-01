@@ -345,15 +345,19 @@ export class TelegramCommandRouter {
     } else if (action === 'chat' || action === 'reply') {
       // Use all terminals (not scoped) — callback has exact terminalId, no ambiguity
       const terminals = this.terminalManager.list()
-      const terminal = terminals.find(t => t.id === terminalId)
+      let terminal = terminals.find(t => t.id === terminalId)
+      // Defense-in-depth: resolve Claude session ID if direct lookup fails
+      if (!terminal) {
+        terminal = terminals.find(t => t.claudeSessionId === terminalId)
+      }
       if (!terminal) {
         const ghost = this.terminalManager.getExitedSession(terminalId)
         const title = ghost ? `_${this.esc(ghost.title)}_` : 'này'
         await this.sendReply(`⚠️ Terminal ${title} đã đóng\\. Không thể chat\\.`)
         return
       }
-      const index = terminals.findIndex(t => t.id === terminalId) + 1
-      this.pendingChat = { terminalId }
+      const index = terminals.findIndex(t => t.id === terminal!.id) + 1
+      this.pendingChat = { terminalId: terminal.id }
       await this.sendReply(
         `💬 *Terminal ${index}* \\(${this.esc(terminal.title)}\\) đang chờ input\\.\nNhập lệnh \\(hoặc /cancel để huỷ\\):`
       )
@@ -363,20 +367,26 @@ export class TelegramCommandRouter {
   private async handleTailById(terminalId: string, eventType?: NotificationEventType): Promise<void> {
     // Use all terminals (not scoped) — called from callback with exact terminalId
     const terminals = this.terminalManager.list()
-    const terminal = terminals.find(t => t.id === terminalId)
+    let terminal = terminals.find(t => t.id === terminalId)
+
+    // Defense-in-depth: if ID is a Claude session ID (from JSONL watcher), resolve via claudeSessionId
+    if (!terminal) {
+      terminal = terminals.find(t => t.claudeSessionId === terminalId)
+    }
 
     // Fallback: terminal may have exited after notification was sent
-    const ghost = terminal ? null : this.terminalManager.getExitedSession(terminalId)
+    const resolvedId = terminal?.id ?? terminalId
+    const ghost = terminal ? null : this.terminalManager.getExitedSession(resolvedId)
     if (!terminal && !ghost) {
       await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
       return
     }
 
     const title = terminal?.title ?? ghost!.title
-    const index = terminal ? terminals.findIndex(t => t.id === terminalId) + 1 : null
+    const index = terminal ? terminals.findIndex(t => t.id === resolvedId) + 1 : null
     const label = index ? `*Terminal ${index}* — ${this.esc(title)}` : `*${this.esc(title)}* _\\(đã đóng\\)_`
 
-    const rawOutput = this.getRawTerminalOutput(terminalId)
+    const rawOutput = this.getRawTerminalOutput(resolvedId)
     if (!rawOutput) {
       await this.sendReply(`📄 ${label} — no output`)
       return

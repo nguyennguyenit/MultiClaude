@@ -495,4 +495,19 @@ export class TerminalManager extends EventEmitter {
   getExitedSession(id: string): TerminalSession | undefined {
     return this.exitedTerminals.get(id)
   }
+
+  /**
+   * Find a live or exited terminal by its Claude session ID.
+   * Used to translate JSONL watcher events (which use Claude session IDs)
+   * back to real MultiClaude terminal IDs.
+   */
+  findByClaudeSessionId(sessionId: string): { id: string } | undefined {
+    for (const t of this.terminals.values()) {
+      if (t.metadata.claudeSessionId === sessionId) return { id: t.id }
+    }
+    for (const s of this.exitedTerminals.values()) {
+      if (s.claudeSessionId === sessionId) return { id: s.id }
+    }
+    return undefined
+  }
 }
