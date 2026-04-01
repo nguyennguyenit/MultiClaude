@@ -165,16 +165,32 @@ describe('PlainTextParser', () => {
   })
 
   describe('non-review lines', () => {
-    it('ignores completed task lines because completion events come from JSONL', () => {
-      parser.parse('term1', '✓ Fixed the login bug', 'TestProject')
+    it('ignores completed task lines for Claude because completion events come from JSONL', () => {
+      parser.parse('term1', '✓ Fixed the login bug', 'TestProject', 'claude')
 
       expect(events).toHaveLength(0)
     })
 
-    it('ignores failure lines because failure events come from JSONL', () => {
-      parser.parse('term1', 'Process exited with code 1', 'Proj')
+    it('ignores failure lines for Claude because failure events come from JSONL', () => {
+      parser.parse('term1', 'Process exited with code 1', 'Proj', 'claude')
 
       expect(events).toHaveLength(0)
+    })
+
+    it('emits taskComplete for non-Claude agents from plain text output', () => {
+      parser.parse('term1', '✓ Fixed the login bug', 'TestProject', 'codex')
+
+      expect(events).toHaveLength(1)
+      expect(events[0].type).toBe('taskComplete')
+      expect(events[0].taskName).toBe('Fixed the login bug')
+    })
+
+    it('emits taskFailed for non-Claude agents from plain text output', () => {
+      parser.parse('term1', 'Process exited with code 1', 'Proj', 'gemini')
+
+      expect(events).toHaveLength(1)
+      expect(events[0].type).toBe('taskFailed')
+      expect(events[0].taskName).toBe('Exit code 1')
     })
   })
 
@@ -287,10 +303,19 @@ describe('OutputParser', () => {
 
     it('uses text parser in plain-text mode', () => {
       parser.setMode('plain-text')
-      parser.parse('term1', 'Allow this tool? [Y/n]', 'Proj')
+      parser.parse('term1', 'Allow this tool? [Y/n]', 'Proj', 'codex')
 
       expect(events).toHaveLength(1)
       expect(events[0].type).toBe('reviewNeeded')
+    })
+
+    it('uses text parser taskComplete detection for non-Claude agents in plain-text mode', () => {
+      parser.setMode('plain-text')
+      parser.parse('term1', '✓ Ship the patch', 'Proj', 'codex')
+
+      expect(events).toHaveLength(1)
+      expect(events[0].type).toBe('taskComplete')
+      expect(events[0].taskName).toBe('Ship the patch')
     })
   })
 

@@ -298,7 +298,8 @@ export class NotificationManager extends EventEmitter {
   // Process terminal output through the parser
   processOutput(terminalId: string, output: string): void {
     const projectName = this.terminalProjects.get(terminalId) || 'Unknown'
-    this.parser.parse(terminalId, output, projectName)
+    const agentType = this.terminalAgentTypes.get(terminalId)
+    this.parser.parse(terminalId, output, projectName, agentType)
   }
 
   private handleTaskEvent(event: TaskEvent): void {

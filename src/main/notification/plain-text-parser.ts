@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
-import type { TaskEvent } from '@shared/types'
+import type { TaskEvent, NotificationEventType, AgentType } from '@shared/types'
+import { ENHANCED_DETECTION_PATTERNS } from '@shared/constants'
 import { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
 import { cleanTerminalOutput } from './terminal-output-cleaner'
 
@@ -28,15 +29,24 @@ export class PlainTextParser extends EventEmitter {
   /** Rolling buffer of recent clean lines per terminal */
   private lineBuffers: Map<string, string[]> = new Map()
 
-  parse(terminalId: string, data: string, projectName: string): void {
+  parse(terminalId: string, data: string, projectName: string, agentType?: AgentType): void {
     const safeData = data.length > MAX_REGEX_INPUT_LENGTH
       ? data.slice(0, MAX_REGEX_INPUT_LENGTH)
       : data
+    const cleanData = cleanTerminalOutput(safeData)
 
     // Update rolling buffer with clean lines from this chunk
-    this.updateBuffer(terminalId, safeData)
+    this.updateBuffer(terminalId, cleanData)
 
-    if (!REVIEW_PATTERN.test(safeData)) return
+    if (this.shouldDetectTaskState(agentType)) {
+      const event = this.detectTaskState(terminalId, cleanData, projectName)
+      if (event) {
+        this.emit('taskEvent', event)
+        return
+      }
+    }
+
+    if (!REVIEW_PATTERN.test(cleanData)) return
 
     const key = `${terminalId}:reviewNeeded`
     const now = Date.now()
@@ -55,9 +65,57 @@ export class PlainTextParser extends EventEmitter {
     this.emit('taskEvent', event)
   }
 
+  private shouldDetectTaskState(agentType?: AgentType): boolean {
+    return agentType !== undefined && agentType !== 'claude' && agentType !== 'generic'
+  }
+
+  private detectTaskState(terminalId: string, cleanData: string, projectName: string): TaskEvent | null {
+    const taskCompleteMatch = cleanData.match(ENHANCED_DETECTION_PATTERNS.taskComplete)
+    if (taskCompleteMatch) {
+      return this.buildTaskEvent(
+        terminalId,
+        'taskComplete',
+        taskCompleteMatch.groups?.taskName || taskCompleteMatch[0].slice(0, 100),
+        projectName
+      )
+    }
+
+    const taskFailedMatch = cleanData.match(ENHANCED_DETECTION_PATTERNS.taskFailed)
+    if (taskFailedMatch) {
+      const taskName = taskFailedMatch.groups?.taskName || (taskFailedMatch.groups?.exitCode
+        ? `Exit code ${taskFailedMatch.groups.exitCode}`
+        : taskFailedMatch[0].slice(0, 100))
+
+      return this.buildTaskEvent(terminalId, 'taskFailed', taskName, projectName)
+    }
+
+    return null
+  }
+
+  private buildTaskEvent(
+    terminalId: string,
+    type: NotificationEventType,
+    taskName: string,
+    projectName: string
+  ): TaskEvent | null {
+    const key = `${terminalId}:${type}`
+    const now = Date.now()
+    if (now - (this.debounceMap.get(key) ?? 0) <= this.debounceMs) return null
+
+    this.debounceMap.set(key, now)
+
+    return {
+      id: generateTaskEventId(terminalId, type, taskName),
+      terminalId,
+      type,
+      taskName,
+      projectName,
+      timestamp: now
+    }
+  }
+
   /** Add clean lines from raw data to the terminal's rolling buffer */
-  private updateBuffer(terminalId: string, raw: string): void {
-    const clean = cleanTerminalOutput(raw)
+  private updateBuffer(terminalId: string, clean: string): void {
     const newLines = clean.split('\n').filter(l => l.trim().length > 3)
     if (newLines.length === 0) return
 

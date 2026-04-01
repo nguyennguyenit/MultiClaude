@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { OutputMode } from '@shared/types'
+import type { OutputMode, AgentType } from '@shared/types'
 import { JsonStreamParser } from './json-stream-parser'
 import { PlainTextParser } from './plain-text-parser'
 
@@ -27,25 +27,25 @@ export class OutputParser extends EventEmitter {
     this.mode = mode
   }
 
-  parse(terminalId: string, data: string, projectName: string): void {
+  parse(terminalId: string, data: string, projectName: string, agentType?: AgentType): void {
     if (this.mode === 'stream-json') {
       this.jsonParser.parse(terminalId, data, projectName)
     } else if (this.mode === 'plain-text') {
-      this.textParser.parse(terminalId, data, projectName)
+      this.textParser.parse(terminalId, data, projectName, agentType)
     } else {
       // Auto mode: detect format from content
-      this.autoDetectAndParse(terminalId, data, projectName)
+      this.autoDetectAndParse(terminalId, data, projectName, agentType)
     }
   }
 
-  private autoDetectAndParse(terminalId: string, data: string, projectName: string): void {
+  private autoDetectAndParse(terminalId: string, data: string, projectName: string, agentType?: AgentType): void {
     // Check if terminal already has a locked parser type
     const lockedMode = this.terminalModes.get(terminalId)
     if (lockedMode) {
       if (lockedMode === 'json') {
         this.jsonParser.parse(terminalId, data, projectName)
       } else {
-        this.textParser.parse(terminalId, data, projectName)
+        this.textParser.parse(terminalId, data, projectName, agentType)
       }
       return
     }
@@ -63,7 +63,7 @@ export class OutputParser extends EventEmitter {
       this.jsonParser.parse(terminalId, data, projectName)
     } else {
       this.terminalModes.set(terminalId, 'text')  // Lock to text
-      this.textParser.parse(terminalId, data, projectName)
+      this.textParser.parse(terminalId, data, projectName, agentType)
     }
   }
 
