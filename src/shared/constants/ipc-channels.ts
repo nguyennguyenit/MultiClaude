@@ -12,6 +12,7 @@ export const IPC_CHANNELS = {
   TERMINAL_STATE_CHANGE: 'terminal:state-change',
   TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
   TERMINAL_CREATED: 'terminal:created',
+  TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
 
   // Project channels
   PROJECT_LIST: 'project:list',

@@ -43,6 +43,7 @@ export interface ElectronAPI {
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
     onCreated: (callback: (terminal: Terminal) => void) => () => void
+    onAgentDetected: (callback: (data: { terminalId: string; agentType: string }) => void) => () => void
   }
   project: {
     list: () => Promise<Project[]>
@@ -211,6 +212,11 @@ const api: ElectronAPI = {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_CREATED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_CREATED, listener)
+    },
+    onAgentDetected: (callback) => {
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
     }
   },
   project: {

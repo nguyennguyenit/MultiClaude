@@ -3,7 +3,7 @@ import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFile
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
-import type { AppSettings, WindowState } from '@shared/types'
+import type { AppSettings, WindowState, AgentType } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { GitHeadWatcher } from '../git/git-head-watcher'
@@ -103,6 +103,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   terminalManager.on('exit', ({ terminalId, exitCode }) => {
     if (!window.isDestroyed()) {
       window.webContents.send('terminal:exit', { terminalId, exitCode })
+    }
+    // Notify for non-Claude agent exits (codex/gemini/aider)
+    notificationManager.handleAgentExit(terminalId, exitCode)
+  })
+
+  // Forward agent detection to renderer for badge display
+  terminalManager.on('agentDetected', ({ terminalId, agentType }: { terminalId: string; agentType: AgentType }) => {
+    notificationManager.setTerminalAgentType(terminalId, agentType)
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, { terminalId, agentType })
     }
   })
 

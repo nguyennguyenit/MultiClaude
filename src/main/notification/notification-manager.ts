@@ -2,9 +2,9 @@ import path from 'path'
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
 import Store from 'electron-store'
-import type { NotificationSettings, NotificationEventType, NotificationEvent } from '@shared/types'
+import type { NotificationSettings, NotificationEventType, NotificationEvent, AgentType } from '@shared/types'
 import type { TaskEvent } from '@shared/types/notification-events'
-import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS } from '@shared/constants'
+import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS, AGENT_DISPLAY_NAMES } from '@shared/constants'
 import { SecureStorage } from './secure-storage'
 import { OutputParser } from './output-parser'
 import { FocusDetector } from './focus-detector'
@@ -14,6 +14,7 @@ import { DiscordNotifier } from './discord-notifier'
 import { TelegramPoller } from './telegram-poller'
 import { TelegramCommandRouter } from './telegram-command-router'
 import { ClaudeLogWatcher } from './claude-log-watcher'
+import { generateTaskEventId } from './parser-utils'
 import type { RemoteControlStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
@@ -46,6 +47,8 @@ export class NotificationManager extends EventEmitter {
 
   // Map terminalId -> projectName for context (used by OutputParser path)
   private terminalProjects: Map<string, string> = new Map()
+  // Map terminalId -> agentType for routing and event enrichment
+  private terminalAgentTypes: Map<string, AgentType> = new Map()
 
   private poller: TelegramPoller | null = null
   private commandRouter: TelegramCommandRouter | null = null
@@ -77,6 +80,11 @@ export class NotificationManager extends EventEmitter {
 
     // Listen for task events from terminal output parser (reviewNeeded only)
     this.parser.on('taskEvent', (event: TaskEvent) => {
+      // Enrich with agent type if known
+      const agentType = this.terminalAgentTypes.get(event.terminalId)
+      if (agentType) {
+        event.agentType = agentType
+      }
       this.handleTaskEvent(event)
     })
 
@@ -87,6 +95,7 @@ export class NotificationManager extends EventEmitter {
       if (match) {
         event.terminalId = match.id
       }
+      event.agentType = 'claude'
       this.handleTaskEvent(event)
     })
 
@@ -116,18 +125,61 @@ export class NotificationManager extends EventEmitter {
     this.terminalProjects.set(terminalId, projectName)
   }
 
+  setTerminalAgentType(terminalId: string, agentType: AgentType): void {
+    this.terminalAgentTypes.set(terminalId, agentType)
+  }
+
+  getTerminalAgentType(terminalId: string): AgentType | undefined {
+    return this.terminalAgentTypes.get(terminalId)
+  }
+
+  /**
+   * Handle exit of a non-Claude agent terminal.
+   * Generates taskComplete (exit 0) or taskFailed (exit non-zero) events.
+   * Claude agents use JSONL transcripts instead — this is only for codex/gemini/aider.
+   */
+  handleAgentExit(terminalId: string, exitCode: number): void {
+    const agentType = this.terminalAgentTypes.get(terminalId)
+    // Skip Claude — uses ClaudeLogWatcher for taskComplete/taskFailed
+    // Skip terminals without a detected agent (plain shell)
+    if (!agentType || agentType === 'claude') return
+
+    const projectName = this.terminalProjects.get(terminalId) || 'Unknown'
+    const type = exitCode === 0 ? 'taskComplete' as const : 'taskFailed' as const
+    const displayName = AGENT_DISPLAY_NAMES[agentType] || agentType
+
+    const event: TaskEvent = {
+      id: generateTaskEventId(terminalId, type, `${agentType}-exit-${exitCode}-${Date.now()}`),
+      terminalId,
+      type,
+      taskName: exitCode === 0
+        ? `${displayName} session completed`
+        : `${displayName} exited with code ${exitCode}`,
+      projectName,
+      agentType,
+      timestamp: Date.now()
+    }
+
+    this.handleTaskEvent(event)
+  }
+
   /**
    * Register the working directory for a terminal.
    * Starts watching ~/.claude/projects/<hash>/ for JSONL transcript events.
    * Call this when a terminal is created with a known CWD.
    */
   registerTerminalCwd(terminalId: string, cwd: string): void {
-    this.logWatcher.register(cwd)
+    // Only watch JSONL transcripts for Claude terminals (or unknown — may be Claude)
+    const agentType = this.terminalAgentTypes.get(terminalId)
+    if (!agentType || agentType === 'claude') {
+      this.logWatcher.register(cwd)
+    }
     this.setTerminalProject(terminalId, path.basename(cwd))
   }
 
   clearTerminal(terminalId: string): void {
     this.terminalProjects.delete(terminalId)
+    this.terminalAgentTypes.delete(terminalId)
     this.taskTracker.clearTerminal(terminalId)
     this.parser.clearTerminal(terminalId)
   }
@@ -385,6 +437,7 @@ export class NotificationManager extends EventEmitter {
     this.focusDetector.destroy()
     this.taskTracker.clearAll()
     this.terminalProjects.clear()
+    this.terminalAgentTypes.clear()
     this.logWatcher.destroy()
   }
 }

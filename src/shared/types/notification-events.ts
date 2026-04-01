@@ -1,4 +1,5 @@
 import type { NotificationEventType, OutputMode } from './notification'
+import type { AgentType } from './index'
 
 /**
  * Unique task event emitted by output parsers.
@@ -17,6 +18,8 @@ export interface TaskEvent {
   projectName: string
   /** Additional context (last tool used, duration, etc.) */
   context?: string
+  /** Agent type that generated this event (e.g. 'claude', 'codex') */
+  agentType?: AgentType
   /** Unix timestamp in milliseconds */
   timestamp: number
 }

@@ -3,6 +3,8 @@ import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
 import { useFileDrop } from '../../hooks/use-file-drop'
 import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
 import { useAppStore } from '../../stores'
+import { AGENT_BADGE_COLORS, AGENT_BADGE_TEXT, AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
+import type { AgentType } from '@shared/types'
 
 // Streaming detection constants
 const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
@@ -14,6 +16,7 @@ interface TerminalPaneProps {
   isActive: boolean
   hidden?: boolean
   isClaudeMode?: boolean
+  agentType?: AgentType
   initialOutput?: string
   onActivate: () => void
   onClose: () => void
@@ -28,6 +31,7 @@ export const TerminalPane = memo(function TerminalPane({
   isActive,
   hidden = false,
   isClaudeMode = false,
+  agentType,
   initialOutput,
   onActivate,
   onClose,
@@ -175,8 +179,19 @@ export const TerminalPane = memo(function TerminalPane({
       {/* Top tab bar */}
       <div className={`pane-tab-bar${isActive ? ' active' : ''}`}>
         <div className={`pane-tab${isActive ? ' active' : ''}`}>
-          {/* Claude mode badge */}
-          {isClaudeMode && <span className="pane-tab-claude">AI</span>}
+          {/* Agent mode badge — shows for any detected agent (claude=AI, codex=CX, gemini=GM, aider=AD) */}
+          {(agentType || isClaudeMode) && (() => {
+            const type: AgentType = agentType ?? 'claude'
+            return (
+              <span
+                className="pane-tab-agent-badge"
+                style={{ backgroundColor: AGENT_BADGE_COLORS[type] }}
+                title={AGENT_DISPLAY_NAMES[type]}
+              >
+                {AGENT_BADGE_TEXT[type]}
+              </span>
+            )
+          })()}
 
           <div className="pane-tab-title-group">
             {/* Title - editable on double-click */}

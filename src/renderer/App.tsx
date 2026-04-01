@@ -23,6 +23,7 @@ function App() {
   const removeTerminal = useAppStore((state) => state.removeTerminal)
   const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
   const updateTerminalClaudeMode = useAppStore((state) => state.updateTerminalClaudeMode)
+  const updateTerminalAgentType = useAppStore((state) => state.updateTerminalAgentType)
   const addProject = useAppStore((state) => state.addProject)
   const removeProject = useAppStore((state) => state.removeProject)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -379,6 +380,14 @@ function App() {
     })
     return unsubscribe
   }, [updateTerminalClaudeMode])
+
+  // Handle agent detection events (codex, gemini, aider, etc.)
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onAgentDetected(({ terminalId, agentType }) => {
+      updateTerminalAgentType(terminalId, agentType as import('@shared/types').AgentType)
+    })
+    return unsubscribe
+  }, [updateTerminalAgentType])
 
   // Handle terminals created externally (e.g. via Telegram /new command)
   useEffect(() => {

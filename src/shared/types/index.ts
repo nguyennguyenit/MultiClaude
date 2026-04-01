@@ -1,3 +1,6 @@
+// Agent type detected from terminal command input
+export type AgentType = 'claude' | 'codex' | 'gemini' | 'aider' | 'generic'
+
 // Terminal types
 export interface Terminal {
   id: string
@@ -9,6 +12,8 @@ export interface Terminal {
   createdAt: Date | string // Date in main process, ISO string in renderer (after IPC serialization)
   // Allow OSC title updates only after activity starts (e.g., Claude mode)
   allowTitleUpdate?: boolean
+  /** Detected CLI agent type running in this terminal */
+  agentType?: AgentType
 }
 
 export interface TerminalState {

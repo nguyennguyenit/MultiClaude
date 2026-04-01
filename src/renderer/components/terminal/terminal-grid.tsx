@@ -171,6 +171,7 @@ export const TerminalGrid = memo(function TerminalGrid({
                             isActive={terminal.id === activeTerminalId}
                             hidden={!group.isActive}
                             isClaudeMode={terminal.isClaudeMode}
+                            agentType={terminal.agentType}
                             onActivate={() => onTerminalClick(terminal.id)}
                             onClose={() => onCloseTerminal?.(terminal.id)}
                             onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}

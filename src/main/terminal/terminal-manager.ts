@@ -4,8 +4,8 @@ import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import { existsSync, readdirSync } from 'fs'
 import path from 'path'
-import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
-import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
+import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS } from '@shared/constants'
+import type { Terminal, TerminalSession, WindowsShell, AgentType } from '@shared/types'
 
 const DESTROY_TIMEOUT_MS = 3000
 // Max exited terminals to keep for notification button lookups
@@ -219,16 +219,39 @@ export class TerminalManager extends EventEmitter {
     this.emit('stateChange', { terminalId: term.id, isClaudeMode: true })
   }
 
-  private processInputForClaudeMode(term: PTYProcess, data: string): void {
-    if (term.metadata.isClaudeMode) return
+  /**
+   * Detect CLI agent from terminal input commands.
+   * Watches keystrokes for Enter, then checks command against known agent binaries.
+   * Sets agentType on terminal metadata and emits 'agentDetected' event.
+   * For claude: also sets isClaudeMode for backward compatibility.
+   */
+  private processInputForAgentDetection(term: PTYProcess, data: string): void {
+    // Skip if agent already detected for this terminal
+    if (term.metadata.agentType) return
 
     for (const char of data) {
       if (char === '\r' || char === '\n') {
         const command = term.inputBuffer.trim()
         term.inputBuffer = ''
 
-        if (/^claude(?:\s|$)/.test(command)) {
-          this.setClaudeMode(term)
+        if (!command) continue
+
+        // Extract binary name (first token)
+        const binary = command.split(/\s+/)[0].toLowerCase()
+        const agentType = AGENT_DETECTION_PATTERNS[binary] as AgentType | undefined
+
+        if (agentType) {
+          term.metadata.agentType = agentType
+
+          // Backward compat: claude still sets isClaudeMode
+          if (agentType === 'claude') {
+            this.setClaudeMode(term)
+          } else {
+            // Non-claude agents also get title updates
+            term.metadata.allowTitleUpdate = true
+          }
+
+          this.emit('agentDetected', { terminalId: term.id, agentType })
         }
         continue
       }
@@ -239,7 +262,7 @@ export class TerminalManager extends EventEmitter {
       }
 
       // Only keep printable command input. This avoids escape-sequence noise from
-      // cursor/navigation keys while still catching direct `claude` launches.
+      // cursor/navigation keys while still catching direct agent launches.
       if (char >= ' ' || char === '\t') {
         term.inputBuffer += char
         if (term.inputBuffer.length > 1024) {
@@ -336,7 +359,7 @@ export class TerminalManager extends EventEmitter {
       return false
     }
     try {
-      this.processInputForClaudeMode(term, data)
+      this.processInputForAgentDetection(term, data)
       term.pty.write(data)
       return true
     } catch (error) {
@@ -476,6 +499,8 @@ export class TerminalManager extends EventEmitter {
 
     term.pty.write(command)
     this.setClaudeMode(term)
+    term.metadata.agentType = 'claude'
+    this.emit('agentDetected', { terminalId: id, agentType: 'claude' as AgentType })
     return true
   }
 

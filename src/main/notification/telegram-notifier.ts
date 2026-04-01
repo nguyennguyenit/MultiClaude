@@ -1,11 +1,20 @@
 import type { NotificationEventType } from '@shared/types/notification'
 import type { TaskEvent } from '@shared/types/notification-events'
-import type { NotificationTestResult } from '@shared/types'
+import type { NotificationTestResult, AgentType } from '@shared/types'
+import { AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
 
 const TELEGRAM_MAX_LENGTH = 4096
 const TELEGRAM_MAX_RETRIES = 3
 const TELEGRAM_INITIAL_BACKOFF_MS = 1000
 const MAX_FIELD_LENGTH = 256
+
+const AGENT_EMOJI: Record<AgentType, string> = {
+  claude: '🟣',
+  codex: '🟢',
+  gemini: '🔵',
+  aider: '🟠',
+  generic: '⚪',
+}
 
 interface InlineKeyboardButton {
   text: string
@@ -135,8 +144,11 @@ export class TelegramNotifier {
       ? `📁 ${projectName}  ·  🖥 ${this.escapeHtml(terminalTitle.slice(0, MAX_FIELD_LENGTH))}`
       : `📁 <b>Project:</b> ${projectName}`
 
+    const agentType: AgentType = event.agentType ?? 'generic'
+    const agentLabel = `${AGENT_EMOJI[agentType]} ${AGENT_DISPLAY_NAMES[agentType]}`
+
     const lines = [
-      `${emoji[event.type]} <b>${titles[event.type]}</b>`,
+      `${emoji[event.type]} <b>${titles[event.type]}</b>  ·  ${agentLabel}`,
       '',
       headerLine,
       `📝 <b>Task:</b> ${taskName}`

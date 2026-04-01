@@ -748,6 +748,17 @@ button, input, select, textarea, optgroup, option {
   flex-shrink: 0;
 }
 
+/* Generic agent badge — background-color set via inline style per agent type */
+.pane-tab-agent-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: white;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
 .pane-tab-title-group {
   display: flex;
   align-items: center;

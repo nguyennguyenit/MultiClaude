@@ -136,7 +136,7 @@ describe('DiscordNotifier', () => {
       const [, options] = vi.mocked(fetch).mock.calls[0]
       const body = JSON.parse(options?.body as string)
 
-      expect(body.embeds[0].footer).toEqual({ text: 'MultiClaude' })
+      expect(body.embeds[0].footer).toEqual({ text: 'Terminal · MultiClaude' })
     })
 
     it('truncates task name to 256 chars', async () => {

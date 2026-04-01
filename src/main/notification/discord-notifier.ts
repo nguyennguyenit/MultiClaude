@@ -1,5 +1,6 @@
 import type { NotificationTestResult, NotificationEventType } from '@shared/types'
 import type { TaskEvent } from '@shared/types/notification-events'
+import { AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
 
 interface DiscordEmbed {
   title: string
@@ -74,7 +75,7 @@ export class DiscordNotifier {
         { name: 'Task', value: event.taskName.slice(0, DiscordNotifier.MAX_FIELD_LENGTH), inline: false }
       ],
       timestamp: new Date(event.timestamp).toISOString(),
-      footer: { text: 'MultiClaude' }
+      footer: { text: `${AGENT_DISPLAY_NAMES[event.agentType ?? 'generic']} · MultiClaude` }
     }
 
     if (event.context) {

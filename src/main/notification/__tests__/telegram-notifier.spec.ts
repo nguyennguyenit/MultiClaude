@@ -126,6 +126,27 @@ describe('TelegramNotifier', () => {
       expect(body.text).not.toContain('<b>Project:</b>')
     })
 
+    it('includes agent label in header for agentType codex', async () => {
+      const event: TaskEvent = { ...baseEvent, agentType: 'codex' }
+      await notifier.sendTaskEvent(event)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.text).toContain('Codex CLI')
+      expect(body.text).toContain('🟢')
+    })
+
+    it('defaults to generic agent label when agentType is absent', async () => {
+      await notifier.sendTaskEvent(baseEvent)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.text).toContain('Terminal')
+      expect(body.text).toContain('⚪')
+    })
+
     it('falls back to Project: label when no terminal title', async () => {
       await notifier.sendTaskEvent(baseEvent)
 
