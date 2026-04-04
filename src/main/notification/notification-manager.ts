@@ -92,6 +92,9 @@ export class NotificationManager extends EventEmitter {
     // JSONL events use Claude session ID as terminalId — translate to real terminal ID
     this.logWatcher.on('taskEvent', (event: TaskEvent) => {
       const match = this.terminalManagerRef?.findByClaudeSessionId(event.terminalId)
+        ?? (event.cwd
+          ? this.terminalManagerRef?.attachClaudeSession(event.terminalId, event.cwd)
+          : undefined)
       if (match) {
         event.terminalId = match.id
       }

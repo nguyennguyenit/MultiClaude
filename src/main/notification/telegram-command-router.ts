@@ -417,7 +417,7 @@ export class TelegramCommandRouter {
   }
 
   private async sendChatInput(terminalId: string, text: string): Promise<void> {
-    const { terminals } = this.getScopedTerminals()
+    const terminals = this.terminalManager.list()
     const terminal = terminals.find(t => t.id === terminalId)
     if (!terminal) {
       await this.sendReply('⚠️ Terminal not found\\. Chat session expired\\.')

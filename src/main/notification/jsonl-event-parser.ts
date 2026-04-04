@@ -76,6 +76,7 @@ export class JsonlEventParser {
       type: 'taskComplete' as NotificationEventType,
       taskName,
       projectName,
+      cwd,
       timestamp: Date.now()
     }
   }

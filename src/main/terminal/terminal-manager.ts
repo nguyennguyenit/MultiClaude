@@ -165,6 +165,16 @@ export class TerminalManager extends EventEmitter {
     return `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   }
 
+  private extractClaudeSessionId(command: string): string | undefined {
+    const match = command.match(/(?:^|\s)--resume(?:=|\s+)(\S+)/)
+    return match?.[1]
+  }
+
+  private getCreatedAtMs(createdAt: Date | string): number {
+    const value = createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime()
+    return Number.isFinite(value) ? value : 0
+  }
+
   /**
    * Parse OSC escape sequences for terminal title changes
    * OSC 0/1/2 set window/icon title: \x1b]0;title\x07 or \x1b]0;title\x1b\\
@@ -246,6 +256,10 @@ export class TerminalManager extends EventEmitter {
           // Backward compat: claude still sets isClaudeMode
           if (agentType === 'claude') {
             this.setClaudeMode(term)
+            const sessionId = this.extractClaudeSessionId(command)
+            if (sessionId) {
+              term.metadata.claudeSessionId = sessionId
+            }
           } else {
             // Non-claude agents also get title updates
             term.metadata.allowTitleUpdate = true
@@ -494,6 +508,7 @@ export class TerminalManager extends EventEmitter {
     let command = 'claude'
     if (sessionId) {
       command += ` --resume ${sessionId}`
+      term.metadata.claudeSessionId = sessionId
     }
     command += '\n'
 
@@ -519,6 +534,52 @@ export class TerminalManager extends EventEmitter {
   /** Returns cached session data for an exited terminal (for notification button fallback) */
   getExitedSession(id: string): TerminalSession | undefined {
     return this.exitedTerminals.get(id)
+  }
+
+  /**
+   * Attach a Claude session ID to the most likely live Claude terminal for a cwd.
+   * This is used when JSONL transcript events arrive before the terminal knows its session ID.
+   */
+  attachClaudeSession(sessionId: string, cwd: string): { id: string } | undefined {
+    const existing = this.findByClaudeSessionId(sessionId)
+    if (existing) return existing
+
+    const claudeTerminals = Array.from(this.terminals.values())
+      .filter(term => term.metadata.agentType === 'claude' || term.metadata.isClaudeMode)
+
+    // Prefer unbound terminals, then most recently active
+    const sortByAffinity = (list: PTYProcess[]) =>
+      list.sort((a, b) => {
+        const aUnbound = a.metadata.claudeSessionId ? 0 : 1
+        const bUnbound = b.metadata.claudeSessionId ? 0 : 1
+        if (aUnbound !== bUnbound) return bUnbound - aUnbound
+        if (a.lastOutputAt !== b.lastOutputAt) return b.lastOutputAt - a.lastOutputAt
+        return this.getCreatedAtMs(b.metadata.createdAt) - this.getCreatedAtMs(a.metadata.createdAt)
+      })
+
+    // Tier 1: Exact CWD match
+    const exactMatch = sortByAffinity(
+      claudeTerminals.filter(t => t.metadata.cwd === cwd)
+    )[0]
+
+    // Tier 2: Same project basename (handles symlinks, resolved paths, sub-dirs)
+    const cwdBasename = path.basename(cwd)
+    const basenameMatch = !exactMatch
+      ? sortByAffinity(
+          claudeTerminals.filter(t => path.basename(t.metadata.cwd || '') === cwdBasename)
+        )[0]
+      : undefined
+
+    // Tier 3: Most recently active Claude terminal (last resort)
+    const fallback = !exactMatch && !basenameMatch
+      ? sortByAffinity(claudeTerminals)[0]
+      : undefined
+
+    const candidate = exactMatch ?? basenameMatch ?? fallback
+    if (!candidate) return undefined
+
+    candidate.metadata.claudeSessionId = sessionId
+    return { id: candidate.id }
   }
 
   /**

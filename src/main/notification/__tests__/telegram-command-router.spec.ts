@@ -447,6 +447,33 @@ describe('TelegramCommandRouter', () => {
       expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'ls -la\r')
     })
 
+    it('keeps chat callback working even when active project is different', async () => {
+      mockProjectStore.getProjects.mockReturnValue([
+        { id: 'proj-1', name: 'Frontend', path: '/frontend', createdAt: new Date(), updatedAt: new Date() },
+        { id: 'proj-2', name: 'Backend', path: '/backend', createdAt: new Date(), updatedAt: new Date() }
+      ] as Project[])
+      mockProjectStore.getProject.mockImplementation((id) => mockProjectStore.getProjects().find(project => project.id === id))
+      mockProjectStore.getActiveProjectId.mockReturnValue('proj-2')
+
+      mockTerminalManager.list.mockReturnValue([
+        { ...term, projectId: 'proj-1', cwd: '/frontend' }
+      ] as Terminal[])
+
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+      mockTerminalManager.list.mockReturnValue([
+        { ...term, projectId: 'proj-1', cwd: '/frontend' }
+      ] as Terminal[])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output', lastOutputAt: 0 }
+      ])
+
+      await router.handle('pwd')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'pwd\r')
+    })
+
     it('/cancel clears pending chat', async () => {
       await router.handleCallback('cq-1', 'chat:uuid-1')
       vi.clearAllMocks()

@@ -18,6 +18,8 @@ export interface TaskEvent {
   projectName: string
   /** Additional context (last tool used, duration, etc.) */
   context?: string
+  /** Source working directory for transcript-derived events */
+  cwd?: string
   /** Agent type that generated this event (e.g. 'claude', 'codex') */
   agentType?: AgentType
   /** Unix timestamp in milliseconds */
