@@ -164,9 +164,9 @@ export class TelegramNotifier {
   }
 
   private buildEventKeyboard(event: TaskEvent): InlineKeyboardButton[][] {
-    const chatText = event.type === 'reviewNeeded' ? 'Trả lời 💬' : 'Chat 💬'
+    const chatText = event.type === 'reviewNeeded' ? 'Reply 💬' : 'Chat 💬'
     return [[
-      { text: 'Chi tiết 🔍', callback_data: `tail:${event.type}:${event.terminalId}` },
+      { text: 'Details 🔍', callback_data: `tail:${event.type}:${event.terminalId}` },
       { text: chatText, callback_data: `chat:${event.terminalId}` }
     ]]
   }

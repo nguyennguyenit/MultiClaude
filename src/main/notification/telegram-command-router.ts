@@ -352,14 +352,14 @@ export class TelegramCommandRouter {
       }
       if (!terminal) {
         const ghost = this.terminalManager.getExitedSession(terminalId)
-        const title = ghost ? `_${this.esc(ghost.title)}_` : 'này'
-        await this.sendReply(`⚠️ Terminal ${title} đã đóng\\. Không thể chat\\.`)
+        const title = ghost ? `_${this.esc(ghost.title)}_` : 'this'
+        await this.sendReply(`⚠️ Terminal ${title} is closed\\. Cannot chat\\.`)
         return
       }
       const index = terminals.findIndex(t => t.id === terminal!.id) + 1
       this.pendingChat = { terminalId: terminal.id }
       await this.sendReply(
-        `💬 *Terminal ${index}* \\(${this.esc(terminal.title)}\\) đang chờ input\\.\nNhập lệnh \\(hoặc /cancel để huỷ\\):`
+        `💬 *Terminal ${index}* \\(${this.esc(terminal.title)}\\) waiting for input\\.\nType a message \\(or /cancel\\):`
       )
     }
   }
@@ -384,7 +384,7 @@ export class TelegramCommandRouter {
 
     const title = terminal?.title ?? ghost!.title
     const index = terminal ? terminals.findIndex(t => t.id === resolvedId) + 1 : null
-    const label = index ? `*Terminal ${index}* — ${this.esc(title)}` : `*${this.esc(title)}* _\\(đã đóng\\)_`
+    const label = index ? `*Terminal ${index}* — ${this.esc(title)}` : `*${this.esc(title)}* _\\(closed\\)_`
 
     const rawOutput = this.getRawTerminalOutput(resolvedId)
     if (!rawOutput) {

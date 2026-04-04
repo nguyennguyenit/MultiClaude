@@ -90,7 +90,7 @@ describe('TelegramNotifier', () => {
       expect(body.text).not.toContain('<script>')
     })
 
-    it('includes inline keyboard with Chi tiết and Chat buttons for taskComplete', async () => {
+    it('includes inline keyboard with Details and Chat buttons for taskComplete', async () => {
       await notifier.sendTaskEvent(baseEvent)
 
       const [, options] = vi.mocked(fetch).mock.calls[0]
@@ -98,13 +98,13 @@ describe('TelegramNotifier', () => {
 
       expect(body.reply_markup).toBeDefined()
       const buttons = body.reply_markup.inline_keyboard[0]
-      expect(buttons[0].text).toBe('Chi tiết 🔍')
+      expect(buttons[0].text).toBe('Details 🔍')
       expect(buttons[0].callback_data).toBe('tail:taskComplete:term-1')
       expect(buttons[1].text).toBe('Chat 💬')
       expect(buttons[1].callback_data).toBe('chat:term-1')
     })
 
-    it('uses Trả lời button text for reviewNeeded', async () => {
+    it('uses Reply button text for reviewNeeded', async () => {
       const event: TaskEvent = { ...baseEvent, type: 'reviewNeeded' }
       await notifier.sendTaskEvent(event)
 
@@ -113,7 +113,7 @@ describe('TelegramNotifier', () => {
 
       const buttons = body.reply_markup.inline_keyboard[0]
       expect(buttons[0].callback_data).toBe('tail:reviewNeeded:term-1')
-      expect(buttons[1].text).toBe('Trả lời 💬')
+      expect(buttons[1].text).toBe('Reply 💬')
     })
 
     it('includes terminal title in header when provided', async () => {
