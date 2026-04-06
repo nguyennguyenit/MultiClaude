@@ -83,7 +83,7 @@ export function Toolbar({
       {/* Left group: keep clear of traffic lights unless the macOS window is expanded */}
       <div
         className="toolbar-group toolbar-group-left"
-        style={{ paddingLeft: isMac && !windowState.isExpanded ? 80 : 8 }}
+        style={{ paddingLeft: isMac && !windowState.isFullScreen ? 80 : 8 }}
       >
         <div className="toolbar-brand">
           <img src={logoImg} alt="MultiClaude" className="toolbar-brand-logo" />
