@@ -51,6 +51,7 @@ export interface TerminalSession {
   claudeSessionId?: string
   outputBuffer: string
   lastOutputAt?: number
+  exitedAt?: number // ghost cache TTL tracking
 }
 
 // Per-project terminal layout types

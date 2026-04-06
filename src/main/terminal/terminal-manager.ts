@@ -9,7 +9,8 @@ import type { Terminal, TerminalSession, WindowsShell, AgentType } from '@shared
 
 const DESTROY_TIMEOUT_MS = 3000
 // Max exited terminals to keep for notification button lookups
-const MAX_GHOST_TERMINALS = 20
+const MAX_GHOST_TERMINALS = 50
+const GHOST_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 interface PTYProcess {
   id: string
@@ -351,8 +352,17 @@ export class TerminalManager extends EventEmitter {
         projectId: termProcess.metadata.projectId,
         claudeSessionId: termProcess.metadata.claudeSessionId,
         outputBuffer: termProcess.outputBuffer,
-        lastOutputAt: termProcess.lastOutputAt
+        lastOutputAt: termProcess.lastOutputAt,
+        exitedAt: Date.now()
       })
+      // Evict expired ghosts first
+      const now = Date.now()
+      for (const [gid, session] of this.exitedTerminals) {
+        if (session.exitedAt && (now - session.exitedAt) > GHOST_TTL_MS) {
+          this.exitedTerminals.delete(gid)
+        }
+      }
+      // Count-based eviction if still over limit
       if (this.exitedTerminals.size > MAX_GHOST_TERMINALS) {
         this.exitedTerminals.delete(this.exitedTerminals.keys().next().value!)
       }

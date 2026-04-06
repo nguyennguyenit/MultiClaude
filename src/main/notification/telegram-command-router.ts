@@ -3,6 +3,7 @@ import type { ProjectStore } from '../project/project-store'
 import type { Project, Terminal, NotificationEventType } from '@shared/types'
 import { cleanTerminalOutput } from './terminal-output-cleaner'
 import { buildDetailSummary } from './terminal-summary-formatter'
+import { formatDetailMessage } from './detail-message-formatter'
 
 const DEFAULT_TAIL_LINES = 20
 const ALLOWED_NEW_COMMANDS = ['claude', 'codex'] as const
@@ -378,7 +379,7 @@ export class TelegramCommandRouter {
     const resolvedId = terminal?.id ?? terminalId
     const ghost = terminal ? null : this.terminalManager.getExitedSession(resolvedId)
     if (!terminal && !ghost) {
-      await this.sendReply('⚠️ Terminal not found\\. Use /status to check\\.')
+      await this.sendReply('📄 Session ended — no cached output available\\.')
       return
     }
 
@@ -393,27 +394,8 @@ export class TelegramCommandRouter {
     }
 
     const summary = buildDetailSummary(rawOutput)
-    const lines: string[] = [`📄 ${label}`, '']
-
-    if (summary.question) {
-      lines.push('❓ *Đang chờ:*')
-      lines.push(this.esc(summary.question))
-      lines.push('')
-    }
-
-    if (summary.activityLines.length > 0) {
-      lines.push('📋 *Hoạt động gần đây:*')
-      for (const line of summary.activityLines) {
-        lines.push(this.esc(line))
-      }
-    }
-
-    if (!summary.question && summary.activityLines.length === 0) {
-      lines.push('_\\(no meaningful output\\)_')
-    }
-
-    const msg = lines.join('\n')
-    await this.sendReply(msg.length > TELEGRAM_MSG_LIMIT ? msg.slice(0, TELEGRAM_MSG_LIMIT) : msg)
+    const msg = formatDetailMessage(summary, label)
+    await this.sendReply(msg)
   }
 
   private async sendChatInput(terminalId: string, text: string): Promise<void> {

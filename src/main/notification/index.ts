@@ -10,5 +10,6 @@ export { TaskTracker } from './task-tracker'
 export { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
 export { TelegramPoller } from './telegram-poller'
 export { TelegramCommandRouter } from './telegram-command-router'
+export { formatDetailMessage, escapeMarkdownV2 } from './detail-message-formatter'
 // Deprecated: PatternDetector replaced by OutputParser in Phase 4
 export { PatternDetector } from './pattern-detector'
