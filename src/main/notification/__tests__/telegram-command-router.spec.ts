@@ -387,19 +387,19 @@ describe('TelegramCommandRouter', () => {
       expect(reply).toContain('Terminal 1')
     })
 
-    it('tail action with review prompt shows Đang chờ section', async () => {
+    it('tail action with review prompt shows Awaiting section', async () => {
       mockTerminalManager.getSessions.mockReturnValue([
         { id: 'uuid-1', outputBuffer: 'File exists\nWhich approach? [Y/n]', lastOutputAt: 0 }
       ])
       await router.handleCallback('cq-1', 'tail:reviewNeeded:uuid-1')
       const reply = mockSendReply.mock.calls[0][0]
-      expect(reply).toContain('Đang chờ')
+      expect(reply).toContain('Awaiting')
     })
 
-    it('tail action replies not found for unknown terminal', async () => {
+    it('tail action reports cached session end for unknown terminal', async () => {
       await router.handleCallback('cq-1', 'tail:unknown-id')
       const reply = mockSendReply.mock.calls[0][0]
-      expect(reply).toContain('not found')
+      expect(reply).toContain('Session ended')
     })
 
     it('chat action sets pending chat and prompts for input', async () => {
