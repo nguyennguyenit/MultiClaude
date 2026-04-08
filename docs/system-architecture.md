@@ -76,13 +76,11 @@ src/renderer/
 │   ├── toolbar/              # Compact 32px header (VibeTerminal)
 │   │   ├── toolbar.tsx            # Main toolbar container
 │   │   ├── toolbar-button.tsx     # Reusable icon button
-│   │   ├── project-dropdown.tsx   # Project selector/creator
 │   │   └── index.ts
 │   ├── terminal/             # Terminal workspace
 │   │   ├── terminal-grid.tsx      # Auto-flex grid layout (no resize handles)
 │   │   ├── terminal-pane.tsx      # Pane with bottom tab bar + actions
 │   │   ├── terminal-view.tsx      # xterm.js renderer
-│   │   ├── shell-selector-dropdown.tsx  # WSL shell context menu
 │   │   └── index.ts
 │   ├── git-panel/            # Git panel components (single-column collapsible sections, conditionally mounted)
 │   │   ├── git-panel.tsx          # Main container with performance optimization (conditional mount)

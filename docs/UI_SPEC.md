@@ -247,7 +247,6 @@ Each theme includes:
 | App | `src/renderer/App.tsx` |
 | Toolbar | `src/renderer/components/toolbar/toolbar.tsx` |
 | ToolbarButton | `src/renderer/components/toolbar/toolbar-button.tsx` |
-| ProjectDropdown | `src/renderer/components/toolbar/project-dropdown.tsx` |
 | WelcomeScreen | `src/renderer/components/welcome-screen.tsx` |
 | TerminalGrid | `src/renderer/components/terminal/terminal-grid.tsx` |
 | TerminalPane | `src/renderer/components/terminal/terminal-pane.tsx` |
