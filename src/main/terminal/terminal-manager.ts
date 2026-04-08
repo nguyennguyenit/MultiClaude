@@ -4,16 +4,20 @@ import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import { existsSync, readdirSync } from 'fs'
 import path from 'path'
-import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
-import type { Terminal, TerminalSession, WindowsShell } from '@shared/types'
+import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS } from '@shared/constants'
+import type { Terminal, TerminalSession, WindowsShell, AgentType } from '@shared/types'
 
 const DESTROY_TIMEOUT_MS = 3000
+// Max exited terminals to keep for notification button lookups
+const MAX_GHOST_TERMINALS = 50
+const GHOST_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 interface PTYProcess {
   id: string
   pty: pty.IPty
   metadata: Terminal
   outputBuffer: string
+  inputBuffer: string
   lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
   destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
@@ -22,9 +26,12 @@ interface PTYProcess {
 
 export class TerminalManager extends EventEmitter {
   private terminals: Map<string, PTYProcess> = new Map()
+  // Ghost cache: preserves exited terminal state for Telegram notification button lookups
+  private exitedTerminals: Map<string, TerminalSession> = new Map()
   private shell: string
   private resolvedWindowsPowerShellCommand: string | null = null
   private systemSuspended = false // Track system suspend state
+  private nextTerminalNumber = 1
 
   constructor() {
     super()
@@ -159,6 +166,16 @@ export class TerminalManager extends EventEmitter {
     return `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   }
 
+  private extractClaudeSessionId(command: string): string | undefined {
+    const match = command.match(/(?:^|\s)--resume(?:=|\s+)(\S+)/)
+    return match?.[1]
+  }
+
+  private getCreatedAtMs(createdAt: Date | string): number {
+    const value = createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime()
+    return Number.isFinite(value) ? value : 0
+  }
+
   /**
    * Parse OSC escape sequences for terminal title changes
    * OSC 0/1/2 set window/icon title: \x1b]0;title\x07 or \x1b]0;title\x1b\\
@@ -204,6 +221,72 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
+  private setClaudeMode(term: PTYProcess): void {
+    if (term.metadata.isClaudeMode && term.metadata.allowTitleUpdate) return
+
+    term.metadata.isClaudeMode = true
+    // Enable title updates once Claude is running (activity started)
+    term.metadata.allowTitleUpdate = true
+    this.emit('stateChange', { terminalId: term.id, isClaudeMode: true })
+  }
+
+  /**
+   * Detect CLI agent from terminal input commands.
+   * Watches keystrokes for Enter, then checks command against known agent binaries.
+   * Sets agentType on terminal metadata and emits 'agentDetected' event.
+   * For claude: also sets isClaudeMode for backward compatibility.
+   */
+  private processInputForAgentDetection(term: PTYProcess, data: string): void {
+    // Skip if agent already detected for this terminal
+    if (term.metadata.agentType) return
+
+    for (const char of data) {
+      if (char === '\r' || char === '\n') {
+        const command = term.inputBuffer.trim()
+        term.inputBuffer = ''
+
+        if (!command) continue
+
+        // Extract binary name (first token)
+        const binary = command.split(/\s+/)[0].toLowerCase()
+        const agentType = AGENT_DETECTION_PATTERNS[binary] as AgentType | undefined
+
+        if (agentType) {
+          term.metadata.agentType = agentType
+
+          // Backward compat: claude still sets isClaudeMode
+          if (agentType === 'claude') {
+            this.setClaudeMode(term)
+            const sessionId = this.extractClaudeSessionId(command)
+            if (sessionId) {
+              term.metadata.claudeSessionId = sessionId
+            }
+          } else {
+            // Non-claude agents also get title updates
+            term.metadata.allowTitleUpdate = true
+          }
+
+          this.emit('agentDetected', { terminalId: term.id, agentType })
+        }
+        continue
+      }
+
+      if (char === '\u007f' || char === '\b') {
+        term.inputBuffer = term.inputBuffer.slice(0, -1)
+        continue
+      }
+
+      // Only keep printable command input. This avoids escape-sequence noise from
+      // cursor/navigation keys while still catching direct agent launches.
+      if (char >= ' ' || char === '\t') {
+        term.inputBuffer += char
+        if (term.inputBuffer.length > 1024) {
+          term.inputBuffer = term.inputBuffer.slice(-1024)
+        }
+      }
+    }
+  }
+
   create(options: { cwd?: string; projectId?: string; shell?: WindowsShell } = {}): Terminal {
     const id = this.generateId()
     const cwd = options.cwd || os.homedir()
@@ -225,7 +308,7 @@ export class TerminalManager extends EventEmitter {
 
     const terminal: Terminal = {
       id,
-      title: `Terminal ${this.terminals.size + 1}`,
+      title: `Terminal ${this.nextTerminalNumber++}`,
       cwd,
       isClaudeMode: false,
       projectId: options.projectId,
@@ -238,6 +321,7 @@ export class TerminalManager extends EventEmitter {
       pty: ptyProcess,
       metadata: terminal,
       outputBuffer: '',
+      inputBuffer: '',
       lastOutputAt: 0,
       oscBuffer: ''
     }
@@ -260,10 +344,33 @@ export class TerminalManager extends EventEmitter {
 
     ptyProcess.onExit(({ exitCode }) => {
       this.emit('exit', { terminalId: id, exitCode })
+      // Save to ghost cache before removing — allows Telegram buttons to still work
+      this.exitedTerminals.set(id, {
+        id,
+        title: termProcess.metadata.title,
+        cwd: termProcess.metadata.cwd,
+        projectId: termProcess.metadata.projectId,
+        claudeSessionId: termProcess.metadata.claudeSessionId,
+        outputBuffer: termProcess.outputBuffer,
+        lastOutputAt: termProcess.lastOutputAt,
+        exitedAt: Date.now()
+      })
+      // Evict expired ghosts first
+      const now = Date.now()
+      for (const [gid, session] of this.exitedTerminals) {
+        if (session.exitedAt && (now - session.exitedAt) > GHOST_TTL_MS) {
+          this.exitedTerminals.delete(gid)
+        }
+      }
+      // Count-based eviction if still over limit
+      if (this.exitedTerminals.size > MAX_GHOST_TERMINALS) {
+        this.exitedTerminals.delete(this.exitedTerminals.keys().next().value!)
+      }
       this.terminals.delete(id)
     })
 
     this.terminals.set(id, termProcess)
+    this.emit('created', { terminal })
     return terminal
   }
 
@@ -276,6 +383,7 @@ export class TerminalManager extends EventEmitter {
       return false
     }
     try {
+      this.processInputForAgentDetection(term, data)
       term.pty.write(data)
       return true
     } catch (error) {
@@ -410,13 +518,14 @@ export class TerminalManager extends EventEmitter {
     let command = 'claude'
     if (sessionId) {
       command += ` --resume ${sessionId}`
+      term.metadata.claudeSessionId = sessionId
     }
     command += '\n'
 
     term.pty.write(command)
-    term.metadata.isClaudeMode = true
-    // Enable title updates once Claude is running (activity started)
-    term.metadata.allowTitleUpdate = true
+    this.setClaudeMode(term)
+    term.metadata.agentType = 'claude'
+    this.emit('agentDetected', { terminalId: id, agentType: 'claude' as AgentType })
     return true
   }
 
@@ -430,5 +539,71 @@ export class TerminalManager extends EventEmitter {
       outputBuffer: t.outputBuffer,
       lastOutputAt: t.lastOutputAt
     }))
+  }
+
+  /** Returns cached session data for an exited terminal (for notification button fallback) */
+  getExitedSession(id: string): TerminalSession | undefined {
+    return this.exitedTerminals.get(id)
+  }
+
+  /**
+   * Attach a Claude session ID to the most likely live Claude terminal for a cwd.
+   * This is used when JSONL transcript events arrive before the terminal knows its session ID.
+   */
+  attachClaudeSession(sessionId: string, cwd: string): { id: string } | undefined {
+    const existing = this.findByClaudeSessionId(sessionId)
+    if (existing) return existing
+
+    const claudeTerminals = Array.from(this.terminals.values())
+      .filter(term => term.metadata.agentType === 'claude' || term.metadata.isClaudeMode)
+
+    // Prefer unbound terminals, then most recently active
+    const sortByAffinity = (list: PTYProcess[]) =>
+      list.sort((a, b) => {
+        const aUnbound = a.metadata.claudeSessionId ? 0 : 1
+        const bUnbound = b.metadata.claudeSessionId ? 0 : 1
+        if (aUnbound !== bUnbound) return bUnbound - aUnbound
+        if (a.lastOutputAt !== b.lastOutputAt) return b.lastOutputAt - a.lastOutputAt
+        return this.getCreatedAtMs(b.metadata.createdAt) - this.getCreatedAtMs(a.metadata.createdAt)
+      })
+
+    // Tier 1: Exact CWD match
+    const exactMatch = sortByAffinity(
+      claudeTerminals.filter(t => t.metadata.cwd === cwd)
+    )[0]
+
+    // Tier 2: Same project basename (handles symlinks, resolved paths, sub-dirs)
+    const cwdBasename = path.basename(cwd)
+    const basenameMatch = !exactMatch
+      ? sortByAffinity(
+          claudeTerminals.filter(t => path.basename(t.metadata.cwd || '') === cwdBasename)
+        )[0]
+      : undefined
+
+    // Tier 3: Most recently active Claude terminal (last resort)
+    const fallback = !exactMatch && !basenameMatch
+      ? sortByAffinity(claudeTerminals)[0]
+      : undefined
+
+    const candidate = exactMatch ?? basenameMatch ?? fallback
+    if (!candidate) return undefined
+
+    candidate.metadata.claudeSessionId = sessionId
+    return { id: candidate.id }
+  }
+
+  /**
+   * Find a live or exited terminal by its Claude session ID.
+   * Used to translate JSONL watcher events (which use Claude session IDs)
+   * back to real MultiClaude terminal IDs.
+   */
+  findByClaudeSessionId(sessionId: string): { id: string } | undefined {
+    for (const t of this.terminals.values()) {
+      if (t.metadata.claudeSessionId === sessionId) return { id: t.id }
+    }
+    for (const s of this.exitedTerminals.values()) {
+      if (s.claudeSessionId === sessionId) return { id: s.id }
+    }
+    return undefined
   }
 }

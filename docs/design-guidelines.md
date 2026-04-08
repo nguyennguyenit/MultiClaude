@@ -1,19 +1,21 @@
 # Design Guidelines
 
-## VibeTerminal Theme System
+## VibeTerminal Theme System (v3.1.0)
 
-MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and dual theme systems.
+MultiClaude v3.1.0-beta.1 uses the VibeTerminal aesthetic: a minimal, terminal-first UI with CSS custom properties and dual theme systems optimized for parallel Claude workflows.
 
-### Theme Systems (Two Distinct Concepts)
+### Theme Systems (Two Independent Concepts)
 
 **1. UI Color Themes** (app chrome: toolbar, panels, buttons, text)
-- 7 themes: Default, Dusk, Lime, Ocean, Retro, Neo, Forest
-- Light/Dark/System modes applied to each
-- Controls toolbar, panels, sidebar, UI elements
+- **7 themes**: Default, Dusk, Lime, Ocean, Retro, Neo, Forest
+- **Dark/Light/System modes** applied to each theme
+- Controls toolbar, panels, settings UI, button states
+- Tailwind-based with CSS variable overrides for custom colors
 
-**2. Terminal ANSI Palette Themes** (xterm.js colors only)
-- 5 curated color schemes: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
-- Applied to terminal output, text rendering, cursor colors
+**2. Terminal ANSI Palette Themes** (xterm.js rendering)
+- **5 curated palettes**: Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark
+- Applied to terminal text, cursor colors, selection background
+- Independent from UI theme; users can mix (e.g., Forest UI + Tokyo Night terminal)
 
 ### Color Architecture
 
@@ -60,18 +62,21 @@ MultiClaude v3.0.1-beta.13 uses the VibeTerminal aesthetic: a minimal, terminal-
 
 **Note**: Escape key handling is managed by `shortcut-utils.ts` to prevent leakage during project switching.
 
+### Terminal Rendering Modes UI
+
+Three preset modes (Settings > Terminals > Rendering Mode):
+- **⚡ Performance**: No WebGL, best for 9+ terminals, lower GPU load
+- **⚖️ Balanced** (default): WebGL on active terminal only, balanced experience
+- **✨ Quality**: WebGL always on, best visual clarity
+
+**Claude-safe Mode** (Experimental):
+- Badge shows current GPU state: "GPU unavailable" (Performance) | "Claude-safe mode" (safe) | "Claude follows mode" (experimental)
+- When disabled: Claude terminals always use canvas renderer (safer)
+- When enabled: Claude terminals use selected rendering mode (experimental, may have rendering issues)
+- Toggle disabled in Performance mode (GPU off globally)
+
 ### Element Styling Guidelines
 
-**Circular Elements** (avatars, status indicators):
-- Use `.rounded-full` class to preserve circular shape
-- Necessary in terminal-first aesthetic with blocky default styling
-
-**Spacing**:
-- Use CSS variables for consistency (`--transition-fast` for animations)
-- Toolbar items: 15x15px icons, 2px gaps between button groups
-- Panel containers: 340px width (4:3 aspect design)
-
-**Typography**:
-- UI text: System font stack (macOS/Segoe UI/Roboto)
-- Terminal content: JetBrains Mono monospace
-- Font sizing: Default system sizes, no custom scaling needed
+**Circular Elements**: Use `.rounded-full` for avatars, status badges, toggle switches
+**Spacing**: Toolbar icons 15x15px, button gaps 2px, panel width 340px (landscape)
+**Typography**: UI = system font (macOS/Segoe UI), Terminal = JetBrains Mono with Nerd Font symbols for Claude renderer

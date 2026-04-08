@@ -66,6 +66,18 @@ describe('TerminalManager', () => {
       expect(term2.title).toBe('Terminal 2')
     })
 
+    it('does not reuse a default title after a terminal is destroyed', () => {
+      manager.create()
+      const term2 = manager.create()
+      const term3 = manager.create()
+
+      manager.destroy(term2.id)
+
+      const term4 = manager.create()
+      expect(term3.title).toBe('Terminal 3')
+      expect(term4.title).toBe('Terminal 4')
+    })
+
     it('creates terminal with custom cwd', () => {
       const term = manager.create({ cwd: '/custom/path' })
       expect(term.cwd).toBe('/custom/path')
@@ -93,6 +105,36 @@ describe('TerminalManager', () => {
       const result = manager.write(term.id, 'test')
       expect(result).toBe(true)
       expect(mockPty.write).toHaveBeenCalledWith('test')
+    })
+
+    it('marks a terminal as Claude mode when the user launches claude manually', () => {
+      const term = manager.create()
+
+      manager.write(term.id, 'claude')
+      manager.write(term.id, '\r')
+
+      expect(manager.get(term.id)?.isClaudeMode).toBe(true)
+    })
+
+    it('enables title updates and emits stateChange when claude is launched manually', () => {
+      const term = manager.create()
+      const stateChangeListener = vi.fn()
+      manager.on('stateChange', stateChangeListener)
+
+      manager.write(term.id, 'claude --resume session-123')
+      manager.write(term.id, '\r')
+
+      expect(manager.get(term.id)?.allowTitleUpdate).toBe(true)
+      expect(stateChangeListener).toHaveBeenCalledWith({ terminalId: term.id, isClaudeMode: true })
+    })
+
+    it('stores the resumed Claude session ID when launched manually', () => {
+      const term = manager.create()
+
+      manager.write(term.id, 'claude --resume session-123')
+      manager.write(term.id, '\r')
+
+      expect(manager.get(term.id)?.claudeSessionId).toBe('session-123')
     })
 
     it('returns false for non-existent terminal', () => {
@@ -178,6 +220,12 @@ describe('TerminalManager', () => {
       const term = manager.create()
       manager.invokeClaudeCode(term.id, 'session-123')
       expect(mockPty.write).toHaveBeenCalledWith('claude --resume session-123\n')
+    })
+
+    it('stores session id if provided', () => {
+      const term = manager.create()
+      manager.invokeClaudeCode(term.id, 'session-123')
+      expect(manager.get(term.id)?.claudeSessionId).toBe('session-123')
     })
 
     it('sets isClaudeMode to true', () => {
@@ -283,6 +331,17 @@ describe('TerminalManager', () => {
       const sessions = manager.getSessions()
       expect(sessions[0].id).toBe(term.id)
       expect(sessions[0].outputBuffer).toHaveLength(150000)
+    })
+
+    it('can attach a Claude session ID to a live Claude terminal by cwd', () => {
+      const term = manager.create({ cwd: '/workspace/app' })
+
+      manager.write(term.id, 'claude')
+      manager.write(term.id, '\r')
+
+      expect(manager.attachClaudeSession('session-456', '/workspace/app')).toEqual({ id: term.id })
+      expect(manager.get(term.id)?.claudeSessionId).toBe('session-456')
+      expect(manager.findByClaudeSessionId('session-456')).toEqual({ id: term.id })
     })
   })
 

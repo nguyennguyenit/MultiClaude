@@ -3,7 +3,7 @@ import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFile
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
-import type { AppSettings, WindowState } from '@shared/types'
+import type { AppSettings, WindowState, AgentType } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { GitManager } from '../git/git-manager'
 import type { GitHeadWatcher } from '../git/git-head-watcher'
@@ -104,6 +104,16 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (!window.isDestroyed()) {
       window.webContents.send('terminal:exit', { terminalId, exitCode })
     }
+    // Notify for non-Claude agent exits (codex/gemini/aider)
+    notificationManager.handleAgentExit(terminalId, exitCode)
+  })
+
+  // Forward agent detection to renderer for badge display
+  terminalManager.on('agentDetected', ({ terminalId, agentType }: { terminalId: string; agentType: AgentType }) => {
+    notificationManager.setTerminalAgentType(terminalId, agentType)
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, { terminalId, agentType })
+    }
   })
 
   // Forward terminal title changes to renderer
@@ -113,9 +123,32 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  terminalManager.on('stateChange', ({ terminalId, isClaudeMode }) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_STATE_CHANGE, { terminalId, isClaudeMode })
+    }
+  })
+
+  // Forward terminal created events (e.g. from Telegram /new command) to renderer
+  terminalManager.on('created', ({ terminal }: { terminal: import('@shared/types').Terminal }) => {
+    if (terminal.cwd) {
+      notificationManager.registerTerminalCwd(terminal.id, terminal.cwd)
+    }
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_CREATED, {
+        ...terminal,
+        createdAt: terminal.createdAt instanceof Date
+          ? terminal.createdAt.toISOString()
+          : terminal.createdAt
+      })
+    }
+  })
+
   // Terminal handlers
   safeHandle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
     const terminal = terminalManager.create(options)
+    // Note: registerTerminalCwd is handled by the 'created' event listener above,
+    // which fires for all terminals (both renderer-originated and remote-originated).
     // Serialize Date to ISO string for IPC cloning
     return {
       ...terminal,
@@ -440,6 +473,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return true
   })
 
+  safeHandle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM, () => {
+    return notificationManager.getTelegramCredentials()
+  })
+
   safeHandle(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS, () => {
     return notificationManager.getSettings().telegramConfigured
   })
@@ -519,11 +556,17 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // YOLO Mode handlers
   safeHandle(IPC_CHANNELS.YOLO_MODE_GET, async (_, projectPath: string) => {
+    const knownPaths = projectStore.getProjects().map(p => p.path)
+    if (!knownPaths.includes(projectPath)) return false
     const settingsPath = join(projectPath, '.claude', 'settings.local.json')
     return existsSync(settingsPath)
   })
 
   safeHandle(IPC_CHANNELS.YOLO_MODE_SET, async (_, { projectPath, enabled }: { projectPath: string; enabled: boolean }) => {
+    const knownPaths = projectStore.getProjects().map(p => p.path)
+    if (!knownPaths.includes(projectPath)) {
+      return { success: false, error: 'Path not in project store' }
+    }
     const claudeDir = join(projectPath, '.claude')
     const settingsPath = join(claudeDir, 'settings.local.json')
 
@@ -554,7 +597,8 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Image handlers
   safeHandle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
-    if (existsSync(filePath)) {
+    // Security: only allow opening files in multiClaude-screenshots directory
+    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
       shell.openPath(filePath)
       return true
     }

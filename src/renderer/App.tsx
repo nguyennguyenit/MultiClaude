@@ -8,7 +8,7 @@ import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
-import { useAppStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { joinPathsForTerminal } from './utils'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
@@ -22,6 +22,8 @@ function App() {
   const addTerminal = useAppStore((state) => state.addTerminal)
   const removeTerminal = useAppStore((state) => state.removeTerminal)
   const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
+  const updateTerminalClaudeMode = useAppStore((state) => state.updateTerminalClaudeMode)
+  const updateTerminalAgentType = useAppStore((state) => state.updateTerminalAgentType)
   const addProject = useAppStore((state) => state.addProject)
   const removeProject = useAppStore((state) => state.removeProject)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -37,6 +39,7 @@ function App() {
   }, [])
 
   const { pendingSettings, loadSettings, detectWsl, getTerminalLimitValue } = useSettingsStore()
+  const loadNotificationSettings = useNotificationStore((state) => state.loadSettings)
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -247,6 +250,7 @@ function App() {
   // Load settings and detect WSL on mount
   useEffect(() => {
     loadSettings()
+    loadNotificationSettings()
     detectWsl()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -369,6 +373,29 @@ function App() {
     })
     return unsubscribe
   }, [updateTerminalTitle])
+
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onStateChange(({ terminalId, isClaudeMode }) => {
+      updateTerminalClaudeMode(terminalId, isClaudeMode)
+    })
+    return unsubscribe
+  }, [updateTerminalClaudeMode])
+
+  // Handle agent detection events (codex, gemini, aider, etc.)
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onAgentDetected(({ terminalId, agentType }) => {
+      updateTerminalAgentType(terminalId, agentType as import('@shared/types').AgentType)
+    })
+    return unsubscribe
+  }, [updateTerminalAgentType])
+
+  // Handle terminals created externally (e.g. via Telegram /new command)
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onCreated((terminal) => {
+      addTerminal(terminal)
+    })
+    return unsubscribe
+  }, [addTerminal])
 
   // Save session before close
   useEffect(() => {

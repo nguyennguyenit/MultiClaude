@@ -1,8 +1,56 @@
-import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
+import type { Page } from '@playwright/test'
+import { test, expect, injectMockProject, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 
 // Skip PTY-dependent tests on CI (terminal creation can be unreliable)
 const isCI = process.env.CI === 'true'
+
+async function createTerminalForActiveProject(window: Page): Promise<string | null> {
+  return await window.evaluate(async () => {
+    const appWindow = window as typeof window & {
+      electron: {
+        terminal: {
+          create: (input: { cwd: string; projectId: string }) => Promise<{
+            id: string
+            title: string
+            cwd: string
+            isClaudeMode: boolean
+            projectId?: string
+            createdAt: string
+          }>
+        }
+      }
+    }
+
+    const store = (appWindow as unknown as {
+      __APP_STORE__?: {
+        getState: () => {
+          activeProjectId: string | null
+          projects: Array<{ id: string; path: string }>
+          addTerminal: (terminal: {
+            id: string
+            title: string
+            cwd: string
+            isClaudeMode: boolean
+            projectId?: string
+            createdAt: string
+          }) => void
+        }
+      }
+    }).__APP_STORE__
+
+    const state = store?.getState()
+    const activeProject = state?.projects.find((project) => project.id === state.activeProjectId)
+    if (!state || !activeProject) return null
+
+    const terminal = await appWindow.electron.terminal.create({
+      cwd: activeProject.path,
+      projectId: activeProject.id
+    })
+    state.addTerminal(terminal)
+    return terminal.id
+  })
+}
 
 /**
  * Terminal Pane Interaction Tests
@@ -14,16 +62,19 @@ test.describe('Terminal Pane Interactions', () => {
   test.skip(isCI, 'Terminal pane tests require PTY which is unreliable on CI')
 
   test.beforeEach(async ({ window }) => {
+    const terminalPanes = window.locator('[data-terminal-id]')
+
     // Inject mock project data
     await injectMockProject(window, [mockProject])
     await window.waitForSelector('#root', { state: 'attached' })
     await window.waitForTimeout(WAIT_TIMES.LONG)
 
     // Ensure at least one terminal exists
-    const terminalCount = await window.locator('.terminal-pane').count()
+    const terminalCount = await terminalPanes.count()
     if (terminalCount === 0) {
-      await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      const terminalId = await createTerminalForActiveProject(window)
+      expect(terminalId).toBeTruthy()
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
   })
 
@@ -58,6 +109,48 @@ test.describe('Terminal Pane Interactions', () => {
 
     // Input should be focused and contain existing title
     await expect(titleInput).toBeFocused()
+  })
+
+  test('selection copy still completes when mouseup happens below the terminal surface', async ({ window }) => {
+    const terminalIds = await window.evaluate(() => {
+      const store = (window as unknown as {
+        __APP_STORE__?: {
+          getState: () => {
+            activeTerminalId: string | null
+            terminals: Array<{ id: string }>
+          }
+        }
+      }).__APP_STORE__
+
+      const state = store?.getState()
+      return {
+        activeTerminalId: state?.activeTerminalId ?? null
+      }
+    })
+
+    expect(terminalIds.activeTerminalId).toBeTruthy()
+
+    const sourceScreen = window.locator(`[data-terminal-id="${terminalIds.activeTerminalId}"] .xterm-screen`)
+
+    await expect(sourceScreen).toBeVisible()
+
+    const sourceBox = await sourceScreen.boundingBox()
+    const viewport = await window.evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }))
+
+    expect(sourceBox).not.toBeNull()
+    if (!sourceBox) return
+
+    await window.evaluate(() => navigator.clipboard.writeText('SENTINEL'))
+
+    await window.mouse.move(sourceBox.x + 120, sourceBox.y + 40)
+    await window.mouse.down()
+    await window.mouse.move(sourceBox.x + 320, viewport.height - 20, { steps: 20 })
+    await window.mouse.up()
+
+    await expect(window.locator('text=Copied to clipboard')).toBeVisible({ timeout: 2000 })
+
+    const clipboardText = await window.evaluate(async () => navigator.clipboard.readText())
+    expect(clipboardText).not.toBe('SENTINEL')
   })
 
   test.skip('new title saves on Enter', async ({ window }) => {

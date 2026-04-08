@@ -85,33 +85,25 @@ test.describe('Settings Modal', () => {
     await expect(appearanceContent).toBeVisible()
   })
 
-  test('theme selector changes theme mode', async ({ window }) => {
-    // Open settings modal
+  test('theme selector changes color theme', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(200)
 
-    // Get current theme class on html
-    // Find and click dark mode button
-    const darkModeButton = window.locator('button:has-text("dark")').first()
-    if (await darkModeButton.isVisible()) {
-      await darkModeButton.click()
-      await window.waitForTimeout(200)
+    const saveButton = window.locator('[data-testid="settings-save-button"]')
+    await expect(saveButton).toBeDisabled()
 
-      // Verify theme class changed on html element
-      const htmlClassAfter = await window.evaluate(() => document.documentElement.className)
-      expect(htmlClassAfter).toContain('dark')
-    }
+    const draculaButton = window.getByRole('button', { name: /Dracula/i })
+    await draculaButton.click()
+    await window.waitForTimeout(200)
 
-    // Try clicking light mode
-    const lightModeButton = window.locator('button:has-text("light")').first()
-    if (await lightModeButton.isVisible()) {
-      await lightModeButton.click()
-      await window.waitForTimeout(200)
+    await expect(draculaButton).toHaveAttribute('aria-pressed', 'true')
+    await expect(saveButton).toBeEnabled()
 
-      const htmlClassLight = await window.evaluate(() => document.documentElement.className)
-      expect(htmlClassLight).toBeDefined()
-    }
+    const accentColor = await window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    )
+    expect(accentColor.toLowerCase()).toBe('#bd93f9')
   })
 
   test('modal closes on X button click', async ({ window }) => {
@@ -220,213 +212,197 @@ test.describe('Settings Modal', () => {
     // Verify modal is no longer visible
     await expect(modal).not.toBeVisible()
   })
+
+  test('notification changes enable Save Settings', async ({ window }) => {
+    const settingsButton = window.locator('[data-testid="settings-button"]')
+    await settingsButton.click()
+    await window.waitForTimeout(200)
+
+    await window.locator('[data-testid="settings-tab-notifications"]').click()
+    await window.waitForTimeout(100)
+
+    const saveButton = window.locator('[data-testid="settings-save-button"]')
+    await expect(saveButton).toBeDisabled()
+
+    const soundToggle = window
+      .locator('p:has-text("Enable Sound")')
+      .locator('xpath=ancestor::div[2]')
+      .locator('[role="switch"]')
+
+    const initialState = await soundToggle.getAttribute('aria-checked')
+    await soundToggle.click()
+    await window.waitForTimeout(100)
+
+    await expect(soundToggle).toHaveAttribute('aria-checked', initialState === 'true' ? 'false' : 'true')
+    await expect(saveButton).toBeEnabled()
+  })
 })
 
 /**
  * Terminal UI Style E2E tests.
  * Tests terminal style toggle, color presets, fonts, and border options.
  */
-test.describe('Terminal UI Style', () => {
+test.describe('Terminal Settings', () => {
   test.beforeEach(async ({ window }) => {
     await injectMockProject(window, [mockProject])
     await window.waitForTimeout(200)
   })
 
-  test('should toggle to terminal UI style', async ({ window }) => {
-    // Open settings modal
+  test('should show rendering mode options in terminal settings', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section to be visible
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    // Click Terminal style button (in UI Style section, not tab)
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await expect(terminalButton).toBeVisible({ timeout: 5000 })
-    await terminalButton.click()
-    await window.waitForTimeout(300)
-
-    // Verify ui-terminal class applied to html
-    const htmlClass = await window.evaluate(() => document.documentElement.className)
-    expect(htmlClass).toContain('ui-terminal')
+    await expect(window.getByText('Rendering Mode')).toBeVisible()
+    await expect(window.getByRole('button', { name: /Performance/i })).toBeVisible()
+    await expect(window.getByRole('button', { name: /Balanced/i })).toBeVisible()
+    await expect(window.getByRole('button', { name: /Quality/i })).toBeVisible()
   })
 
-  test('should show Terminal Style Options when terminal mode selected', async ({ window }) => {
-    // Open settings modal
+  test('should switch terminal render mode to quality', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    // Click Terminal style button
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
+    const renderingCard = window
+      .locator('p:has-text("Rendering Mode")')
+      .locator('xpath=ancestor::div[contains(@class,"settings-card")][1]')
+    const saveButton = window.locator('[data-testid="settings-save-button"]')
+
+    await window.getByRole('button', { name: /Quality/i }).click()
     await window.waitForTimeout(300)
 
-    // Verify Terminal Style Options section is visible
-    const colorPresetSection = window.locator('text=Terminal Color Preset')
-    await expect(colorPresetSection).toBeVisible({ timeout: 5000 })
-
-    const fontSection = window.locator('text=Terminal Font')
-    await expect(fontSection).toBeVisible()
-
-    const borderSection = window.locator('text=Border Style')
-    await expect(borderSection).toBeVisible()
+    await expect(renderingCard.locator('span').first()).toHaveText(/quality/i)
+    await expect(saveButton).toBeEnabled()
   })
 
-  test('should disable Color Theme section in terminal mode', async ({ window }) => {
-    // Open settings modal
+  test('should disable Claude GPU override in performance mode', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    // Click Terminal style button
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
+    await window.getByRole('button', { name: /Performance/i }).click()
     await window.waitForTimeout(300)
 
-    // Verify "Disabled in Terminal mode" text is visible
-    const disabledText = window.locator('text=Disabled in Terminal mode')
-    await expect(disabledText).toBeVisible({ timeout: 5000 })
+    const gpuToggle = window.locator('[role="switch"]').first()
+    await expect(window.getByText('GPU unavailable')).toBeVisible()
+    await expect(gpuToggle).toBeDisabled()
   })
 
-  test('should switch back to modern UI style', async ({ window }) => {
-    // Open settings modal and switch to terminal first
+  test('should allow Claude GPU override in balanced mode', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
+    await window.getByRole('button', { name: /Performance/i }).click()
+    await window.waitForTimeout(200)
+    await window.getByRole('button', { name: /Balanced/i }).click()
     await window.waitForTimeout(300)
 
-    // Now switch back to Modern
-    const modernButton = window.locator('button[aria-label="Select Modern UI style"]')
-    await modernButton.click()
-    await window.waitForTimeout(300)
+    const gpuToggle = window.locator('[role="switch"]').first()
+    const initialState = await gpuToggle.getAttribute('aria-checked')
+    await expect(gpuToggle).toBeEnabled()
+    await gpuToggle.click()
 
-    // Verify ui-terminal class removed
-    const htmlClass = await window.evaluate(() => document.documentElement.className)
-    expect(htmlClass).not.toContain('ui-terminal')
+    await expect(gpuToggle).toHaveAttribute('aria-checked', initialState === 'true' ? 'false' : 'true')
   })
 
-  test('should change terminal color preset', async ({ window }) => {
-    // Open settings modal
+  test('should update max terminal preset badge', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    // Switch to terminal mode
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
+    const limitCard = window
+      .locator('p:has-text("Max Terminals per Project")')
+      .locator('xpath=ancestor::div[contains(@class,"settings-card")][1]')
+
+    await limitCard.getByRole('button', { name: '4' }).click()
     await window.waitForTimeout(300)
 
-    // Wait for color presets to be visible
-    await window.waitForSelector('text=Terminal Color Preset', { timeout: 5000 })
-
-    // Click Blue preset
-    const bluePreset = window.locator('button[aria-label="Select Blue color preset"]')
-    await bluePreset.click()
-    await window.waitForTimeout(300)
-
-    // Verify terminal-preset-blue class applied
-    const htmlClass = await window.evaluate(() => document.documentElement.className)
-    expect(htmlClass).toContain('terminal-preset-blue')
+    await expect(limitCard.locator('span').first()).toHaveText('4 max')
   })
 
   test('should change terminal font', async ({ window }) => {
-    // Open settings modal
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
-
-    // Switch to terminal mode
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
-    await window.waitForTimeout(300)
-
-    // Wait for font selector to be visible
-    await window.waitForSelector('text=Terminal Font', { timeout: 5000 })
-
-    // Select VT323 font
-    const fontSelect = window.locator('#terminal-font-select')
+    const fontCard = window
+      .locator('p:has-text("Terminal Font")')
+      .locator('xpath=ancestor::div[contains(@class,"settings-card")][1]')
+    const fontSelect = fontCard.locator('select')
     await fontSelect.selectOption('vt323')
     await window.waitForTimeout(300)
 
-    // Verify font CSS variable is set
     const fontVar = await window.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue('--mc-terminal-font')
+      getComputedStyle(document.documentElement).getPropertyValue('--terminal-font')
     )
     expect(fontVar).toContain('VT323')
   })
 
-  test('should toggle ASCII border style', async ({ window }) => {
-    // Open settings modal
+  test('should update custom terminal limit value', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    // Switch to terminal mode
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
+    const limitCard = window
+      .locator('p:has-text("Max Terminals per Project")')
+      .locator('xpath=ancestor::div[contains(@class,"settings-card")][1]')
+
+    await limitCard.getByRole('button', { name: 'Custom' }).click()
+    const customInput = limitCard.locator('input[type="number"]')
+    await customInput.fill('12')
     await window.waitForTimeout(300)
 
-    // Wait for border style section
-    await window.waitForSelector('text=Border Style', { timeout: 5000 })
-
-    // Click ASCII Box button
-    const asciiBorderButton = window.locator('button[aria-label="Select ASCII Box border style"]')
-    await asciiBorderButton.click()
-    await window.waitForTimeout(300)
-
-    // Verify use-border-chars class applied
-    const htmlClass = await window.evaluate(() => document.documentElement.className)
-    expect(htmlClass).toContain('use-border-chars')
+    await expect(limitCard.locator('span').first()).toHaveText('12 max')
   })
 
   test('should save and persist terminal settings', async ({ window }) => {
-    // Open settings modal
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    // Wait for UI Style section
-    await window.waitForSelector('text=UI Style', { timeout: 5000 })
+    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.waitForTimeout(200)
 
-    // Switch to terminal mode
-    const terminalButton = window.locator('button[aria-label="Select Terminal UI style"]')
-    await terminalButton.click()
+    await window.getByRole('button', { name: /Quality/i }).click()
     await window.waitForTimeout(300)
 
-    // Click Save button
     const saveButton = window.locator('[data-testid="settings-save-button"]')
+    await expect(saveButton).toBeEnabled()
     await saveButton.click()
     await window.waitForTimeout(300)
 
-    // Verify modal closed
     const modal = window.locator('[data-testid="settings-modal"]')
     await expect(modal).not.toBeVisible()
 
-    // Verify ui-terminal class still applied after modal closes
-    const htmlClass = await window.evaluate(() => document.documentElement.className)
-    expect(htmlClass).toContain('ui-terminal')
+    const savedSettings = await window.evaluate(() =>
+      (globalThis as typeof globalThis & {
+        electron: {
+          settings: {
+            get: () => Promise<{ terminalRenderMode: string }>
+          }
+        }
+      }).electron.settings.get()
+    )
+    expect(savedSettings.terminalRenderMode).toBe('quality')
   })
 })

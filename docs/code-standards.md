@@ -325,6 +325,57 @@ export const useAppStore = create<AppState>((set) => ({
 }))
 ```
 
+### Settings Store Pattern (v3.1.0)
+
+**Dual-Flow Architecture**: Pending (live preview) + Saved (disk source of truth)
+
+```typescript
+// stores/settings-store.ts (Zustand in renderer)
+interface SettingsState {
+  savedSettings: Settings          // Disk source of truth
+  pendingSettings: Settings        // Live preview before Save
+  hasUnsavedChanges: boolean
+
+  // Actions
+  setSetting: (key: keyof Settings, value: unknown) => void
+  save: () => Promise<void>        // Persist to main process
+  cancel: () => void               // Discard pendingSettings
+  reset: () => Promise<void>       // Reset to defaults
+}
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
+  savedSettings: DEFAULTS,
+  pendingSettings: DEFAULTS,
+  hasUnsavedChanges: false,
+
+  setSetting: (key, value) => set((state) => {
+    const pending = { ...state.pendingSettings, [key]: value }
+    return {
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, state.savedSettings)
+    }
+  }),
+
+  save: async () => {
+    const { pendingSettings } = get()
+    await window.electron.settings.set(pendingSettings)
+    set({ savedSettings: pendingSettings, hasUnsavedChanges: false })
+  },
+
+  cancel: () => set((state) => ({
+    pendingSettings: state.savedSettings,
+    hasUnsavedChanges: false
+  }))
+}))
+```
+
+**Key Patterns:**
+- `hasUnsavedChanges`: Deep field-by-field equality (not JSON.stringify)
+- `setSetting()`: Updates pendingSettings, recalculates hasUnsavedChanges
+- `save()`: IPC to main process, updates savedSettings only on success
+- `cancel()`: Reverts pendingSettings to savedSettings
+- Main process validates all settings before persistence (validation firewall)
+
 ## IPC Standards
 
 ### Channel Definition

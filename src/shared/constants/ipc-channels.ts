@@ -9,7 +9,10 @@ export const IPC_CHANNELS = {
   TERMINAL_LIST: 'terminal:list',
   TERMINAL_INVOKE_CLAUDE: 'terminal:invoke-claude',
   TERMINAL_TITLE_CHANGE: 'terminal:title-change',
+  TERMINAL_STATE_CHANGE: 'terminal:state-change',
   TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
+  TERMINAL_CREATED: 'terminal:created',
+  TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
 
   // Project channels
   PROJECT_LIST: 'project:list',
@@ -79,6 +82,7 @@ export const IPC_CHANNELS = {
   NOTIFICATION_SET_SETTINGS: 'notification:set-settings',
   NOTIFICATION_SET_TELEGRAM: 'notification:set-telegram',
   NOTIFICATION_SET_DISCORD: 'notification:set-discord',
+  NOTIFICATION_GET_TELEGRAM: 'notification:get-telegram',
   NOTIFICATION_GET_TELEGRAM_STATUS: 'notification:get-telegram-status',
   NOTIFICATION_GET_DISCORD_STATUS: 'notification:get-discord-status',
   NOTIFICATION_TEST_TELEGRAM: 'notification:test-telegram',

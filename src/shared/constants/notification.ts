@@ -1,4 +1,5 @@
 import type { NotificationSettings, SoundPreset } from '../types/notification'
+import type { AgentType } from '../types'
 
 // Task tracker constants
 export const TASK_TRACKER_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -50,3 +51,39 @@ export const ENHANCED_DETECTION_PATTERNS = {
   // Match review/approval prompts
   reviewNeeded: /\[Y\/n\]|\(y\/N\)|approve|allow\s+(?:this\s+)?tool|waiting\s+for\s+(?:your\s+)?(?:input|response|confirmation)/i
 } as const
+
+// Agent command detection patterns
+// Matches command binary name from terminal input (e.g. "codex", "codex --model gpt-4")
+export const AGENT_DETECTION_PATTERNS: Record<string, AgentType> = {
+  'claude': 'claude',
+  'codex': 'codex',
+  'gemini': 'gemini',
+  'aider': 'aider',
+}
+
+// Human-readable display names for each agent type
+export const AGENT_DISPLAY_NAMES: Record<AgentType, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex CLI',
+  gemini: 'Gemini CLI',
+  aider: 'Aider',
+  generic: 'Terminal',
+}
+
+// Badge colors for terminal pane (CSS background-color)
+export const AGENT_BADGE_COLORS: Record<AgentType, string> = {
+  claude: '#a855f7',  // purple
+  codex: '#22c55e',   // green
+  gemini: '#3b82f6',  // blue
+  aider: '#f97316',   // orange
+  generic: '#6b7280', // gray
+}
+
+// Short badge text for terminal tab
+export const AGENT_BADGE_TEXT: Record<AgentType, string> = {
+  claude: 'AI',
+  codex: 'CX',
+  gemini: 'GM',
+  aider: 'AD',
+  generic: '??',
+}

@@ -3,6 +3,7 @@ import {
   createUserScrollIntent,
   isPointerOnViewportScrollbar,
   isViewportNearBottom,
+  resolveFitViewportRestoreTarget,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD
 } from './terminal-scroll-utils'
@@ -34,6 +35,7 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 80,
       pendingUserScrollIntent: {
         viewportY: 75,
         stickToBottom: false
@@ -45,6 +47,7 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 80,
       pendingUserScrollIntent: {
         viewportY: null,
         stickToBottom: true
@@ -56,8 +59,18 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 40,
       pendingUserScrollIntent: null
     })).toBe(40)
+  })
+
+  it('preserves the same absolute viewport line while new output is appended below it', () => {
+    expect(resolveViewportRestoreTarget({
+      wasAtBottom: false,
+      savedViewportY: 75,
+      currentBaseY: 160,
+      pendingUserScrollIntent: null
+    })).toBe(75)
   })
 
   it('forces bottom-follow mode after local input requests live output', () => {
@@ -65,6 +78,7 @@ describe('terminal-scroll-utils', () => {
       forceStickToBottom: true,
       wasAtBottom: false,
       savedViewportY: 40,
+      currentBaseY: 40,
       pendingUserScrollIntent: {
         viewportY: 12,
         stickToBottom: false
@@ -76,6 +90,7 @@ describe('terminal-scroll-utils', () => {
     expect(resolveViewportRestoreTarget({
       wasAtBottom: true,
       savedViewportY: 40,
+      currentBaseY: 40,
       pendingUserScrollIntent: null
     })).toBeNull()
   })
@@ -103,5 +118,32 @@ describe('terminal-scroll-utils', () => {
       viewportOffsetWidth: 400,
       viewportRight: 400
     })).toBe(false)
+  })
+
+  it('keeps bottom-following panes pinned to live output after fit changes the viewport size', () => {
+    expect(resolveFitViewportRestoreTarget({
+      restoreViewport: true,
+      wasAtBottom: true,
+      savedViewportY: 0,
+      currentBaseY: 14
+    })).toBe('bottom')
+  })
+
+  it('restores the saved viewport line after fit when the user was reading scrollback', () => {
+    expect(resolveFitViewportRestoreTarget({
+      restoreViewport: true,
+      wasAtBottom: false,
+      savedViewportY: 42,
+      currentBaseY: 100
+    })).toBe(42)
+  })
+
+  it('skips viewport restoration when fit is explicitly told not to preserve it', () => {
+    expect(resolveFitViewportRestoreTarget({
+      restoreViewport: false,
+      wasAtBottom: true,
+      savedViewportY: 0,
+      currentBaseY: 14
+    })).toBeNull()
   })
 })

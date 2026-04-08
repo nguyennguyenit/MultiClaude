@@ -1,16 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TelegramCommandRouter } from '../telegram-command-router'
 import type { Terminal, Project } from '@shared/types'
+import type { TerminalManager } from '../../terminal/terminal-manager'
+import type { ProjectStore } from '../../project/project-store'
 
 const mockTerminalManager = {
   list: vi.fn<() => Terminal[]>(),
   write: vi.fn<(id: string, data: string) => boolean>(),
   destroy: vi.fn<(id: string) => boolean>(),
-  getSessions: vi.fn()
+  getSessions: vi.fn(),
+  getExitedSession: vi.fn(),
+  create: vi.fn<(opts: { cwd?: string; projectId?: string; shell?: unknown }) => Terminal>()
 }
 
 const mockProjectStore = {
   getProjects: vi.fn<() => Project[]>(),
+  getProject: vi.fn<(id: string) => Project | undefined>(),
   setActiveProjectId: vi.fn<(id: string | null) => void>(),
   getActiveProjectId: vi.fn<() => string | null>()
 }
@@ -23,9 +28,22 @@ describe('TelegramCommandRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockSendReply.mockResolvedValue(true)
+    mockTerminalManager.create.mockReturnValue({
+      id: 'new-term-id',
+      title: 'Terminal 1',
+      cwd: '/projects/myapp',
+      isClaudeMode: false,
+      createdAt: new Date()
+    } as Terminal)
+    mockProjectStore.getProjects.mockReturnValue([])
+    mockProjectStore.getProject.mockReturnValue(undefined)
+    mockProjectStore.getActiveProjectId.mockReturnValue(null)
+    mockProjectStore.setActiveProjectId.mockImplementation((id) => {
+      mockProjectStore.getActiveProjectId.mockReturnValue(id)
+    })
     router = new TelegramCommandRouter(
-      mockTerminalManager as any,
-      mockProjectStore as any,
+      mockTerminalManager as unknown as TerminalManager,
+      mockProjectStore as unknown as ProjectStore,
       mockSendReply
     )
   })
@@ -40,6 +58,7 @@ describe('TelegramCommandRouter', () => {
       expect(reply).toContain('/kill')
       expect(reply).toContain('/tail')
       expect(reply).toContain('/project')
+      expect(reply).toContain('/new')
     })
   })
 
@@ -77,7 +96,20 @@ describe('TelegramCommandRouter', () => {
       ])
 
       await router.handle('/send 1 hello world')
-      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'hello world\n')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'hello world\r')
+    })
+
+    it('writes text to terminal by title', async () => {
+      mockTerminalManager.list.mockReturnValue([
+        { id: 'uuid-1', title: 'Terminal 2', cwd: '/tmp', isClaudeMode: false, createdAt: new Date() }
+      ] as Terminal[])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', title: 'Terminal 2', cwd: '/tmp', outputBuffer: 'line1\nline2\nline3' }
+      ])
+
+      await router.handle('/send Terminal 2 pwd')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'pwd\r')
     })
 
     it('rejects invalid terminal index', async () => {
@@ -104,6 +136,33 @@ describe('TelegramCommandRouter', () => {
       await router.handle('/kill 1')
       expect(mockTerminalManager.destroy).toHaveBeenCalledWith('uuid-1')
     })
+
+    it('destroys terminal by title', async () => {
+      mockTerminalManager.list.mockReturnValue([
+        { id: 'uuid-1', title: 'Terminal 3', cwd: '/tmp', isClaudeMode: false, createdAt: new Date() }
+      ] as Terminal[])
+      mockTerminalManager.destroy.mockReturnValue(true)
+
+      await router.handle('/kill Terminal 3')
+      expect(mockTerminalManager.destroy).toHaveBeenCalledWith('uuid-1')
+    })
+
+    it('uses active project scope when resolving index', async () => {
+      mockProjectStore.getProjects.mockReturnValue([
+        { id: 'proj-1', name: 'Frontend', path: '/frontend', createdAt: new Date(), updatedAt: new Date() },
+        { id: 'proj-2', name: 'Backend', path: '/backend', createdAt: new Date(), updatedAt: new Date() }
+      ] as Project[])
+      mockProjectStore.getProject.mockImplementation((id) => mockProjectStore.getProjects().find(project => project.id === id))
+      mockProjectStore.getActiveProjectId.mockReturnValue('proj-2')
+      mockTerminalManager.list.mockReturnValue([
+        { id: 'uuid-1', title: 'Terminal 1', cwd: '/frontend', projectId: 'proj-1', isClaudeMode: false, createdAt: new Date() },
+        { id: 'uuid-2', title: 'Terminal 2', cwd: '/backend', projectId: 'proj-2', isClaudeMode: false, createdAt: new Date() }
+      ] as Terminal[])
+      mockTerminalManager.destroy.mockReturnValue(true)
+
+      await router.handle('/kill 1')
+      expect(mockTerminalManager.destroy).toHaveBeenCalledWith('uuid-2')
+    })
   })
 
   describe('/tail', () => {
@@ -120,6 +179,20 @@ describe('TelegramCommandRouter', () => {
       expect(reply).toContain('line3')
       expect(reply).toContain('line4')
       expect(reply).toContain('line5')
+    })
+
+    it('resolves terminal by title when requesting tail', async () => {
+      mockTerminalManager.list.mockReturnValue([
+        { id: 'uuid-1', title: 'Terminal 2', cwd: '/tmp', isClaudeMode: false, createdAt: new Date() }
+      ] as Terminal[])
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'line1\nline2\nline3\nline4' }
+      ])
+
+      await router.handle('/tail Terminal 2 2')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('line3')
+      expect(reply).toContain('line4')
     })
 
     it('defaults to 20 lines', async () => {
@@ -154,11 +227,121 @@ describe('TelegramCommandRouter', () => {
       mockProjectStore.getProjects.mockReturnValue([
         { id: 'proj-1', name: 'MyApp', path: '/app', createdAt: new Date() }
       ] as Project[])
+      mockProjectStore.getProject.mockImplementation((id) => mockProjectStore.getProjects().find(project => project.id === id))
       mockProjectStore.getActiveProjectId.mockReturnValue('proj-1')
 
       await router.handle('/project')
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('MyApp')
+    })
+
+    it('scopes status output to the active project after switching', async () => {
+      mockProjectStore.getProjects.mockReturnValue([
+        { id: 'proj-1', name: 'Frontend', path: '/frontend', createdAt: new Date(), updatedAt: new Date() },
+        { id: 'proj-2', name: 'Backend', path: '/backend', createdAt: new Date(), updatedAt: new Date() }
+      ] as Project[])
+      mockProjectStore.getProject.mockImplementation((id) => mockProjectStore.getProjects().find(project => project.id === id))
+      mockTerminalManager.list.mockReturnValue([
+        { id: 'uuid-1', title: 'Frontend Shell', cwd: '/frontend', projectId: 'proj-1', isClaudeMode: false, createdAt: new Date() },
+        { id: 'uuid-2', title: 'Backend Shell', cwd: '/backend', projectId: 'proj-2', isClaudeMode: false, createdAt: new Date() }
+      ] as Terminal[])
+
+      await router.handle('/project Backend')
+      await router.handle('/status')
+
+      const reply = mockSendReply.mock.calls[1][0]
+      expect(reply).toContain('Backend')
+      expect(reply).toContain('Backend Shell')
+      expect(reply).not.toContain('Frontend Shell')
+    })
+  })
+
+  describe('/new', () => {
+    const activeProject: Project = {
+      id: 'proj-1',
+      name: 'MyApp',
+      path: '/projects/myapp',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+
+    beforeEach(() => {
+      mockProjectStore.getProjects.mockReturnValue([activeProject])
+      mockProjectStore.getProject.mockReturnValue(activeProject)
+      mockProjectStore.getActiveProjectId.mockReturnValue('proj-1')
+      mockTerminalManager.list.mockReturnValue([])
+    })
+
+    it('creates a shell terminal when called with no args', async () => {
+      await router.handle('/new')
+      expect(mockTerminalManager.create).toHaveBeenCalledWith({
+        cwd: '/projects/myapp',
+        projectId: 'proj-1'
+      })
+      expect(mockTerminalManager.write).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+      expect(reply).toContain('MyApp')
+    })
+
+    it('creates terminal and runs claude when arg is claude', async () => {
+      await router.handle('/new claude')
+      expect(mockTerminalManager.create).toHaveBeenCalledWith({
+        cwd: '/projects/myapp',
+        projectId: 'proj-1'
+      })
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'claude\r')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+      expect(reply).toContain('claude')
+    })
+
+    it('creates terminal and runs codex when arg is codex', async () => {
+      await router.handle('/new codex')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('new-term-id', 'codex\r')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+      expect(reply).toContain('codex')
+    })
+
+    it('returns error when terminal limit is reached', async () => {
+      // Fill up to the limit with scoped terminals
+      const terminals = Array.from({ length: 9 }, (_, i) => ({
+        id: `uuid-${i}`,
+        title: `Terminal ${i + 1}`,
+        cwd: '/projects/myapp',
+        projectId: 'proj-1',
+        isClaudeMode: false,
+        createdAt: new Date()
+      }))
+      mockTerminalManager.list.mockReturnValue(terminals as Terminal[])
+
+      await router.handle('/new')
+      expect(mockTerminalManager.create).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('limit')
+    })
+
+    it('returns error when no active project', async () => {
+      mockProjectStore.getActiveProjectId.mockReturnValue(null)
+      await router.handle('/new')
+      expect(mockTerminalManager.create).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('No active project')
+    })
+
+    it('returns usage error for unknown arg', async () => {
+      await router.handle('/new bash')
+      expect(mockTerminalManager.create).not.toHaveBeenCalled()
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Usage')
+    })
+
+    it('reports launch failure if write returns false', async () => {
+      mockTerminalManager.write.mockReturnValue(false)
+      await router.handle('/new claude')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('failed to launch')
     })
   })
 
@@ -173,6 +356,151 @@ describe('TelegramCommandRouter', () => {
       await router.handle('just some text')
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('/help')
+    })
+  })
+
+  describe('handleCallback', () => {
+    const term: Terminal = {
+      id: 'uuid-1',
+      title: 'Terminal 1',
+      cwd: '/tmp',
+      isClaudeMode: false,
+      createdAt: new Date()
+    }
+
+    beforeEach(() => {
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'File checked\nline2\nline3', lastOutputAt: 0 }
+      ])
+    })
+
+    it('tail action (legacy format) shows smart summary with terminal title', async () => {
+      await router.handleCallback('cq-1', 'tail:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+    })
+
+    it('tail action (new format with event type) shows smart summary', async () => {
+      await router.handleCallback('cq-1', 'tail:reviewNeeded:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+    })
+
+    it('tail action with review prompt shows Awaiting section', async () => {
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'File exists\nWhich approach? [Y/n]', lastOutputAt: 0 }
+      ])
+      await router.handleCallback('cq-1', 'tail:reviewNeeded:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Awaiting')
+    })
+
+    it('tail action reports cached session end for unknown terminal', async () => {
+      await router.handleCallback('cq-1', 'tail:unknown-id')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Session ended')
+    })
+
+    it('chat action sets pending chat and prompts for input', async () => {
+      await router.handleCallback('cq-2', 'chat:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+      expect(reply).toContain('cancel')
+    })
+
+    it('reply action sets pending chat', async () => {
+      await router.handleCallback('cq-3', 'reply:uuid-1')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Terminal 1')
+    })
+  })
+
+  describe('chat mode', () => {
+    const term: Terminal = {
+      id: 'uuid-1',
+      title: 'Terminal 1',
+      cwd: '/tmp',
+      isClaudeMode: false,
+      createdAt: new Date()
+    }
+
+    beforeEach(() => {
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output after command', lastOutputAt: 0 }
+      ])
+    })
+
+    it('routes non-command text to pending terminal when chat mode active', async () => {
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output', lastOutputAt: 0 }
+      ])
+
+      await router.handle('ls -la')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'ls -la\r')
+    })
+
+    it('keeps chat callback working even when active project is different', async () => {
+      mockProjectStore.getProjects.mockReturnValue([
+        { id: 'proj-1', name: 'Frontend', path: '/frontend', createdAt: new Date(), updatedAt: new Date() },
+        { id: 'proj-2', name: 'Backend', path: '/backend', createdAt: new Date(), updatedAt: new Date() }
+      ] as Project[])
+      mockProjectStore.getProject.mockImplementation((id) => mockProjectStore.getProjects().find(project => project.id === id))
+      mockProjectStore.getActiveProjectId.mockReturnValue('proj-2')
+
+      mockTerminalManager.list.mockReturnValue([
+        { ...term, projectId: 'proj-1', cwd: '/frontend' }
+      ] as Terminal[])
+
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+      mockTerminalManager.list.mockReturnValue([
+        { ...term, projectId: 'proj-1', cwd: '/frontend' }
+      ] as Terminal[])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output', lastOutputAt: 0 }
+      ])
+
+      await router.handle('pwd')
+      expect(mockTerminalManager.write).toHaveBeenCalledWith('uuid-1', 'pwd\r')
+    })
+
+    it('/cancel clears pending chat', async () => {
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+
+      await router.handle('/cancel')
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).toContain('Cancelled')
+      expect(mockTerminalManager.write).not.toHaveBeenCalled()
+    })
+
+    it('after chat input sent, chat mode is cleared', async () => {
+      await router.handleCallback('cq-1', 'chat:uuid-1')
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+      mockTerminalManager.list.mockReturnValue([term])
+      mockTerminalManager.write.mockReturnValue(true)
+      mockTerminalManager.getSessions.mockReturnValue([
+        { id: 'uuid-1', outputBuffer: 'output', lastOutputAt: 0 }
+      ])
+
+      await router.handle('first command')  // sends to terminal, clears pendingChat
+      vi.clearAllMocks()
+      mockSendReply.mockResolvedValue(true)
+
+      await router.handle('second command')  // no pending chat → routed as unknown command
+      expect(mockTerminalManager.write).not.toHaveBeenCalled()
     })
   })
 })

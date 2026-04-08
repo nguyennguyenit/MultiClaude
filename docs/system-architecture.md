@@ -29,37 +29,40 @@ MultiClaude is an Electron application with a three-layer architecture: Main Pro
 
 ```
 src/main/
-├── index.ts                  # App entry, window creation, menu
+├── index.ts                          # App entry, window creation, IPC registration
 ├── terminal/
-│   ├── terminal-manager.ts   # PTY lifecycle management
-│   ├── wsl-detector.ts       # WSL detection (Windows)
-│   ├── shortcut-utils.ts     # Escape key leakage prevention
+│   ├── terminal-manager.ts           # PTY lifecycle, suspend/resume, output buffering, OSC parsing
+│   ├── wsl-detector.ts               # WSL distro detection and validation
+│   ├── shortcut-utils.ts             # Escape key leakage prevention
 │   └── index.ts
+├── settings/
+│   ├── settings-store.ts             # electron-store with validation firewall for themes/limits/shells
+│   └── __tests__/
 ├── git/
-│   ├── git-manager.ts        # Git operations via simple-git
-│   ├── git-head-watcher.ts   # File watcher for HEAD changes
+│   ├── git-manager.ts                # Git operations via simple-git
+│   ├── git-head-watcher.ts           # File watcher for HEAD changes
 │   └── index.ts
 ├── project/
-│   ├── project-store.ts      # electron-store persistence + WSL UNC path conversion
+│   ├── project-store.ts              # electron-store persistence + WSL UNC path conversion
 │   └── index.ts
 ├── notification/
-│   ├── notification-manager.ts  # Orchestrator
-│   ├── pattern-detector.ts      # Regex matching
-│   ├── secure-storage.ts        # Credential encryption
-│   ├── telegram-notifier.ts     # Telegram Bot API
-│   ├── discord-notifier.ts      # Discord Webhooks
+│   ├── notification-manager.ts       # Orchestrator for all notification types
+│   ├── pattern-detector.ts           # Regex matching with debounce
+│   ├── secure-storage.ts             # Electron safeStorage encryption
+│   ├── telegram-notifier.ts          # Telegram Bot API
+│   ├── discord-notifier.ts           # Discord Webhooks
 │   └── index.ts
 ├── clipboard/
-│   └── clipboard-handler.ts  # Image paste handling
+│   └── clipboard-handler.ts          # Image paste to temp file + path insertion
 ├── updater/
-│   ├── auto-updater.ts       # electron-updater wrapper
+│   ├── auto-updater.ts               # electron-updater wrapper
 │   └── index.ts
 ├── vietnamese-ime-patcher/
-│   ├── vietnamese-ime-patcher.ts  # Auto-detect and patch Claude CLI
+│   ├── vietnamese-ime-patcher.ts     # Auto-detect and patch Claude CLI
 │   └── index.ts
 └── ipc/
-    ├── handlers.ts           # IPC handler registration
-    ├── github-handlers.ts    # GitHub-specific handlers
+    ├── handlers.ts                   # Main IPC handler registration
+    ├── github-handlers.ts            # GitHub OAuth/repo operations
     └── index.ts
 ```
 
@@ -254,6 +257,35 @@ interface ElectronAPI {
 }
 ```
 
+## Repository Tooling
+
+### Release Automation
+
+Release orchestration is repo-local tooling rather than app runtime code:
+
+```text
+plugins/multiclaude-release/
+  .codex-plugin/plugin.json
+  skills/release/SKILL.md
+scripts/release/
+  release-command.mjs
+  release-context.mjs
+  execute-release.mjs
+  git-state.mjs
+  github-release.mjs
+  release-notes.mjs
+  resolve-target.mjs
+  versioning.mjs
+  write-version.mjs
+```
+
+Flow:
+
+1. Codex skill runs preview against repo state.
+2. Preview resolves `main` via the stable branch alias (`origin/HEAD` -> `master` in this repo), inspects the target branch version, and validates preflight state.
+3. Execute updates `package.json` / `package-lock.json`, creates the release commit and tag, creates a draft GitHub release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for the upload job to attach assets to that draft.
+4. Publishing remains manual after CI uploads finish.
+
 ## Terminal Grid Layout
 
 Grid auto-adjusts based on terminal count:
@@ -372,14 +404,49 @@ Notify user (ready)
 Quit and Install
 ```
 
+## Settings Architecture (v3.1.0)
+
+### Dual-Layer Settings System
+
+**Main Process (electron-store)**
+```
+SettingsStore (main process)
+  └─ electron-store persistence
+     └─ Validation firewall for themeMode, colorTheme, terminalLimit, windowsShell, etc.
+```
+
+**Renderer (Zustand)**
+```
+SettingsStore (Zustand)
+  ├─ savedSettings (disk source of truth)
+  ├─ pendingSettings (live preview)
+  ├─ hasUnsavedChanges (deep field-by-field equality)
+  └─ Save/Cancel buttons
+     ├─ Save → IPC to main, persist to disk
+     └─ Cancel → Reset pendingSettings to savedSettings
+```
+
+### Terminal Limits Feature
+- **Presets**: 2, 4, 9, or custom (1-99)
+- **Storage**: `terminalLimit: { preset: '2' | '4' | '9' | 'custom', customValue?: number }`
+- **Enforcement**: TerminalGrid respects limit, prevents spawning beyond max
+- **Per-Project**: Terminal count resets per project; layout respects limit
+
+### System Suspend/Resume
+- Main process listens for `system-suspend` / `system-resume` events
+- Pauses PTY operations during system sleep to prevent SIGTRAP crashes
+- Auto-resumes on wake with terminal health checks
+- Renderer notified of resume for UI refresh if needed
+
 ## Performance Considerations
 
-1. **WebGL per terminal**: Configurable to reduce GPU load
-2. **Debounced fit**: ResizeObserver with 100ms debounce
-3. **Lazy loading**: xterm addons loaded on demand
-4. **IPC batching**: Terminal output buffered before send
-5. **State selectors**: Zustand with shallow equality checks
-6. **Smart scroll**: Auto-scroll only when at bottom; preserves position when reading scrollback
+1. **Terminal Rendering**: Three modes (Performance/Balanced/Quality) with Claude-safe toggle
+2. **Terminal Output Buffering**: TERMINAL_OUTPUT_BUFFER_MAX with intelligent trim on overflow
+3. **OSC Parsing**: Accumulates escape sequences; updates terminal title on complete sequences
+4. **Smart Scroll**: Auto-scroll only when at bottom; preserves position when reading scrollback
+5. **IPC Batching**: Terminal output accumulated before IPC send
+6. **State Selectors**: Zustand with shallow equality checks
+7. **WebGL Disposal**: 100ms deferred cleanup on project switch prevents display corruption
 
 ## Error Handling
 

@@ -10,6 +10,7 @@ import '@fontsource/source-code-pro/400.css'
 import '@fontsource/fira-code/400.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/space-mono/400.css'
+import '@azurity/pure-nerd-font/pure-nerd-font.css'
 // App/UI fonts (sans-serif)
 import '@fontsource/inter/400.css'
 import '@fontsource/inter/500.css'

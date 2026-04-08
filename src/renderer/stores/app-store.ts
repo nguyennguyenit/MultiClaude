@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState } from '@shared/types'
+import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState, AgentType } from '@shared/types'
 import { DEFAULT_ACTIVITY_BAR_STATE, TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
 import type { TerminalKeyboardEnhancementState } from '../utils/keyboard-enhancement-utils'
 
@@ -27,6 +27,8 @@ interface AppState {
   removeTerminal: (id: string) => void
   setActiveTerminal: (id: string | null) => void
   updateTerminalTitle: (id: string, title: string) => void
+  updateTerminalClaudeMode: (id: string, isClaudeMode: boolean) => void
+  updateTerminalAgentType: (id: string, agentType: AgentType) => void
   getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void
   getTerminalKeyboardEnhancement: (id: string) => TerminalKeyboardEnhancementState | null
@@ -63,21 +65,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastActiveTerminalByProjectId: {},
 
   addTerminal: (terminal) =>
-    set((state) => ({
-      terminals: [...state.terminals, terminal],
-      terminalOutputs: {
-        ...state.terminalOutputs,
-        [terminal.id]: ''
-      },
-      terminalKeyboardEnhancements: {
-        ...state.terminalKeyboardEnhancements
-      },
-      activeTerminalId: terminal.id,
-      lastActiveTerminalByProjectId: {
-        ...state.lastActiveTerminalByProjectId,
-        [getTerminalProjectKey(terminal.projectId)]: terminal.id
+    set((state) => {
+      // Guard against duplicate terminal ids (e.g. renderer + 'created' event race)
+      if (state.terminals.some((t) => t.id === terminal.id)) return state
+      return {
+        terminals: [...state.terminals, terminal],
+        terminalOutputs: {
+          ...state.terminalOutputs,
+          [terminal.id]: ''
+        },
+        terminalKeyboardEnhancements: {
+          ...state.terminalKeyboardEnhancements
+        },
+        activeTerminalId: terminal.id,
+        lastActiveTerminalByProjectId: {
+          ...state.lastActiveTerminalByProjectId,
+          [getTerminalProjectKey(terminal.projectId)]: terminal.id
+        }
       }
-    })),
+    }),
 
   removeTerminal: (id) =>
     set((state) => {
@@ -143,6 +149,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       terminals: state.terminals.map((t) =>
         t.id === id ? { ...t, title } : t
+      )
+    })),
+
+  updateTerminalClaudeMode: (id, isClaudeMode) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, isClaudeMode } : t
+      )
+    })),
+
+  updateTerminalAgentType: (id, agentType) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, agentType } : t
       )
     })),
 

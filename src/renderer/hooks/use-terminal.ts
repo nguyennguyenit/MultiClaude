@@ -14,10 +14,12 @@ import {
   processTerminalKeyboardEnhancementData,
   type TerminalKeyboardEnhancementState
 } from '../utils/keyboard-enhancement-utils'
+import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
 import {
   createUserScrollIntent,
   isPointerOnViewportScrollbar,
   isViewportNearBottom,
+  resolveFitViewportRestoreTarget,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD,
   type UserScrollIntent
@@ -45,6 +47,20 @@ interface ViewportEventListener {
 interface PendingWriteViewportSnapshot {
   wasAtBottom: boolean
   savedViewportY: number
+}
+
+interface TerminalDebugSnapshot {
+  baseY: number
+  viewportY: number
+  savedViewportY: number | null
+  isHidden: boolean
+  pendingWriteCount: number
+  isAtBottom: boolean
+  hiddenViewportIntent: UserScrollIntent | null
+  pendingUserScrollIntent: UserScrollIntent | null
+  domScrollTop: number | null
+  domScrollHeight: number | null
+  domClientHeight: number | null
 }
 
 function getPrimaryTerminalFont(): string | null {
@@ -95,11 +111,20 @@ function getCurrentTerminalTheme() {
  * Determine if WebGL should be used based on render mode, active state, and hidden state
  * Hidden terminals never use WebGL to save GPU resources
  */
-function shouldUseWebGL(isActive: boolean, isHidden: boolean): boolean {
+function shouldUseWebGL(terminalId: string, isActive: boolean, isHidden: boolean): boolean {
   // Never use WebGL for hidden terminals (saves GPU resources)
   if (isHidden) return false
 
-  const mode = useSettingsStore.getState().settings.terminalRenderMode ?? 'balanced'
+  const { pendingSettings } = useSettingsStore.getState()
+  const isClaudeTerminal = useAppStore.getState().terminals.some(
+    terminal => terminal.id === terminalId && terminal.isClaudeMode
+  )
+
+  if (isClaudeTerminal && !pendingSettings.gpuRendererForClaudeTerminals) {
+    return false
+  }
+
+  const mode = pendingSettings.terminalRenderMode ?? 'balanced'
   switch (mode) {
     case 'performance':
       return false
@@ -131,24 +156,78 @@ export function useTerminal({
   const pendingWriteViewportSnapshotRef = useRef<PendingWriteViewportSnapshot | null>(null)
   const userViewportInteractingRef = useRef(false)  // Track wheel/drag interaction so manual scroll wins during streaming
   const pendingUserScrollIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve manual scroll changes that happen mid-write
+  const hiddenViewportIntentRef = useRef<UserScrollIntent | null>(null)  // Preserve the last hidden-project scroll position across background output
   const followOutputOnNextWriteRef = useRef(false)  // Local input should pull the next output back to the live cursor
   const [isAtBottom, setIsAtBottom] = useState(true)  // Reactive state for UI button visibility
   const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
+  const selectionChangeDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for selection change listener
   const viewportListenersRef = useRef<ViewportEventListener[] | null>(null)  // Cleanup for viewport-level user interaction listeners
+  const selectionListenersRef = useRef<ViewportEventListener[] | null>(null)  // Cleanup for selection lifecycle listeners
   const userViewportInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
   const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
+  const selectionCopyPendingRef = useRef(false)  // Track mouse-driven selection so mouseup outside terminal still copies
+  const selectionChangedSinceMouseDownRef = useRef(false)  // Avoid copying stale selections on plain clicks
+  const selectionCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // Debounce selection copy while drag is still moving
+  const lastSelectionSnapshotRef = useRef('')  // Preserve the last non-empty selection if xterm clears it before mouseup
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const observedContainerSizeRef = useRef({ width: 0, height: 0 })
   const keyboardEnhancementStateRef = useRef<TerminalKeyboardEnhancementState>(
     useAppStore.getState().getTerminalKeyboardEnhancement(terminalId) ?? INITIAL_KEYBOARD_ENHANCEMENT_STATE
   )
+
+  const registerTerminalDebugHandle = useCallback(() => {
+    if (typeof window === 'undefined') return
+
+    const debugWindow = window as typeof window & {
+      __TERMINAL_DEBUG__?: Record<string, { getSnapshot: () => TerminalDebugSnapshot | null }>
+    }
+
+    debugWindow.__TERMINAL_DEBUG__ ??= {}
+    debugWindow.__TERMINAL_DEBUG__[terminalId] = {
+      getSnapshot: () => {
+        const terminal = terminalRef.current
+        if (!terminal) return null
+
+        const buffer = terminal.buffer.active
+        const viewport = terminal.element?.querySelector('.xterm-viewport') as HTMLElement | null
+
+        return {
+          baseY: buffer.baseY,
+          viewportY: buffer.viewportY,
+          savedViewportY: savedViewportYRef.current,
+          isHidden: isHiddenRef.current,
+          pendingWriteCount: pendingWriteCountRef.current,
+          isAtBottom: isAtBottomRef.current,
+          hiddenViewportIntent: hiddenViewportIntentRef.current,
+          pendingUserScrollIntent: pendingUserScrollIntentRef.current,
+          domScrollTop: viewport?.scrollTop ?? null,
+          domScrollHeight: viewport?.scrollHeight ?? null,
+          domClientHeight: viewport?.clientHeight ?? null
+        }
+      }
+    }
+  }, [terminalId])
+
+  const unregisterTerminalDebugHandle = useCallback(() => {
+    if (typeof window === 'undefined') return
+
+    const debugWindow = window as typeof window & {
+      __TERMINAL_DEBUG__?: Record<string, { getSnapshot: () => TerminalDebugSnapshot | null }>
+    }
+
+    if (!debugWindow.__TERMINAL_DEBUG__) return
+    delete debugWindow.__TERMINAL_DEBUG__[terminalId]
+    if (Object.keys(debugWindow.__TERMINAL_DEBUG__).length === 0) {
+      delete debugWindow.__TERMINAL_DEBUG__
+    }
+  }, [terminalId])
 
   const syncKeyboardEnhancementState = useCallback((nextState: TerminalKeyboardEnhancementState) => {
     if (isTerminalKeyboardEnhancementStateEqual(keyboardEnhancementStateRef.current, nextState)) {
@@ -207,6 +286,32 @@ export function useTerminal({
     }
   }, [])
 
+  const syncViewportState = useCallback((
+    buffer: XTerm['buffer']['active'],
+    hiddenViewportIntent: UserScrollIntent | null = null
+  ) => {
+    const atBottom = hiddenViewportIntent
+      ? hiddenViewportIntent.stickToBottom
+      : isViewportNearBottom(
+        buffer.baseY,
+        buffer.viewportY,
+        TERMINAL_SCROLL_THRESHOLD
+      )
+
+    isAtBottomRef.current = atBottom
+    setIsAtBottom(atBottom)
+    setHasScrollback(buffer.baseY > 0)
+
+    if (hiddenViewportIntent) {
+      savedViewportYRef.current = hiddenViewportIntent.stickToBottom
+        ? buffer.baseY
+        : hiddenViewportIntent.viewportY
+      return
+    }
+
+    savedViewportYRef.current = buffer.viewportY
+  }, [])
+
   // Repaint visible rows after renderer/visibility transitions.
   const refreshVisibleRows = useCallback(() => {
     const terminal = terminalRef.current
@@ -219,6 +324,41 @@ export function useTerminal({
     }
   }, [])
 
+  const reconcileWebGL = useCallback(() => {
+    if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
+
+    const needsWebGL = shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)
+    const hasWebGL = webglAddonRef.current !== null
+
+    if (needsWebGL && !hasWebGL) {
+      webglLoadingRef.current = true
+      requestAnimationFrame(() => {
+        if (disposedRef.current || !terminalRef.current) {
+          webglLoadingRef.current = false
+          return
+        }
+        try {
+          const webglAddon = new WebglAddon()
+          webglAddonRef.current = webglAddon
+          terminalRef.current.loadAddon(webglAddon)
+          attachContextLostListener(webglAddon)
+          refreshVisibleRows()
+        } catch (e) {
+          console.warn('WebGL addon failed to load:', e)
+        }
+        webglLoadingRef.current = false
+      })
+    } else if (!needsWebGL && hasWebGL) {
+      try {
+        webglAddonRef.current?.dispose()
+      } catch {
+        // Ignore disposal errors
+      }
+      webglAddonRef.current = null
+      refreshVisibleRows()
+    }
+  }, [attachContextLostListener, refreshVisibleRows, terminalId])
+
   const performFit = useCallback((restoreViewport = true) => {
     const terminal = terminalRef.current
     const fitAddon = fitAddonRef.current
@@ -227,7 +367,7 @@ export function useTerminal({
     if (container.clientWidth === 0 || container.clientHeight === 0) return false
 
     const savedViewportY = terminal.buffer.active.viewportY
-    const shouldRestoreViewport = restoreViewport && !isAtBottomRef.current && savedViewportY > 0
+    const wasAtBottom = isAtBottomRef.current
 
     try {
       fitAddon.fit()
@@ -238,8 +378,17 @@ export function useTerminal({
 
     refreshVisibleRows()
 
-    if (shouldRestoreViewport && terminalRef.current) {
-      terminalRef.current.scrollToLine(savedViewportY)
+    const restoreTarget = resolveFitViewportRestoreTarget({
+      restoreViewport,
+      wasAtBottom,
+      savedViewportY,
+      currentBaseY: terminal.buffer.active.baseY
+    })
+
+    if (restoreTarget === 'bottom' && terminalRef.current) {
+      terminalRef.current.scrollToBottom()
+    } else if (typeof restoreTarget === 'number' && terminalRef.current) {
+      terminalRef.current.scrollToLine(restoreTarget)
     }
 
     return true
@@ -263,13 +412,18 @@ export function useTerminal({
     performFit(false)
   }, [performFit])
 
-  const reconcileVisibleTerminal = useCallback((savedViewportY: number | null) => {
+  const reconcileVisibleTerminal = useCallback((
+    savedViewportY: number | null,
+    stickToBottom = false
+  ) => {
     if (!terminalRef.current || disposedRef.current) return
 
     clearTextureAtlas()
     fitVisibleTerminal()
 
-    if (savedViewportY !== null && savedViewportY > 0 && terminalRef.current) {
+    if (stickToBottom && terminalRef.current) {
+      terminalRef.current.scrollToBottom()
+    } else if (savedViewportY !== null && savedViewportY >= 0 && terminalRef.current) {
       terminalRef.current.scrollToLine(savedViewportY)
     }
   }, [clearTextureAtlas, fitVisibleTerminal])
@@ -374,6 +528,52 @@ export function useTerminal({
 
     terminal.open(container)
 
+    const copySelectionToClipboard = async (selectionOverride?: string) => {
+      const selection = selectionOverride ?? terminal.getSelection()
+      if (!selection) return
+
+      try {
+        await navigator.clipboard.writeText(selection)
+        const now = Date.now()
+        if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
+          useToastStore.getState().addToast('Copied to clipboard', 'info')
+          lastCopyToastTimeRef.current = now
+        }
+      } catch {
+        // Clipboard permission denied - ignore silently
+      }
+    }
+
+    const clearSelectionCopyTimer = () => {
+      if (selectionCopyTimerRef.current) {
+        clearTimeout(selectionCopyTimerRef.current)
+        selectionCopyTimerRef.current = null
+      }
+    }
+
+    const scheduleSelectionCopy = () => {
+      clearSelectionCopyTimer()
+      selectionCopyTimerRef.current = setTimeout(() => {
+        selectionCopyTimerRef.current = null
+        const selection = lastSelectionSnapshotRef.current || terminal.getSelection()
+        void copySelectionToClipboard(selection)
+      }, 80)
+    }
+
+    const finalizeSelectionCopy = async () => {
+      if (!selectionCopyPendingRef.current) return
+
+      const didSelectionChange = selectionChangedSinceMouseDownRef.current
+      selectionCopyPendingRef.current = false
+      selectionChangedSinceMouseDownRef.current = false
+      clearSelectionCopyTimer()
+
+      if (!didSelectionChange) return
+      const selection = terminal.getSelection() || lastSelectionSnapshotRef.current
+      lastSelectionSnapshotRef.current = ''
+      await copySelectionToClipboard(selection)
+    }
+
     // Load web links addon so plain left-click opens safe URLs in the default browser.
     const webLinksAddon = new WebLinksAddon(
       (event, uri) => {
@@ -393,6 +593,13 @@ export function useTerminal({
     // Helper function to check and update scroll position for smart scroll behavior
     const syncScrollPosition = (captureUserIntent = false) => {
       const buffer = terminal.buffer.active
+      const hiddenViewportIntent = isHiddenRef.current ? hiddenViewportIntentRef.current : null
+
+      if (hiddenViewportIntent && !captureUserIntent) {
+        syncViewportState(buffer, hiddenViewportIntent)
+        return
+      }
+
       const atBottom = isViewportNearBottom(
         buffer.baseY,
         buffer.viewportY,
@@ -458,6 +665,37 @@ export function useTerminal({
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
+    registerTerminalDebugHandle()
+
+    selectionChangeDisposableRef.current = terminal.onSelectionChange(() => {
+      if (selectionCopyPendingRef.current) {
+        selectionChangedSinceMouseDownRef.current = true
+        const selection = terminal.getSelection()
+        if (selection) {
+          lastSelectionSnapshotRef.current = selection
+        }
+        scheduleSelectionCopy()
+      }
+    })
+
+    if (terminal.element) {
+      const selectionListeners: ViewportEventListener[] = []
+      const addSelectionListener = (target: EventTarget, type: string, handler: EventListener) => {
+        target.addEventListener(type, handler)
+        selectionListeners.push({ target, type, handler })
+      }
+
+      addSelectionListener(terminal.element, 'mousedown', (event) => {
+        if (!(event instanceof MouseEvent) || event.button !== 0) return
+        selectionCopyPendingRef.current = true
+        selectionChangedSinceMouseDownRef.current = false
+        lastSelectionSnapshotRef.current = ''
+      })
+      addSelectionListener(window, 'mouseup', () => { void finalizeSelectionCopy() })
+      addSelectionListener(window, 'blur', () => { void finalizeSelectionCopy() })
+
+      selectionListenersRef.current = selectionListeners
+    }
 
     // Defer WebGL addon, fit, and initialOutput to ensure terminal is fully initialized
     // Use setTimeout to run after xterm's internal setTimeout completes
@@ -466,7 +704,7 @@ export function useTerminal({
       if (disposedRef.current || !terminalRef.current) return
 
       // Conditionally load WebGL based on render mode setting
-      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+      if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -494,7 +732,7 @@ export function useTerminal({
 
       // Restore output AFTER WebGL init to prevent race condition
       if (initialOutput) {
-        terminal.write(initialOutput, () => {
+        terminal.write(stripLeakedTerminalResponses(initialOutput), () => {
           requestAnimationFrame(restoreInitialViewport)
         })
       } else {
@@ -506,25 +744,6 @@ export function useTerminal({
       // Refit and clear cached glyphs after the active font finishes loading.
       syncFontAfterLoad()
     }, TERMINAL_INIT_DELAY)
-
-    // Auto-copy on selection complete
-    // Note: Listeners are implicitly cleaned up when terminal.dispose() destroys the DOM element
-    terminal.element?.addEventListener('mouseup', async () => {
-      const selection = terminal.getSelection()
-      if (selection) {
-        try {
-          await navigator.clipboard.writeText(selection)
-          // Debounce notification to prevent spam on rapid selections
-          const now = Date.now()
-          if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
-            useToastStore.getState().addToast('Copied to clipboard', 'info')
-            lastCopyToastTimeRef.current = now
-          }
-        } catch {
-          // Clipboard permission denied - ignore silently
-        }
-      }
-    })
 
     // Right-click paste (prevent context menu)
     terminal.element?.addEventListener('contextmenu', async (e) => {
@@ -695,7 +914,7 @@ export function useTerminal({
     const terminal = terminalRef.current
     if (!terminal) return ''
 
-    const visibleData = processKeyboardEnhancementOutput(data)
+    const visibleData = stripLeakedTerminalResponses(processKeyboardEnhancementOutput(data))
     if (!visibleData) return ''
 
     // Save scroll state BEFORE write (xterm auto-scrolls on write)
@@ -718,7 +937,19 @@ export function useTerminal({
       pendingWriteCountRef.current = Math.max(0, pendingWriteCountRef.current - 1)
       const terminal = terminalRef.current
       if (!terminal) return
-      if (pendingWriteCountRef.current > 0) return
+
+      const hiddenViewportIntent = isHiddenRef.current ? hiddenViewportIntentRef.current : null
+      if (pendingWriteCountRef.current > 0) {
+        if (hiddenViewportIntent?.stickToBottom) {
+          terminal.scrollToBottom()
+        } else if (hiddenViewportIntent?.viewportY !== null && hiddenViewportIntent?.viewportY !== undefined) {
+          terminal.scrollToLine(hiddenViewportIntent.viewportY)
+        }
+
+        const buffer = terminal.buffer.active
+        syncViewportState(buffer, hiddenViewportIntent)
+        return
+      }
 
       const pendingWriteViewportSnapshot = pendingWriteViewportSnapshotRef.current
       pendingWriteViewportSnapshotRef.current = null
@@ -727,7 +958,10 @@ export function useTerminal({
         forceStickToBottom: followOutputOnNextWriteRef.current,
         wasAtBottom: pendingWriteViewportSnapshot?.wasAtBottom ?? true,
         savedViewportY: pendingWriteViewportSnapshot?.savedViewportY ?? terminal.buffer.active.viewportY,
-        pendingUserScrollIntent: pendingUserScrollIntentRef.current
+        currentBaseY: terminal.buffer.active.baseY,
+        pendingUserScrollIntent: isHiddenRef.current
+          ? hiddenViewportIntentRef.current
+          : pendingUserScrollIntentRef.current
       })
       followOutputOnNextWriteRef.current = false
       pendingUserScrollIntentRef.current = null
@@ -739,20 +973,13 @@ export function useTerminal({
       }
 
       const buffer = terminal.buffer.active
-      const atBottom = isViewportNearBottom(
-        buffer.baseY,
-        buffer.viewportY,
-        TERMINAL_SCROLL_THRESHOLD
-      )
-      isAtBottomRef.current = atBottom
-      setIsAtBottom(atBottom)
-      setHasScrollback(buffer.baseY > 0)
+      syncViewportState(buffer, isHiddenRef.current ? hiddenViewportIntentRef.current : null)
     })
 
     // NOTE: Removed auto cursor restore - it interferes with Claude Code CLI's cursor positioning
     // Claude Code manages its own cursor via escape sequences for status line rendering
     return visibleData
-  }, [processKeyboardEnhancementOutput])
+  }, [processKeyboardEnhancementOutput, syncViewportState])
 
   // Fit terminal to container (with safety check for initialization)
   const fit = useCallback(() => {
@@ -796,13 +1023,33 @@ export function useTerminal({
 
   // Scroll terminal to the first line in the scrollback buffer.
   const scrollToTop = useCallback(() => {
-    terminalRef.current?.scrollToLine(0)
-  }, [])
+    const terminal = terminalRef.current
+    if (!terminal) return
+
+    terminal.scrollToLine(0)
+    hiddenViewportIntentRef.current = createUserScrollIntent(
+      terminal.buffer.active.baseY,
+      terminal.buffer.active.viewportY,
+      TERMINAL_SCROLL_THRESHOLD
+    )
+    pendingUserScrollIntentRef.current = hiddenViewportIntentRef.current
+    syncViewportState(terminal.buffer.active, isHiddenRef.current ? hiddenViewportIntentRef.current : null)
+  }, [syncViewportState])
 
   // Scroll terminal to bottom (for UI button)
   const scrollToBottom = useCallback(() => {
-    terminalRef.current?.scrollToBottom()
-  }, [])
+    const terminal = terminalRef.current
+    if (!terminal) return
+
+    terminal.scrollToBottom()
+    hiddenViewportIntentRef.current = createUserScrollIntent(
+      terminal.buffer.active.baseY,
+      terminal.buffer.active.viewportY,
+      TERMINAL_SCROLL_THRESHOLD
+    )
+    pendingUserScrollIntentRef.current = hiddenViewportIntentRef.current
+    syncViewportState(terminal.buffer.active, isHiddenRef.current ? hiddenViewportIntentRef.current : null)
+  }, [syncViewportState])
 
   const getViewportSnapshot = useCallback(() => {
     const terminal = terminalRef.current
@@ -845,7 +1092,7 @@ export function useTerminal({
       terminalRef.current.refresh(0, terminalRef.current.rows - 1)
 
       // 3. Re-init WebGL if needed
-      if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+      if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
         try {
           const webglAddon = new WebglAddon()
           webglAddonRef.current = webglAddon
@@ -890,6 +1137,7 @@ export function useTerminal({
       pendingWriteCountRef.current = 0
       pendingWriteViewportSnapshotRef.current = null
       pendingUserScrollIntentRef.current = null
+      hiddenViewportIntentRef.current = null
       followOutputOnNextWriteRef.current = false
       clearUserViewportInteraction()
 
@@ -899,6 +1147,10 @@ export function useTerminal({
         refreshDebounceRef.current = null
       }
 
+      if (selectionCopyTimerRef.current) {
+        clearTimeout(selectionCopyTimerRef.current)
+        selectionCopyTimerRef.current = null
+      }
       cancelScheduledFit()
 
 
@@ -907,15 +1159,30 @@ export function useTerminal({
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
+      const selectionChangeDisposable = selectionChangeDisposableRef.current
       const viewportListeners = viewportListenersRef.current
+      const selectionListeners = selectionListenersRef.current
       terminalRef.current = null
       fitAddonRef.current = null
       webglAddonRef.current = null
       scrollDisposableRef.current = null
+      selectionChangeDisposableRef.current = null
       viewportListenersRef.current = null
+      selectionListenersRef.current = null
+      selectionCopyPendingRef.current = false
+      selectionChangedSinceMouseDownRef.current = false
+      selectionCopyTimerRef.current = null
+      lastSelectionSnapshotRef.current = ''
+      unregisterTerminalDebugHandle()
 
       if (viewportListeners) {
         for (const listener of viewportListeners) {
+          listener.target.removeEventListener(listener.type, listener.handler)
+        }
+      }
+
+      if (selectionListeners) {
+        for (const listener of selectionListeners) {
           listener.target.removeEventListener(listener.type, listener.handler)
         }
       }
@@ -926,6 +1193,7 @@ export function useTerminal({
         try {
           // Order: scroll listener first, WebGL, fit, then terminal
           scrollDisposable?.dispose()
+          selectionChangeDisposable?.dispose()
           webglAddon?.dispose()
           fitAddon?.dispose()
           terminal?.dispose()
@@ -1001,7 +1269,7 @@ export function useTerminal({
         terminalRef.current.refresh(0, terminalRef.current.rows - 1)
 
         // Reload WebGL addon with new theme
-        if (shouldUseWebGL(isActiveRef.current, isHiddenRef.current)) {
+        if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
           try {
             const webglAddon = new WebglAddon()
             webglAddonRef.current = webglAddon
@@ -1044,45 +1312,8 @@ export function useTerminal({
       webglToggleTimerRef.current = null
     }
 
-    const toggleWebGL = () => {
-      if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
-
-      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
-      const hasWebGL = webglAddonRef.current !== null
-
-      if (needsWebGL && !hasWebGL) {
-        // Load WebGL addon with guard
-        webglLoadingRef.current = true
-        requestAnimationFrame(() => {
-          if (disposedRef.current || !terminalRef.current) {
-            webglLoadingRef.current = false
-            return
-          }
-          try {
-            const webglAddon = new WebglAddon()
-            webglAddonRef.current = webglAddon
-            terminalRef.current.loadAddon(webglAddon)
-            attachContextLostListener(webglAddon)
-            refreshVisibleRows()
-          } catch (e) {
-            console.warn('WebGL addon failed to load:', e)
-          }
-          webglLoadingRef.current = false
-        })
-      } else if (!needsWebGL && hasWebGL) {
-        // Dispose WebGL addon
-        try {
-          webglAddonRef.current?.dispose()
-        } catch {
-          // Ignore disposal errors
-        }
-        webglAddonRef.current = null
-        refreshVisibleRows()
-      }
-    }
-
     // Debounce toggle to handle rapid tab switching
-    webglToggleTimerRef.current = setTimeout(toggleWebGL, WEBGL_TOGGLE_DEBOUNCE)
+    webglToggleTimerRef.current = setTimeout(reconcileWebGL, WEBGL_TOGGLE_DEBOUNCE)
 
     return () => {
       if (webglToggleTimerRef.current) {
@@ -1090,47 +1321,40 @@ export function useTerminal({
         webglToggleTimerRef.current = null
       }
     }
-  }, [isActive, isHidden, attachContextLostListener, refreshVisibleRows])
+  }, [isActive, isHidden, reconcileWebGL])
 
   // React to render mode setting changes
   useEffect(() => {
     const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
       if (!terminalRef.current || disposedRef.current) return
-      if (state.settings.terminalRenderMode === prevState.settings.terminalRenderMode) return
+      const renderModeChanged =
+        state.pendingSettings.terminalRenderMode !== prevState.pendingSettings.terminalRenderMode
+      const claudeGpuOverrideChanged =
+        state.pendingSettings.gpuRendererForClaudeTerminals !== prevState.pendingSettings.gpuRendererForClaudeTerminals
 
-      const needsWebGL = shouldUseWebGL(isActiveRef.current, isHiddenRef.current)
-      const hasWebGL = webglAddonRef.current !== null
-
-      if (needsWebGL && !hasWebGL && !webglLoadingRef.current) {
-        webglLoadingRef.current = true
-        requestAnimationFrame(() => {
-          if (disposedRef.current || !terminalRef.current) {
-            webglLoadingRef.current = false
-            return
-          }
-          try {
-            const webglAddon = new WebglAddon()
-            webglAddonRef.current = webglAddon
-            terminalRef.current.loadAddon(webglAddon)
-            attachContextLostListener(webglAddon)
-            refreshVisibleRows()
-          } catch (e) {
-            console.warn('WebGL addon failed to load:', e)
-          }
-          webglLoadingRef.current = false
-        })
-      } else if (!needsWebGL && hasWebGL) {
-        try {
-          webglAddonRef.current?.dispose()
-        } catch {
-          // Ignore disposal errors
-        }
-        webglAddonRef.current = null
-        refreshVisibleRows()
+      if (!renderModeChanged && !claudeGpuOverrideChanged) {
+        return
       }
+
+      reconcileWebGL()
     })
     return unsubscribe
-  }, [attachContextLostListener, refreshVisibleRows])
+  }, [reconcileWebGL])
+
+  useEffect(() => {
+    const unsubscribe = useAppStore.subscribe((state, prevState) => {
+      if (!terminalRef.current || disposedRef.current) return
+
+      const nextClaudeMode = state.terminals.find((terminal) => terminal.id === terminalId)?.isClaudeMode ?? false
+      const prevClaudeMode = prevState.terminals.find((terminal) => terminal.id === terminalId)?.isClaudeMode ?? false
+
+      if (nextClaudeMode === prevClaudeMode) return
+
+      reconcileWebGL()
+    })
+
+    return unsubscribe
+  }, [reconcileWebGL, terminalId])
 
   // Visibility transition: save scroll when hiding, restore scroll and cursor when showing
   // Uses useLayoutEffect to capture scroll position BEFORE browser paints display:none
@@ -1140,14 +1364,17 @@ export function useTerminal({
 
     // SAVE scroll position when becoming hidden (synchronously before display:none takes effect)
     if (!wasHidden && isHidden && terminalRef.current) {
-      savedViewportYRef.current = terminalRef.current.buffer.active.viewportY
+      const buffer = terminalRef.current.buffer.active
+      savedViewportYRef.current = buffer.viewportY
+      hiddenViewportIntentRef.current = createUserScrollIntent(
+        buffer.baseY,
+        buffer.viewportY,
+        TERMINAL_SCROLL_THRESHOLD
+      )
     }
 
     // RESTORE scroll position and cursor when becoming visible
     if (wasHidden && !isHidden && isActive && terminalRef.current) {
-      // Capture saved viewport line position at the moment of transition
-      const savedViewportY = savedViewportYRef.current
-
       // Cancellation flag - set to true when effect cleanup runs
       // This prevents orphaned recursive timers from executing
       let cancelled = false
@@ -1155,9 +1382,14 @@ export function useTerminal({
       const restoreScrollAndCursor = () => {
         if (cancelled || disposedRef.current || !terminalRef.current) return
 
+        const hiddenViewportIntent = hiddenViewportIntentRef.current
+        const savedViewportY = hiddenViewportIntent?.stickToBottom
+          ? null
+          : hiddenViewportIntent?.viewportY ?? savedViewportYRef.current
+
         // Refit and repaint after project switch so renderer changes and any
         // hidden-layout drift do not leave stale TUI fragments on screen.
-        reconcileVisibleTerminal(savedViewportY)
+        reconcileVisibleTerminal(savedViewportY, hiddenViewportIntent?.stickToBottom ?? false)
 
         // 2. Focus terminal - let CLI manage its own cursor
         terminalRef.current.focus()

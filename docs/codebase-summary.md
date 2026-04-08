@@ -1,9 +1,9 @@
 # MultiClaude Codebase Summary
 
 ## Overview
-MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, terminal management (with WSL support and pwsh preference on Windows, UNC path conversion), and user settings (themes and notifications).
+MultiClaude v3.1.0-beta.1 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, configurable terminal management (with terminal limits, rendering modes, Windows shell selection), and advanced settings (themes, notifications, Vietnamese IME patching).
 
-**Codebase Stats**: ~10K LOC, 90 TypeScript files, 86 IPC channels
+**Codebase Stats**: ~10.5K LOC, 92 TypeScript files, 90+ IPC channels
 
 ## Architecture
 
@@ -16,31 +16,23 @@ MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop app
 ### Key Components
 
 #### Terminal Management (VibeTerminal v1.2)
-- **TerminalManager**: Spawns/destroys PTY processes via node-pty
+- **TerminalManager**: Spawns/destroys PTY processes via node-pty with advanced lifecycle management
+  - **System Suspend/Resume**: Tracks system power events, pauses PTY on suspend to prevent SIGTRAP crashes
   - **Async Destruction**: `destroyAsync(id)` with graceful exit + 3s timeout + platform-specific force kill fallback
-    - Guard flag (`destroying`) prevents duplicate destroy calls
-    - Waits for process `exit` event or timeout (3000ms via `DESTROY_TIMEOUT_MS`)
-    - Force kill on timeout: Windows uses `taskkill /T /F` for process tree, Unix uses `SIGKILL`
-    - Debug logging for timeout/force kill scenarios
   - **Batch Destruction**: `destroyAllAsync()` for parallel cleanup via `Promise.allSettled()`
-  - **Integration**: App quit (`src/main/index.ts`) uses `destroyAllAsync()`, IPC terminal destroy uses `destroyAsync()`
-  - **Sync Methods**: Legacy `destroy(id)` and `destroyAll()` retained for compatibility
-  - **Test Coverage**: 6 async tests covering graceful exit, timeout, force kill, invalid IDs, batch destruction
-- **WslDetector**: Windows-only utility detecting WSL availability and installed distros via `wsl --list` commands
-- **Shell Selection**: Default shell picker (pwsh preferred, cmd fallback on Windows; WSL distro) + right-click context menu for per-terminal shell selection
-- **Keyboard Shortcut Utils** (`shortcut-utils.ts`): New module blocking shortcut escape leakage during project switch
-- **IPC WSL Path Conversion**: `project:open-folder` converts UNC paths (`\\wsl$\distro\...`, `\\wsl.localhost\distro\...`) to Linux paths
+  - **Output Buffering**: TERMINAL_OUTPUT_BUFFER_MAX/TRIM_TO thresholds with intelligent trim strategy
+  - **OSC Parsing**: Handles OSC escape sequences for terminal title updates via `oscBuffer` accumulation
+  - **Test Coverage**: 6+ async tests covering graceful exit, timeout, force kill, batch operations
+- **WslDetector & Shell Validation**: Windows shell detection (cmd, PowerShell, WSL distros) with distro cleanup on load
+- **Terminal Limits**: Configurable per-project terminal limits (presets: 2, 4, 9, or custom 1-99)
+- **Keyboard Enhancement**: Protocol support for terminal input buffering; state persistence in app-store
+- **Atomic switchToProject()**: Prevents race conditions; updates project + terminal + shell in single state update
+- **Smart Terminal Selection**: Remembers lastActiveTerminalByProjectId; fallback to first or latest terminal
 - **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting) + VibeTheme color palette
-- **TerminalGrid**: Auto-flex layout (equal splits, no react-resizable-panels), adapts 1x1 → 3x4 based on terminal count
-  - **Single-Parent Pattern** (Phase 1 of Terminal Cursor Fix)
-    - All project grids render simultaneously in single parent hierarchy
-    - Inactive projects hidden via CSS `display: none` (not React unmount)
-    - Prevents React reconciliation from destroying terminals on project switch
-    - Preserves xterm.js cursor position, buffer content, and WebGL state
-    - `projectGroups` memo groups terminals by projectId with isActive flag
-    - `getProjectId(terminal)` helper with DEFAULT_PROJECT_ID fallback
-    - Accessibility: role="region", aria-label for each project grid
-    - Memory proportional to total terminals; cleanup for inactive projects TBD
+- **TerminalGrid**: Auto-flex layout adapts 1x1 → 3x4 based on terminal count and terminal limit
+  - **Single-Parent Pattern**: All project grids render simultaneously; inactive projects hidden via CSS
+  - **Viewport Preservation**: Saves/restores scroll position and isAtBottom state during terminal show/hide
+  - **Smart Scroll**: Auto-scroll to live output during Claude streaming; preserves user scroll intent
 - **TerminalPane**: Flex item with bottom tab bar (not header bar) containing editable title, action buttons
   - **Bottom Tab Bar**: Shows terminal title, Claude badge, Start Claude button, Close button
   - **Active Terminal Styling**: Visual distinction via glow effect on active pane
@@ -120,31 +112,34 @@ MultiClaude v3.0.1-beta.13 is an Electron 33 + React 19 + TypeScript desktop app
 - Channels: status, init, add-remote, push
 
 #### Settings & VibeTerminal Themes
-- **SettingsStore** (Main Process): electron-store based persistence for app-wide preferences
-  - Storage path: `%APPDATA%/multiclaude/multiclaude-settings.json` (Windows), `~/.config/multiclaude/multiclaude-settings.json` (Linux), `~/Library/Application Support/multiclaude/multiclaude-settings.json` (macOS)
-  - Validation: Enum validation for themeMode/colorTheme/terminalRenderMode, range checks for terminalLimit, object structure checks for windowsShell
-  - IPC: SETTINGS_GET/SET/RESET with fallback to defaults on errors, Array.isArray check for input validation
-  - Handlers in `src/main/ipc/handlers.ts` with error handling
-- **SettingsStore** (Zustand): Renderer store with explicit Save/Cancel flow
-  - Architecture: savedSettings (disk source of truth) + pendingSettings (live preview)
-  - Save/Cancel: Changes preview immediately, persist only on Save button
-  - localStorage migration: One-time automatic migration of old data on first load
-  - Optimized equality check: Field-by-field comparison instead of JSON.stringify
-- **SettingsPanel**: Tabbed settings UI (Appearance, Terminals, Notifications, Updates) with Save/Cancel buttons
+- **SettingsStore** (Main Process): electron-store persistence with validation firewall
+  - Validates: themeMode, colorTheme, terminalRenderMode, terminalLimit (presets + custom), windowsShell (type + distro)
+  - Handles: gpuRendererForClaudeTerminals, vietnameseImeFix, and other boolean toggles
+  - IPC handlers in `src/main/ipc/handlers.ts` with error handling and defaults
+- **SettingsStore** (Zustand Renderer): Dual-flow architecture for safe persistence
+  - **pendingSettings**: Live preview of changes before Save button clicked
+  - **savedSettings**: Disk source of truth, persisted to main process
+  - **hasUnsavedChanges**: Deep equality check (field-by-field, not JSON.stringify)
+  - **localStorage migration**: One-time per session on first load; backward compatible
+  - Save/Cancel buttons: Preview immediately, persist only on explicit Save
+- **SettingsPanel**: Tabbed UI (Appearance, Terminals, Notifications, Updates) with Save/Cancel buttons
+- **TerminalSettings**: Terminal limit presets (2, 4, 9, custom), rendering mode selector, Claude GPU toggle
+  - Vietnamese IME patch UI: status detection, manual patch button, toast notifications
+  - Windows shell selector (cmd/PowerShell/WSL distros) with dropdown
 - **ThemeSelector**: VibeTheme picker with dual systems:
-  - **UI Themes** (7 total): Default, Dusk, Lime, Ocean, Retro, Neo, Forest applied to app chrome
-  - **Terminal ANSI Palettes** (5 total): Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark applied to xterm colors
-- **ToggleSwitch**: Reusable settings control component for boolean toggles (NEW v3.0.1-beta)
-- **UpdateBanner**: Visual state management component for app updates (NEW v3.0.1-beta)
+  - **UI Themes** (7): Default, Dusk, Lime, Ocean, Retro, Neo, Forest → app chrome
+  - **Terminal Palettes** (5): Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark → xterm
+- **ToggleSwitch**: Reusable boolean control for settings (Vietnamese IME, GPU mode, etc.)
 - **VibeTerminal Theme System** (v1.2):
-  - **VibeTheme Interface**: Unified theme with UI colors + full ANSI 16-color palette
-  - **CSS Variables**: `--bg-primary`, `--text-primary`, `--accent`, `--border`, `--hover`, `--tab-bg`, `--cursor`, `--selection-bg`, `--toolbar-height` (32px), `--panel-width` (340px)
-  - **Dynamic Application**: Themes applied via `setTheme(themeId)` in App.tsx, CSS vars update in globals.css
-  - **xterm Integration**: Theme colors passed to TerminalView for terminal color palette
-- **Terminal Rendering Mode**: WebGL optimization for xterm.js (Settings > Appearance > Terminal Rendering)
-  - **Performance**: No WebGL, best for many terminals (lower GPU usage)
-  - **Balanced** (default): WebGL only for active terminal
+  - **VibeTheme Interface**: UI colors + ANSI 16-color palette + font stacks with Nerd Font fallbacks
+  - **CSS Variables**: Layout (`--toolbar-height` 32px, `--panel-width` 340px), colors, transitions
+  - **Dynamic Application**: `setTheme(themeId)` in App.tsx updates all CSS vars in globals.css
+  - **xterm Integration**: ANSI palette passed to TerminalView for terminal rendering
+- **Terminal Rendering Modes** (Settings > Terminals):
+  - **Performance**: No WebGL, best for 9+ terminals, lower GPU usage
+  - **Balanced** (default): WebGL only on active terminal, balanced quality/performance
   - **Quality**: WebGL always enabled, best visual quality
+  - **Claude-safe Mode**: Experimental toggle to keep Claude terminals on canvas renderer
 
 #### Notifications
 **Phase 1 - Completed: Types & Constants**
@@ -456,14 +451,19 @@ interface ProjectTerminal {
 - **Electron Forge**: Native packaging for Win/Mac/Linux
 - **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
 - **Build**: `npm run build` (creates distributable)
-- **Release**: `npm run release` (build + publish to GitHub)
-  - Platform-specific: `release:linux`, `release:win`, `release:mac`
-  - Auto-update via electron-updater from GitHub releases
-- **Versioning**: `npm run version:patch|minor|major` (creates git tag)
+- **Release Command**: Repo-local Codex skill `$release <target>` backed by `scripts/release/`
+  - Preview: `node scripts/release/release-command.mjs preview --target <target>`
+  - Execute: `node scripts/release/release-command.mjs execute --target <target> --version <version> --release-type <stable|prerelease> --confirm`
+  - Shell fallback: `npm run release -- --target <target>` and `npm run release:execute -- ...`
+  - Requires valid `gh auth status` and a clean working tree
+  - Pushes the release tag first, creates the draft release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, waits for CI assets to upload into that draft, then pushes the branch commit
+- **Packaging Scripts**: `npm run build` / `npm run build:ci` for local and CI packaging
+  - Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer release workflow
 - **Testing**: Vitest with V8 coverage (60% thresholds)
   - Run tests: `npm test`
   - Watch mode: `npm run test:watch`
   - Coverage: `npm run test:coverage`
+  - Release scripts: `npm run test:release`
 - **E2E Testing**: Playwright with Electron fixtures
   - Run UI tests: `npm run test:ui`
   - Update snapshots: `npm run test:ui:update`
@@ -492,10 +492,11 @@ interface ProjectTerminal {
 - **build.yml**: CI builds on push/PR to master/main, manual release via workflow_dispatch
   - Matrix build: ubuntu, windows, macos
   - Artifacts uploaded per platform
-- **release.yml**: Tag-triggered release workflow (on `v*` tags)
-  - Triggers on version tags (e.g., `v1.0.0`)
-  - Builds and publishes to GitHub Releases on all platforms
-  - Uploads: AppImage, deb, dmg, zip, exe
+- **release.yml**: Draft-release asset upload workflow
+  - Triggers on `workflow_dispatch` only with a required `tag` input
+  - Checks out the exact requested tag before building
+  - Uploads artifacts into an existing draft GitHub release for that tag
+  - Fails if the draft release does not exist or uploads fail
 - **ui-tests.yml**: E2E/visual regression tests on push/PR to main/beta
   - Runs on ubuntu-latest with Xvfb (virtual framebuffer for headless Electron)
   - Playwright browser caching for faster runs

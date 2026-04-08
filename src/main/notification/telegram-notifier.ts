@@ -1,13 +1,29 @@
-import type { NotificationTestResult, NotificationEventType } from '@shared/types'
+import type { NotificationEventType } from '@shared/types/notification'
 import type { TaskEvent } from '@shared/types/notification-events'
+import type { NotificationTestResult, AgentType } from '@shared/types'
+import { AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
 
 const TELEGRAM_MAX_LENGTH = 4096
 const TELEGRAM_MAX_RETRIES = 3
 const TELEGRAM_INITIAL_BACKOFF_MS = 1000
+const MAX_FIELD_LENGTH = 256
+
+const AGENT_EMOJI: Record<AgentType, string> = {
+  claude: '🟣',
+  codex: '🟢',
+  gemini: '🔵',
+  aider: '🟠',
+  generic: '⚪',
+}
+
+interface InlineKeyboardButton {
+  text: string
+  callback_data: string
+}
 
 /**
  * Sends Telegram notifications via Bot API.
- * Uses MarkdownV2 formatting, exponential backoff on rate limits, and message pagination.
+ * Uses HTML formatting, exponential backoff on rate limits, and message pagination.
  * Inspired by ccpoke's Telegram integration patterns.
  */
 export class TelegramNotifier {
@@ -28,26 +44,52 @@ export class TelegramNotifier {
     return true
   }
 
-  async sendTaskEvent(event: TaskEvent): Promise<boolean> {
-    return this.send(this.formatTaskEvent(event))
+  /** Send text using MarkdownV2 parse mode (for command replies with backticks, bold, etc.) */
+  async sendMarkdown(text: string): Promise<boolean> {
+    const chunks = this.paginateMessage(text)
+    for (const chunk of chunks) {
+      const ok = await this.sendWithRetry(chunk, undefined, 'MarkdownV2')
+      if (!ok) return false
+    }
+    return true
   }
 
-  private async sendWithRetry(text: string): Promise<boolean> {
+  async sendTaskEvent(event: TaskEvent, terminalTitle?: string): Promise<boolean> {
+    const text = this.formatTaskEvent(event, terminalTitle)
+    const keyboard = this.buildEventKeyboard(event)
+    const chunks = this.paginateMessage(text)
+    for (let i = 0; i < chunks.length; i++) {
+      const isLast = i === chunks.length - 1
+      const replyMarkup = isLast ? { inline_keyboard: keyboard } : undefined
+      const ok = await this.sendWithRetry(chunks[i], replyMarkup)
+      if (!ok) return false
+    }
+    return true
+  }
+
+  private async sendWithRetry(
+    text: string,
+    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] },
+    parseMode: 'HTML' | 'MarkdownV2' = 'HTML'
+  ): Promise<boolean> {
     let backoff = TELEGRAM_INITIAL_BACKOFF_MS
 
     for (let attempt = 0; attempt <= TELEGRAM_MAX_RETRIES; attempt++) {
       try {
+        const body: Record<string, unknown> = {
+          chat_id: this.chatId,
+          text,
+          parse_mode: parseMode,
+          disable_web_page_preview: true
+        }
+        if (replyMarkup) body.reply_markup = replyMarkup
+
         const response = await fetch(
           `https://api.telegram.org/bot${this.botToken}/sendMessage`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: this.chatId,
-              text,
-              parse_mode: 'MarkdownV2',
-              disable_web_page_preview: true
-            })
+            body: JSON.stringify(body)
           }
         )
 
@@ -77,9 +119,7 @@ export class TelegramNotifier {
     return false
   }
 
-  private static readonly MAX_FIELD_LENGTH = 200
-
-  private formatTaskEvent(event: TaskEvent): string {
+  private formatTaskEvent(event: TaskEvent, terminalTitle?: string): string {
     const emoji: Record<NotificationEventType, string> = {
       taskComplete: '✅',
       taskFailed: '❌',
@@ -97,27 +137,47 @@ export class TelegramNotifier {
       hour12: false
     })
 
+    const projectName = this.escapeHtml(event.projectName.slice(0, MAX_FIELD_LENGTH))
+    const taskName = this.escapeHtml(event.taskName.slice(0, MAX_FIELD_LENGTH))
+
+    const headerLine = terminalTitle
+      ? `📁 ${projectName}  ·  🖥 ${this.escapeHtml(terminalTitle.slice(0, MAX_FIELD_LENGTH))}`
+      : `📁 <b>Project:</b> ${projectName}`
+
+    const agentType: AgentType = event.agentType ?? 'generic'
+    const agentLabel = `${AGENT_EMOJI[agentType]} ${AGENT_DISPLAY_NAMES[agentType]}`
+
     const lines = [
-      `${emoji[event.type]} *${this.esc(titles[event.type])}*`,
+      `${emoji[event.type]} <b>${titles[event.type]}</b>  ·  ${agentLabel}`,
       '',
-      `📁 *Project:* \`${this.esc(event.projectName.slice(0, TelegramNotifier.MAX_FIELD_LENGTH))}\``,
-      `📝 *Task:* ${this.esc(event.taskName.slice(0, TelegramNotifier.MAX_FIELD_LENGTH))}`
+      headerLine,
+      `📝 <b>Task:</b> ${taskName}`
     ]
 
     if (event.context) {
-      lines.push(
-        `💬 *Context:* ${this.esc(event.context.slice(0, TelegramNotifier.MAX_FIELD_LENGTH))}`
-      )
+      lines.push(`💬 <b>Context:</b> ${this.escapeHtml(event.context.slice(0, MAX_FIELD_LENGTH))}`)
     }
 
-    lines.push('', `_🕐 ${this.esc(time)} · MultiClaude_`)
+    lines.push('', `<i>🕐 ${this.escapeHtml(time)} · MultiClaude</i>`)
 
     return lines.join('\n')
   }
 
-  /** Escape MarkdownV2 special characters per Telegram spec */
-  private esc(text: string): string {
-    return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&')
+  private buildEventKeyboard(event: TaskEvent): InlineKeyboardButton[][] {
+    const chatText = event.type === 'reviewNeeded' ? 'Reply 💬' : 'Chat 💬'
+    return [[
+      { text: 'Details 🔍', callback_data: `tail:${event.type}:${event.terminalId}` },
+      { text: chatText, callback_data: `chat:${event.terminalId}` }
+    ]]
+  }
+
+  /** Escape HTML special characters */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
   }
 
   /** Split message into ≤4096-char chunks at line boundaries */
@@ -146,15 +206,49 @@ export class TelegramNotifier {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
+  /** Register bot commands with Telegram so users see autocomplete suggestions */
+  static async registerBotCommands(botToken: string): Promise<void> {
+    const commands = [
+      { command: 'status', description: 'List running terminals' },
+      { command: 'send', description: 'Send input to terminal' },
+      { command: 'kill', description: 'Kill a terminal' },
+      { command: 'tail', description: 'View last N lines of terminal output' },
+      { command: 'project', description: 'Switch or list projects' },
+      { command: 'new', description: 'Open a new terminal [claude|codex]' },
+      { command: 'help', description: 'Show available commands' }
+    ]
+
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commands })
+      })
+    } catch (error) {
+      console.error('[TelegramNotifier] Failed to register bot commands:', error)
+    }
+  }
+
   static async test(botToken: string, chatId: string): Promise<NotificationTestResult> {
     try {
-      const notifier = new TelegramNotifier(botToken, chatId)
-      const success = await notifier.send('🔔 *MultiClaude*: Test notification successful\\!')
-      return success
-        ? { success: true }
-        : { success: false, error: 'Failed to send message. Check token and chat ID.' }
+      const response = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: '🔔 MultiClaude: Test notification successful!',
+            disable_web_page_preview: true
+          })
+        }
+      )
+
+      const data = (await response.json()) as { ok: boolean; description?: string }
+      if (data.ok) return { success: true }
+      return { success: false, error: data.description ?? 'Failed to send message. Check token and chat ID.' }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: `Network error: ${String(error)}` }
     }
   }
 }

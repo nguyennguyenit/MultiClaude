@@ -6,7 +6,7 @@
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 3.0.1-beta.13 |
+| Version | 3.1.0-beta.1 |
 | License | MIT |
 | Platforms | Linux (AppImage/deb), macOS (dmg), Windows (exe) |
 | Repository | github.com/nguyennguyenit/MultiClaude |
@@ -25,12 +25,15 @@
 #### FR-1: Terminal Management
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-1.1 | Spawn/destroy PTY processes via node-pty | Complete |
-| FR-1.2 | Grid layout auto-adjusts (1x1 to 3x4) based on terminal count | Complete |
-| FR-1.3 | WebGL rendering with configurable modes (Performance/Balanced/Quality) | Complete |
-| FR-1.4 | Terminal title editing via double-click | Complete |
-| FR-1.5 | Claude mode indicator badge when Claude active | Complete |
-| FR-1.6 | WSL shell support (Windows): auto-detect distros, pwsh preference, right-click shell selector; WSL UNC path conversion | Complete |
+| FR-1.1 | Spawn/destroy PTY processes via node-pty; system suspend/resume handling | Complete |
+| FR-1.2 | Grid layout auto-adjusts based on terminal count; configurable terminal limits (2, 4, 9, custom) | Complete |
+| FR-1.3 | Terminal rendering modes: Performance (no WebGL), Balanced (active only), Quality (always on) | Complete |
+| FR-1.4 | Claude-safe mode: experimental toggle for GPU rendering on Claude terminals | Complete |
+| FR-1.5 | Terminal title editing via double-click; Claude mode indicator badge | Complete |
+| FR-1.6 | Windows shell selection: cmd, PowerShell (pwsh), WSL distros with validation and cleanup | Complete |
+| FR-1.7 | Terminal keyboard enhancements: OSC title updates via escape sequences; input buffering; smart scroll with smart scroll-to-bottom button | Complete |
+| FR-1.8 | Smart terminal selection: remembers lastActiveTerminalByProjectId, fallback to first or latest | Complete |
+| FR-1.9 | Atomic switchToProject(): prevents race conditions, updates terminal+shell in single state operation | Complete |
 
 #### FR-2: Project Management
 | ID | Requirement | Status |
@@ -73,7 +76,11 @@
 | FR-6.1 | 7 UI color themes + Light/Dark/System modes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest) | Complete | Applied to app chrome |
 | FR-6.2 | 5 Terminal ANSI palette themes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark) | Complete | xterm.js colors |
 | FR-6.3 | Settings panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | Complete | Tabbed navigation |
-| FR-6.4 | Terminal rendering mode selector (Performance/Balanced/Quality) | Complete | WebGL configuration |
+| FR-6.4 | Terminal rendering mode selector (Performance/Balanced/Quality) with Claude-safe toggle | Complete | WebGL + GPU control |
+| FR-6.5 | Terminal limit presets (2, 4, 9, custom) to constrain concurrent terminals | Complete | Prevents resource exhaustion |
+| FR-6.6 | Windows shell selector: cmd, PowerShell, WSL distros with persistent storage | Complete | Per-project shell choice |
+| FR-6.7 | Settings pending/saved flow: preview changes before persisting; hasUnsavedChanges tracking | Complete | Field-by-field equality check |
+| FR-6.8 | localStorage migration: one-time automatic migration on first load per session | Complete | Backward compatibility |
 
 #### FR-7: Auto-Update
 | ID | Requirement | Status |
@@ -86,8 +93,9 @@
 #### FR-8: Vietnamese IME Support
 | ID | Requirement | Status |
 |----|-------------|--------|
-| FR-8.1 | Auto-detect and patch Claude CLI for Vietnamese IME | Complete |
-| FR-8.2 | Settings toggle to enable/disable auto-patch | Planned |
+| FR-8.1 | Auto-detect and patch Claude CLI for Vietnamese IME on startup | Complete |
+| FR-8.2 | Settings UI for Vietnamese IME patch status and manual patching | Complete |
+| FR-8.3 | Toast notifications for patch success/failure; version detection | Complete |
 
 ### Non-Functional Requirements
 
@@ -117,15 +125,20 @@
 
 ## Feature Roadmap
 
-### Completed (v1.1.x)
-- Multi-terminal grid management
-- Project tabs with persistence
-- Full Git/GitHub integration
-- Notification system (native/Telegram/Discord)
-- Auto-update system
-- 7 themes with dark/light modes
-- Terminal rendering modes
-- WSL shell support for Windows (auto-detect, default shell, per-terminal shell selector)
+### Completed (v3.1.0-beta)
+- Multi-terminal grid management with configurable terminal limits
+- Project tabs with persistence and smart terminal selection
+- Full Git/GitHub integration with visual status and stash management
+- Notification system (native/Telegram/Discord) with pattern detection
+- Auto-update system with changelog display
+- 7 UI themes + 5 terminal color palettes with dark/light modes
+- Terminal rendering modes (Performance/Balanced/Quality) with Claude-safe GPU control
+- Windows shell selection (cmd, PowerShell, WSL distros) with validation
+- Vietnamese IME auto-patch with status detection
+- Settings pending/saved flow with deep equality checking
+- System suspend/resume handling to prevent PTY crashes
+- OSC escape sequence parsing for terminal title updates
+- Terminal output buffering with intelligent trim strategy
 
 ### Planned (v1.2.x)
 - Terminal output search

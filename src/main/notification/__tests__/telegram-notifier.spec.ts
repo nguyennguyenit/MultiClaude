@@ -89,6 +89,72 @@ describe('TelegramNotifier', () => {
       expect(body.text).toContain('&amp;')
       expect(body.text).not.toContain('<script>')
     })
+
+    it('includes inline keyboard with Details and Chat buttons for taskComplete', async () => {
+      await notifier.sendTaskEvent(baseEvent)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.reply_markup).toBeDefined()
+      const buttons = body.reply_markup.inline_keyboard[0]
+      expect(buttons[0].text).toBe('Details 🔍')
+      expect(buttons[0].callback_data).toBe('tail:taskComplete:term-1')
+      expect(buttons[1].text).toBe('Chat 💬')
+      expect(buttons[1].callback_data).toBe('chat:term-1')
+    })
+
+    it('uses Reply button text for reviewNeeded', async () => {
+      const event: TaskEvent = { ...baseEvent, type: 'reviewNeeded' }
+      await notifier.sendTaskEvent(event)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      const buttons = body.reply_markup.inline_keyboard[0]
+      expect(buttons[0].callback_data).toBe('tail:reviewNeeded:term-1')
+      expect(buttons[1].text).toBe('Reply 💬')
+    })
+
+    it('includes terminal title in header when provided', async () => {
+      await notifier.sendTaskEvent(baseEvent, 'Terminal 2')
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.text).toContain('🖥 Terminal 2')
+      expect(body.text).not.toContain('<b>Project:</b>')
+    })
+
+    it('includes agent label in header for agentType codex', async () => {
+      const event: TaskEvent = { ...baseEvent, agentType: 'codex' }
+      await notifier.sendTaskEvent(event)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.text).toContain('Codex CLI')
+      expect(body.text).toContain('🟢')
+    })
+
+    it('defaults to generic agent label when agentType is absent', async () => {
+      await notifier.sendTaskEvent(baseEvent)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.text).toContain('Terminal')
+      expect(body.text).toContain('⚪')
+    })
+
+    it('falls back to Project: label when no terminal title', async () => {
+      await notifier.sendTaskEvent(baseEvent)
+
+      const [, options] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(options?.body as string)
+
+      expect(body.text).toContain('<b>Project:</b>')
+    })
   })
 
   describe('escapeHtml (via formatTaskEvent)', () => {

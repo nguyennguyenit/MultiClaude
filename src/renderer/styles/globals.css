@@ -47,7 +47,7 @@ button, input, select, textarea, optgroup, option {
   --transition-fast: 0.15s ease;
 
   /* Fonts */
-  --terminal-font: 'JetBrains Mono', 'Symbols Nerd Font Mono', 'Symbols Nerd Font', 'MesloLGS NF', 'MesloLGM Nerd Font Mono', 'Hack Nerd Font Mono', 'SauceCodePro Nerd Font Mono', 'FiraCode Nerd Font Mono', 'JetBrainsMono Nerd Font Mono', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'Segoe UI Symbol', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', Menlo, Monaco, Consolas, monospace;
+  --terminal-font: 'JetBrains Mono', 'Pure Nerd Font', 'Symbols Nerd Font Mono', 'Symbols Nerd Font', 'MesloLGS NF', 'MesloLGM Nerd Font Mono', 'Hack Nerd Font Mono', 'SauceCodePro Nerd Font Mono', 'FiraCode Nerd Font Mono', 'JetBrainsMono Nerd Font Mono', 'Noto Sans Symbols 2', 'Noto Sans Symbols', 'Apple Symbols', 'Segoe UI Symbol', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', Menlo, Monaco, Consolas, monospace;
   --modern-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
 
   /* Default colors (Tokyo Night) - overridden by JS theme system */
@@ -745,6 +745,17 @@ button, input, select, textarea, optgroup, option {
   padding: 1px 4px;
   background: var(--accent);
   color: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+/* Generic agent badge — background-color set via inline style per agent type */
+.pane-tab-agent-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: white;
+  letter-spacing: 0.5px;
   flex-shrink: 0;
 }
 
@@ -1714,6 +1725,132 @@ button, input, select, textarea, optgroup, option {
 .github-connect-field-label {
   font-size: 12px;
   font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.github-connect-branch-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 84%, transparent);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.github-connect-branch-select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
+}
+
+.github-connect-branch-card {
+  min-height: 72px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent),
+    color-mix(in srgb, var(--bg-primary) 78%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.github-connect-branch-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.github-connect-branch-card-icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.github-connect-branch-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.github-connect-branch-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.github-connect-branch-card-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.github-connect-branch-card-badge {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.github-connect-branch-helper {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.github-connect-why-panel {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
+}
+
+.github-connect-why-toggle {
+  width: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.github-connect-why-toggle:hover {
+  color: var(--text-primary);
+}
+
+.github-connect-why-copy {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
 

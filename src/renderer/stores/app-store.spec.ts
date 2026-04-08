@@ -93,4 +93,18 @@ describe('useAppStore terminal output buffering', () => {
 
     expect(useAppStore.getState().activeTerminalId).toBe('term-a')
   })
+
+  it('updates Claude mode metadata for an existing terminal', () => {
+    useAppStore.getState().addTerminal(makeTerminal())
+
+    const state = useAppStore.getState() as typeof useAppStore.getState extends () => infer T
+      ? T & { updateTerminalClaudeMode?: (id: string, isClaudeMode: boolean) => void }
+      : never
+
+    expect(typeof state.updateTerminalClaudeMode).toBe('function')
+
+    state.updateTerminalClaudeMode?.('term-1', true)
+
+    expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
+  })
 })

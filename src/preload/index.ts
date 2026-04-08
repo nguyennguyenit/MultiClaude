@@ -41,6 +41,9 @@ export interface ElectronAPI {
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
+    onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
+    onCreated: (callback: (terminal: Terminal) => void) => () => void
+    onAgentDetected: (callback: (data: { terminalId: string; agentType: string }) => void) => () => void
   }
   project: {
     list: () => Promise<Project[]>
@@ -109,6 +112,7 @@ export interface ElectronAPI {
   notification: {
     getSettings: () => Promise<NotificationSettings>
     setSettings: (settings: Partial<NotificationSettings>) => Promise<NotificationSettings>
+    getTelegram: () => Promise<{ botToken: string; chatId: string } | null>
     setTelegram: (botToken: string, chatId: string) => Promise<boolean>
     setDiscord: (webhookUrl: string) => Promise<boolean>
     getTelegramStatus: () => Promise<boolean>
@@ -198,6 +202,21 @@ const api: ElectronAPI = {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_TITLE_CHANGE, listener)
+    },
+    onStateChange: (callback) => {
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_STATE_CHANGE, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_STATE_CHANGE, listener)
+    },
+    onCreated: (callback) => {
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_CREATED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_CREATED, listener)
+    },
+    onAgentDetected: (callback) => {
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
     }
   },
   project: {
@@ -271,6 +290,7 @@ const api: ElectronAPI = {
   notification: {
     getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_SETTINGS),
     setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_SETTINGS, settings),
+    getTelegram: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM),
     setTelegram: (botToken, chatId) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_TELEGRAM, { botToken, chatId }),
     setDiscord: (webhookUrl) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_DISCORD, { webhookUrl }),
     getTelegramStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_TELEGRAM_STATUS),

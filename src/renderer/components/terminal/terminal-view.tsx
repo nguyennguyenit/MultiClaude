@@ -1,6 +1,7 @@
 import { useEffect, useRef, memo, CSSProperties, useCallback, useState } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
 import { useAppStore, useImageStore } from '../../stores'
+import { resolveImagePathFromLine } from './terminal-image-path-resolver'
 
 // Helper to find all image paths in line and return the one at given column
 function findImagePathAtColumn(lineText: string, col: number, terminalId: string): { start: number; end: number } | null {
@@ -207,47 +208,21 @@ export const TerminalView = memo(function TerminalView({
     }
     lineText = lineText.trimEnd()
 
-    let foundPath: string | null = null
+    const imageStore = useImageStore.getState()
+    const trackedImages = imageStore.getImages(terminalId)
 
-    // Priority 1: Check for [Image #X] pattern (Claude Code format)
-    const imageRefRegex = /\[Image #(\d+)\]/g
-    const imageRefMatch = imageRefRegex.exec(lineText)
-    if (imageRefMatch) {
-      const imageIndex = parseInt(imageRefMatch[1], 10)
-      const screenshots = await window.electron.image.listScreenshots()
-      if (screenshots.length >= imageIndex) {
-        foundPath = screenshots[imageIndex - 1]
-      }
-    }
+    let foundPath = resolveImagePathFromLine({
+      lineText,
+      trackedImages
+    })
 
-    // Priority 2: Check tracked images
-    if (!foundPath) {
-      const imageStore = useImageStore.getState()
-      const trackedImages = imageStore.getImages(terminalId)
-      for (const img of trackedImages) {
-        if (lineText.includes(img.filePath)) {
-          foundPath = img.filePath
-          break
-        }
-      }
-    }
-
-    // Fallback 1: multiClaude-screenshots paths
-    if (!foundPath) {
-      const screenshotRegex = /"?([^\s"]*multiClaude-screenshots\/screenshot-\d+\.png)"?/g
-      const screenshotMatch = screenshotRegex.exec(lineText)
-      if (screenshotMatch) {
-        foundPath = screenshotMatch[1]
-      }
-    }
-
-    // Fallback 2: Any absolute path to common image formats
-    if (!foundPath) {
-      const imageExtRegex = /"?([/~][^\s"]*\.(?:png|jpg|jpeg|gif|webp|bmp|svg))"?/gi
-      const extMatch = imageExtRegex.exec(lineText)
-      if (extMatch) {
-        foundPath = extMatch[1]
-      }
+    if (!foundPath && lineText.includes('[Image #')) {
+      const screenshotPaths = await window.electron.image.listScreenshots()
+      foundPath = resolveImagePathFromLine({
+        lineText,
+        trackedImages,
+        screenshotPaths
+      })
     }
 
     // Open image in external viewer if found

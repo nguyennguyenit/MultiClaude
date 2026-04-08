@@ -164,34 +164,29 @@ describe('PlainTextParser', () => {
     parser.on('taskEvent', (e: TaskEvent) => events.push(e))
   })
 
-  describe('Task completion detection', () => {
-    it('extracts task name from checkmark pattern', () => {
-      parser.parse('term1', '✓ Fixed the login bug', 'TestProject')
+  describe('non-review lines', () => {
+    it('ignores completed task lines for Claude because completion events come from JSONL', () => {
+      parser.parse('term1', '✓ Fixed the login bug', 'TestProject', 'claude')
+
+      expect(events).toHaveLength(0)
+    })
+
+    it('ignores failure lines for Claude because failure events come from JSONL', () => {
+      parser.parse('term1', 'Process exited with code 1', 'Proj', 'claude')
+
+      expect(events).toHaveLength(0)
+    })
+
+    it('emits taskComplete for non-Claude agents from plain text output', () => {
+      parser.parse('term1', '✓ Fixed the login bug', 'TestProject', 'codex')
 
       expect(events).toHaveLength(1)
       expect(events[0].type).toBe('taskComplete')
       expect(events[0].taskName).toBe('Fixed the login bug')
     })
 
-    it('handles completed suffix', () => {
-      parser.parse('term1', '✓ Build process (completed)', 'Proj')
-
-      expect(events).toHaveLength(1)
-      expect(events[0].taskName).toBe('Build process')
-    })
-  })
-
-  describe('Task failure detection', () => {
-    it('extracts task name from X pattern', () => {
-      parser.parse('term1', '✗ Database migration failed', 'TestProject')
-
-      expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('taskFailed')
-      expect(events[0].taskName).toBe('Database migration failed')
-    })
-
-    it('extracts exit code', () => {
-      parser.parse('term1', 'Process exited with code 1', 'Proj')
+    it('emits taskFailed for non-Claude agents from plain text output', () => {
+      parser.parse('term1', 'Process exited with code 1', 'Proj', 'gemini')
 
       expect(events).toHaveLength(1)
       expect(events[0].type).toBe('taskFailed')
@@ -217,10 +212,72 @@ describe('PlainTextParser', () => {
 
   describe('Debouncing', () => {
     it('debounces same event type within 5 seconds', () => {
-      parser.parse('term1', '✓ Task done', 'Proj')
-      parser.parse('term1', '✓ Task done again', 'Proj')
+      parser.parse('term1', 'Allow this tool? [Y/n]', 'Proj')
+      parser.parse('term1', 'waiting for your confirmation', 'Proj')
 
       expect(events).toHaveLength(1) // Second ignored due to debounce
+    })
+  })
+
+  describe('project name propagation', () => {
+    it('uses provided projectName in emitted event', () => {
+      const parser = new PlainTextParser()
+      const events: TaskEvent[] = []
+      parser.on('taskEvent', (e: TaskEvent) => events.push(e))
+      parser.parse('term1', 'Allow tool to run? [Y/n]', 'MyProject')
+      expect(events[0].projectName).toBe('MyProject')
+    })
+  })
+
+  describe('context extraction', () => {
+    let parser: PlainTextParser
+    let events: TaskEvent[]
+
+    beforeEach(() => {
+      parser = new PlainTextParser()
+      events = []
+      parser.on('taskEvent', (e: TaskEvent) => events.push(e))
+    })
+
+    it('extracts tool name from "Allow `bash` to run" pattern', () => {
+      parser.parse('term1', 'Allow `bash` to run the command?\n[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('bash requires approval')
+    })
+
+    it('extracts tool name from "Allow npm to run" without backticks', () => {
+      parser.parse('term1', 'Allow npm to run scripts?\n[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('npm requires approval')
+    })
+
+    it('uses last meaningful line as fallback when no tool pattern found', () => {
+      parser.parse('term1', 'Running lint check\nSome important context\n[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('Some important context')
+    })
+
+    it('falls back to "Waiting for approval" when only the prompt line is present', () => {
+      parser.parse('term1', '[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('Waiting for approval')
+    })
+
+    it('uses buffer from previous parse calls for context extraction', () => {
+      // First chunk: context (no [Y/n], no emit)
+      parser.parse('term1', 'Allow `npm` to execute scripts', 'Proj')
+      expect(events).toHaveLength(0)
+
+      // Reset debounce so second parse on same terminal fires
+      ;(parser as unknown as { debounceMap: Map<string, number> }).debounceMap.set('term1:reviewNeeded', 0)
+
+      // Second chunk: the actual prompt
+      parser.parse('term1', '[Y/n]', 'Proj')
+      expect(events).toHaveLength(1)
+      expect(events[0].taskName).toBe('npm requires approval')
+    })
+
+    it('does not bleed buffer between different terminals', () => {
+      parser.parse('term1', 'Allow `bash` to run something', 'Proj')
+      // term2 gets [Y/n] with no prior buffer
+      parser.parse('term2', '[Y/n]', 'Proj')
+      expect(events[0].taskName).toBe('Waiting for approval')
     })
   })
 })
@@ -246,10 +303,19 @@ describe('OutputParser', () => {
 
     it('uses text parser in plain-text mode', () => {
       parser.setMode('plain-text')
-      parser.parse('term1', '✓ Task completed', 'Proj')
+      parser.parse('term1', 'Allow this tool? [Y/n]', 'Proj', 'codex')
+
+      expect(events).toHaveLength(1)
+      expect(events[0].type).toBe('reviewNeeded')
+    })
+
+    it('uses text parser taskComplete detection for non-Claude agents in plain-text mode', () => {
+      parser.setMode('plain-text')
+      parser.parse('term1', '✓ Ship the patch', 'Proj', 'codex')
 
       expect(events).toHaveLength(1)
       expect(events[0].type).toBe('taskComplete')
+      expect(events[0].taskName).toBe('Ship the patch')
     })
   })
 

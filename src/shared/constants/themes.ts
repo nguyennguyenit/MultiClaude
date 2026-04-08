@@ -174,6 +174,7 @@ export const TERMINAL_FONTS: readonly TerminalFontConfig[] = [
 ] as const
 
 const TERMINAL_SYMBOL_FONT_FALLBACKS = [
+  "'Pure Nerd Font'",
   "'Symbols Nerd Font Mono'",
   "'Symbols Nerd Font'",
   "'MesloLGS NF'",
@@ -198,14 +199,48 @@ const TERMINAL_MONOSPACE_FALLBACKS = [
   'monospace'
 ] as const
 
+const CSS_GENERIC_FONT_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+  'emoji',
+  'math',
+  'fangsong'
+])
+
+function partitionGenericFontFamilies(primaryFamily: string): { explicit: string[]; generic: string[] } {
+  const explicit: string[] = []
+  const generic: string[] = []
+
+  for (const family of primaryFamily.split(',').map(f => f.trim()).filter(Boolean)) {
+    const normalizedFamily = family.replace(/^['"]|['"]$/g, '').toLowerCase()
+    if (CSS_GENERIC_FONT_FAMILIES.has(normalizedFamily)) {
+      generic.push(family)
+    } else {
+      explicit.push(family)
+    }
+  }
+
+  return { explicit, generic }
+}
+
 /**
  * Build a terminal font stack that keeps the selected monospace face first,
  * but falls back to common Nerd/symbol fonts for Claude Code prompt glyphs.
  */
 export function buildTerminalFontFamily(primaryFamily: string): string {
+  const { explicit, generic } = partitionGenericFontFamilies(primaryFamily)
   const families = [
-    ...primaryFamily.split(',').map(family => family.trim()).filter(Boolean),
+    ...explicit,
     ...TERMINAL_SYMBOL_FONT_FALLBACKS,
+    ...generic,
     ...TERMINAL_MONOSPACE_FALLBACKS
   ]
 
@@ -287,6 +322,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   colorTheme: 'tokyo-night',
   terminalLimit: { preset: 9 },
   terminalRenderMode: 'balanced',
+  gpuRendererForClaudeTerminals: false,
   glassmorphismEnabled: false,
   terminalFontFamily: 'jetbrains-mono',
   windowsShell: { type: 'cmd' },

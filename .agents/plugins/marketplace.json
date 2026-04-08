@@ -1,0 +1,20 @@
+{
+  "name": "multiclaude-local",
+  "interface": {
+    "displayName": "MultiClaude Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "multiclaude-release",
+      "source": {
+        "source": "local",
+        "path": "./plugins/multiclaude-release"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

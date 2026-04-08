@@ -44,6 +44,13 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
       : defaults.terminalRenderMode
   }
 
+  if (settings.gpuRendererForClaudeTerminals !== undefined) {
+    validated.gpuRendererForClaudeTerminals =
+      typeof settings.gpuRendererForClaudeTerminals === 'boolean'
+        ? settings.gpuRendererForClaudeTerminals
+        : defaults.gpuRendererForClaudeTerminals
+  }
+
   // Validate glassmorphismEnabled
   if (settings.glassmorphismEnabled !== undefined) {
     validated.glassmorphismEnabled = typeof settings.glassmorphismEnabled === 'boolean'

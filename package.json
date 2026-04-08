@@ -1,6 +1,6 @@
 {
   "name": "multiclaude",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Multi-agent terminal manager for Claude Code",
   "main": "dist/main/index.js",
   "type": "module",
@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vitest run",
+    "test:release": "node --test scripts/release/*.spec.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ui": "playwright test -c src/__tests__/e2e/playwright.config.ts",
@@ -22,10 +23,13 @@
     "test:visual": "playwright test -c src/__tests__/e2e/playwright.config.ts --grep 'Visual Regression'",
     "test:visual:update": "playwright test -c src/__tests__/e2e/playwright.config.ts --grep 'Visual Regression' --update-snapshots",
     "test:themes": "playwright test -c src/__tests__/e2e/playwright.config.ts --grep 'Theme'",
-    "release": "npm run build && electron-builder --publish always",
-    "release:linux": "npm run build && electron-builder --linux --publish always",
-    "release:win": "npm run build && electron-builder --win --publish always",
-    "release:mac": "npm run build && electron-builder --mac --publish always",
+    "release": "node scripts/release/release-command.mjs preview",
+    "release:preview": "node scripts/release/release-command.mjs preview",
+    "release:execute": "node scripts/release/release-command.mjs execute",
+    "publish:legacy": "npm run build && electron-builder --publish always",
+    "publish:legacy:linux": "npm run build && electron-builder --linux --publish always",
+    "publish:legacy:win": "npm run build && electron-builder --win --publish always",
+    "publish:legacy:mac": "npm run build && electron-builder --mac --publish always",
     "version:patch": "npm version patch",
     "version:minor": "npm version minor",
     "version:major": "npm version major"
@@ -72,6 +76,7 @@
     "wait-on": "^8.0.1"
   },
   "dependencies": {
+    "@azurity/pure-nerd-font": "^3.0.5",
     "@fontsource/fira-code": "^5.2.7",
     "@fontsource/geist": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",

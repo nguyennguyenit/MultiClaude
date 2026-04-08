@@ -15,18 +15,19 @@
   </p>
 </div>
 
-**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage up to 12 agent terminals, keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage configurable terminal limits (preset or custom), keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
 
-Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, and repo operations than a raw shell setup.
+Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, repo operations, and intelligent terminal management than a raw shell setup.
 
 ## What Makes It Different
 
-- **Parallel Claude Code Workspaces**: Run up to 12 Claude Code terminals in one window with an auto-split grid that scales from focused single-terminal work to broad multi-agent runs.
+- **Parallel Claude Code Workspaces**: Run with configurable terminal limits (2, 4, 9, or custom) in an auto-split grid that scales from focused single-terminal work to broad multi-agent runs.
 - **Project-Scoped Persistence**: Each project keeps its own terminal layout, active sessions, and window state so context survives app restarts and repo switching.
+- **Smart Terminal Rendering**: Three rendering modes (Performance/Balanced/Quality) with GPU controls and Claude-safe mode to optimize for speed or visual quality.
 - **Git + GitHub Inside the App**: Visual git status, staging, branches, stash, history, GitHub auth via `gh`, remote repo creation, plus issue and pull request views.
 - **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks.
-- **Desktop-First Terminal UX**: Native PTY terminals with configurable WebGL modes, drag-and-drop file paths, clipboard image path insertion, WSL-aware shell handling, and global shortcuts.
-- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 10 themes, and light/dark/system appearance without requiring a backend service.
+- **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths, clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
+- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal color palettes, and light/dark/system appearance without requiring a backend service.
 
 ## Ecosystem
 
@@ -195,11 +196,28 @@ npm run typecheck       # Type checking
 ## Release
 
 ```bash
-npm run version:patch   # Bump version (creates git tag)
-npm run release         # Build + publish to GitHub Releases
+gh auth login -h github.com
+# then run the repo-local Codex command:
+$release beta
 ```
 
-Platform-specific: `release:linux`, `release:win`, `release:mac`
+Supported targets: `beta`, `main`, `current`, or any real branch name.
+
+Release flow:
+
+1. Run `$release <target>` inside this repo.
+2. Review the preview output, confirm the version/release type, and approve execution.
+3. Re-run preview with the chosen version/release type when the command asks for them, then approve execution.
+4. The command creates a draft GitHub release, pushes the tag, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for CI assets to upload into that draft.
+5. Publish the draft manually on GitHub after the assets land.
+
+Notes:
+
+- `gh auth status` must be valid before execution.
+- The working tree must be clean before execution.
+- `npm run build` and `npm run build:ci` remain useful for local packaging and CI verification.
+- `npm run release -- --target <target>` and `npm run release:execute -- ...` mirror the new repo-local flow if you need a shell fallback.
+- Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer path.
 
 ## License
 

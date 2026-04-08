@@ -5,7 +5,7 @@ node_modules/
 
 # Build outputs
 dist/
-release/
+/release/
 out/
 
 # IDE
@@ -41,6 +41,7 @@ plans/
 # Claude Code local commands
 .claude/commands/
 .claude/settings.local.json
+.claude/session-state/
 
 # Local feature planning folder
 new-feature/
@@ -66,3 +67,4 @@ IPA-WORKFLOW.md
 # Superpowers skill files (private)
 .superpowers/
 docs/superpowers/
+.claude/worktrees/
