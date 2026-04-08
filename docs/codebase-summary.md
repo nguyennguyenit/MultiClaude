@@ -451,14 +451,19 @@ interface ProjectTerminal {
 - **Electron Forge**: Native packaging for Win/Mac/Linux
 - **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
 - **Build**: `npm run build` (creates distributable)
-- **Release**: `npm run release` (build + publish to GitHub)
-  - Platform-specific: `release:linux`, `release:win`, `release:mac`
-  - Auto-update via electron-updater from GitHub releases
-- **Versioning**: `npm run version:patch|minor|major` (creates git tag)
+- **Release Command**: Repo-local Codex skill `$release <target>` backed by `scripts/release/`
+  - Preview: `node scripts/release/release-command.mjs preview --target <target>`
+  - Execute: `node scripts/release/release-command.mjs execute --target <target> --version <version> --release-type <stable|prerelease> --confirm`
+  - Shell fallback: `npm run release -- --target <target>` and `npm run release:execute -- ...`
+  - Requires valid `gh auth status` and a clean working tree
+  - Pushes the release tag first, creates the draft release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, waits for CI assets to upload into that draft, then pushes the branch commit
+- **Packaging Scripts**: `npm run build` / `npm run build:ci` for local and CI packaging
+  - Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer release workflow
 - **Testing**: Vitest with V8 coverage (60% thresholds)
   - Run tests: `npm test`
   - Watch mode: `npm run test:watch`
   - Coverage: `npm run test:coverage`
+  - Release scripts: `npm run test:release`
 - **E2E Testing**: Playwright with Electron fixtures
   - Run UI tests: `npm run test:ui`
   - Update snapshots: `npm run test:ui:update`
@@ -487,10 +492,11 @@ interface ProjectTerminal {
 - **build.yml**: CI builds on push/PR to master/main, manual release via workflow_dispatch
   - Matrix build: ubuntu, windows, macos
   - Artifacts uploaded per platform
-- **release.yml**: Tag-triggered release workflow (on `v*` tags)
-  - Triggers on version tags (e.g., `v1.0.0`)
-  - Builds and publishes to GitHub Releases on all platforms
-  - Uploads: AppImage, deb, dmg, zip, exe
+- **release.yml**: Draft-release asset upload workflow
+  - Triggers on `workflow_dispatch` only with a required `tag` input
+  - Checks out the exact requested tag before building
+  - Uploads artifacts into an existing draft GitHub release for that tag
+  - Fails if the draft release does not exist or uploads fail
 - **ui-tests.yml**: E2E/visual regression tests on push/PR to main/beta
   - Runs on ubuntu-latest with Xvfb (virtual framebuffer for headless Electron)
   - Playwright browser caching for faster runs

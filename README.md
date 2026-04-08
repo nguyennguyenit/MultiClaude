@@ -196,11 +196,28 @@ npm run typecheck       # Type checking
 ## Release
 
 ```bash
-npm run version:patch   # Bump version (creates git tag)
-npm run release         # Build + publish to GitHub Releases
+gh auth login -h github.com
+# then run the repo-local Codex command:
+$release beta
 ```
 
-Platform-specific: `release:linux`, `release:win`, `release:mac`
+Supported targets: `beta`, `main`, `current`, or any real branch name.
+
+Release flow:
+
+1. Run `$release <target>` inside this repo.
+2. Review the preview output, confirm the version/release type, and approve execution.
+3. Re-run preview with the chosen version/release type when the command asks for them, then approve execution.
+4. The command creates a draft GitHub release, pushes the tag, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for CI assets to upload into that draft.
+5. Publish the draft manually on GitHub after the assets land.
+
+Notes:
+
+- `gh auth status` must be valid before execution.
+- The working tree must be clean before execution.
+- `npm run build` and `npm run build:ci` remain useful for local packaging and CI verification.
+- `npm run release -- --target <target>` and `npm run release:execute -- ...` mirror the new repo-local flow if you need a shell fallback.
+- Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer path.
 
 ## License
 

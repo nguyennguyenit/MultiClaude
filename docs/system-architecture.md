@@ -257,6 +257,35 @@ interface ElectronAPI {
 }
 ```
 
+## Repository Tooling
+
+### Release Automation
+
+Release orchestration is repo-local tooling rather than app runtime code:
+
+```text
+plugins/multiclaude-release/
+  .codex-plugin/plugin.json
+  skills/release/SKILL.md
+scripts/release/
+  release-command.mjs
+  release-context.mjs
+  execute-release.mjs
+  git-state.mjs
+  github-release.mjs
+  release-notes.mjs
+  resolve-target.mjs
+  versioning.mjs
+  write-version.mjs
+```
+
+Flow:
+
+1. Codex skill runs preview against repo state.
+2. Preview resolves `main` via the stable branch alias (`origin/HEAD` -> `master` in this repo), inspects the target branch version, and validates preflight state.
+3. Execute updates `package.json` / `package-lock.json`, creates the release commit and tag, creates a draft GitHub release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for the upload job to attach assets to that draft.
+4. Publishing remains manual after CI uploads finish.
+
 ## Terminal Grid Layout
 
 Grid auto-adjusts based on terminal count:
