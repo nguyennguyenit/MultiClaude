@@ -451,12 +451,11 @@ interface ProjectTerminal {
 - **Electron Forge**: Native packaging for Win/Mac/Linux
 - **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
 - **Build**: `npm run build` (creates distributable)
-- **Release Command**: Repo-local Codex skill `$release <target>` backed by `scripts/release/`
-  - Preview: `node scripts/release/release-command.mjs preview --target <target>`
-  - Execute: `node scripts/release/release-command.mjs execute --target <target> --version <version> --release-type <stable|prerelease> --confirm`
-  - Shell fallback: `npm run release -- --target <target>` and `npm run release:execute -- ...`
+- **Release Command**: Claude Code native skill `/release <target>` backed by `scripts/release/`
+  - Command: `/release <target>` where target is `current`, `main`, `beta`, or branch name
+  - Includes preview validation before execute
   - Requires valid `gh auth status` and a clean working tree
-  - Pushes the release tag first, creates the draft release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, waits for CI assets to upload into that draft, then pushes the branch commit
+  - Draft-first workflow: creates draft, dispatches `.github/workflows/release.yml` via `workflow_dispatch`, waits for CI assets
 - **Packaging Scripts**: `npm run build` / `npm run build:ci` for local and CI packaging
   - Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer release workflow
 - **Testing**: Vitest with V8 coverage (60% thresholds)

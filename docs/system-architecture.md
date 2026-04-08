@@ -264,9 +264,7 @@ interface ElectronAPI {
 Release orchestration is repo-local tooling rather than app runtime code:
 
 ```text
-plugins/multiclaude-release/
-  .codex-plugin/plugin.json
-  skills/release/SKILL.md
+.claude/skills/release/SKILL.md          # Claude Code native skill (/release)
 scripts/release/
   release-command.mjs
   release-context.mjs
@@ -281,10 +279,11 @@ scripts/release/
 
 Flow:
 
-1. Codex skill runs preview against repo state.
-2. Preview resolves `main` via the stable branch alias (`origin/HEAD` -> `master` in this repo), inspects the target branch version, and validates preflight state.
-3. Execute updates `package.json` / `package-lock.json`, creates the release commit and tag, creates a draft GitHub release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for the upload job to attach assets to that draft.
-4. Publishing remains manual after CI uploads finish.
+1. Claude Code skill `/release <target>` runs preview against repo state.
+2. Preview resolves target branch, validates preflight state (auth, tag uniqueness, clean tree).
+3. Skill prompts for missing release type (stable/prerelease) and version if needed.
+4. Execute updates `package.json` / `package-lock.json`, creates the release commit and tag, creates a draft GitHub release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for the upload job to attach assets to that draft.
+5. Publishing remains manual after CI uploads finish.
 
 ## Terminal Grid Layout
 
