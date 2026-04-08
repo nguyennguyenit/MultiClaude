@@ -162,13 +162,19 @@ export function useTerminal({
   const [hasScrollback, setHasScrollback] = useState(false)  // True when buffer has content beyond viewport height
   const savedViewportYRef = useRef<number | null>(null)  // Save viewport line position for restore on project switch
   const scrollDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for onScroll listener
+  const selectionChangeDisposableRef = useRef<IDisposable | null>(null)  // Cleanup for selection change listener
   const viewportListenersRef = useRef<ViewportEventListener[] | null>(null)  // Cleanup for viewport-level user interaction listeners
+  const selectionListenersRef = useRef<ViewportEventListener[] | null>(null)  // Cleanup for selection lifecycle listeners
   const userViewportInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const webglLoadingRef = useRef(false)  // Guard against concurrent WebGL loads
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
   const lastCopyToastTimeRef = useRef(0)  // Track last copy notification time for debouncing
+  const selectionCopyPendingRef = useRef(false)  // Track mouse-driven selection so mouseup outside terminal still copies
+  const selectionChangedSinceMouseDownRef = useRef(false)  // Avoid copying stale selections on plain clicks
+  const selectionCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // Debounce selection copy while drag is still moving
+  const lastSelectionSnapshotRef = useRef('')  // Preserve the last non-empty selection if xterm clears it before mouseup
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const observedContainerSizeRef = useRef({ width: 0, height: 0 })
@@ -522,6 +528,52 @@ export function useTerminal({
 
     terminal.open(container)
 
+    const copySelectionToClipboard = async (selectionOverride?: string) => {
+      const selection = selectionOverride ?? terminal.getSelection()
+      if (!selection) return
+
+      try {
+        await navigator.clipboard.writeText(selection)
+        const now = Date.now()
+        if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
+          useToastStore.getState().addToast('Copied to clipboard', 'info')
+          lastCopyToastTimeRef.current = now
+        }
+      } catch {
+        // Clipboard permission denied - ignore silently
+      }
+    }
+
+    const clearSelectionCopyTimer = () => {
+      if (selectionCopyTimerRef.current) {
+        clearTimeout(selectionCopyTimerRef.current)
+        selectionCopyTimerRef.current = null
+      }
+    }
+
+    const scheduleSelectionCopy = () => {
+      clearSelectionCopyTimer()
+      selectionCopyTimerRef.current = setTimeout(() => {
+        selectionCopyTimerRef.current = null
+        const selection = lastSelectionSnapshotRef.current || terminal.getSelection()
+        void copySelectionToClipboard(selection)
+      }, 80)
+    }
+
+    const finalizeSelectionCopy = async () => {
+      if (!selectionCopyPendingRef.current) return
+
+      const didSelectionChange = selectionChangedSinceMouseDownRef.current
+      selectionCopyPendingRef.current = false
+      selectionChangedSinceMouseDownRef.current = false
+      clearSelectionCopyTimer()
+
+      if (!didSelectionChange) return
+      const selection = terminal.getSelection() || lastSelectionSnapshotRef.current
+      lastSelectionSnapshotRef.current = ''
+      await copySelectionToClipboard(selection)
+    }
+
     // Load web links addon so plain left-click opens safe URLs in the default browser.
     const webLinksAddon = new WebLinksAddon(
       (event, uri) => {
@@ -615,6 +667,36 @@ export function useTerminal({
     fitAddonRef.current = fitAddon
     registerTerminalDebugHandle()
 
+    selectionChangeDisposableRef.current = terminal.onSelectionChange(() => {
+      if (selectionCopyPendingRef.current) {
+        selectionChangedSinceMouseDownRef.current = true
+        const selection = terminal.getSelection()
+        if (selection) {
+          lastSelectionSnapshotRef.current = selection
+        }
+        scheduleSelectionCopy()
+      }
+    })
+
+    if (terminal.element) {
+      const selectionListeners: ViewportEventListener[] = []
+      const addSelectionListener = (target: EventTarget, type: string, handler: EventListener) => {
+        target.addEventListener(type, handler)
+        selectionListeners.push({ target, type, handler })
+      }
+
+      addSelectionListener(terminal.element, 'mousedown', (event) => {
+        if (!(event instanceof MouseEvent) || event.button !== 0) return
+        selectionCopyPendingRef.current = true
+        selectionChangedSinceMouseDownRef.current = false
+        lastSelectionSnapshotRef.current = ''
+      })
+      addSelectionListener(window, 'mouseup', () => { void finalizeSelectionCopy() })
+      addSelectionListener(window, 'blur', () => { void finalizeSelectionCopy() })
+
+      selectionListenersRef.current = selectionListeners
+    }
+
     // Defer WebGL addon, fit, and initialOutput to ensure terminal is fully initialized
     // Use setTimeout to run after xterm's internal setTimeout completes
     setTimeout(() => {
@@ -662,25 +744,6 @@ export function useTerminal({
       // Refit and clear cached glyphs after the active font finishes loading.
       syncFontAfterLoad()
     }, TERMINAL_INIT_DELAY)
-
-    // Auto-copy on selection complete
-    // Note: Listeners are implicitly cleaned up when terminal.dispose() destroys the DOM element
-    terminal.element?.addEventListener('mouseup', async () => {
-      const selection = terminal.getSelection()
-      if (selection) {
-        try {
-          await navigator.clipboard.writeText(selection)
-          // Debounce notification to prevent spam on rapid selections
-          const now = Date.now()
-          if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
-            useToastStore.getState().addToast('Copied to clipboard', 'info')
-            lastCopyToastTimeRef.current = now
-          }
-        } catch {
-          // Clipboard permission denied - ignore silently
-        }
-      }
-    })
 
     // Right-click paste (prevent context menu)
     terminal.element?.addEventListener('contextmenu', async (e) => {
@@ -1084,6 +1147,10 @@ export function useTerminal({
         refreshDebounceRef.current = null
       }
 
+      if (selectionCopyTimerRef.current) {
+        clearTimeout(selectionCopyTimerRef.current)
+        selectionCopyTimerRef.current = null
+      }
       cancelScheduledFit()
 
 
@@ -1092,16 +1159,30 @@ export function useTerminal({
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
+      const selectionChangeDisposable = selectionChangeDisposableRef.current
       const viewportListeners = viewportListenersRef.current
+      const selectionListeners = selectionListenersRef.current
       terminalRef.current = null
       fitAddonRef.current = null
       webglAddonRef.current = null
       scrollDisposableRef.current = null
+      selectionChangeDisposableRef.current = null
       viewportListenersRef.current = null
+      selectionListenersRef.current = null
+      selectionCopyPendingRef.current = false
+      selectionChangedSinceMouseDownRef.current = false
+      selectionCopyTimerRef.current = null
+      lastSelectionSnapshotRef.current = ''
       unregisterTerminalDebugHandle()
 
       if (viewportListeners) {
         for (const listener of viewportListeners) {
+          listener.target.removeEventListener(listener.type, listener.handler)
+        }
+      }
+
+      if (selectionListeners) {
+        for (const listener of selectionListeners) {
           listener.target.removeEventListener(listener.type, listener.handler)
         }
       }
@@ -1112,6 +1193,7 @@ export function useTerminal({
         try {
           // Order: scroll listener first, WebGL, fit, then terminal
           scrollDisposable?.dispose()
+          selectionChangeDisposable?.dispose()
           webglAddon?.dispose()
           fitAddon?.dispose()
           terminal?.dispose()
