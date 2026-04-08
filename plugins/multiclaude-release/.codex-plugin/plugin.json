@@ -1,0 +1,40 @@
+{
+  "name": "multiclaude-release",
+  "version": "1.0.0",
+  "description": "Repo-local release command for MultiClaude draft-first GitHub releases.",
+  "author": {
+    "name": "MultiClaude",
+    "email": "nguyennlt.ncc@gmail.com",
+    "url": "https://github.com/nguyennguyenit/MultiClaude"
+  },
+  "homepage": "https://github.com/nguyennguyenit/MultiClaude#release",
+  "repository": "https://github.com/nguyennguyenit/MultiClaude",
+  "license": "MIT",
+  "keywords": [
+    "multiclaude",
+    "release",
+    "github",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "MultiClaude Release",
+    "shortDescription": "Draft-first release command for this repo",
+    "longDescription": "Adds `$release <target>` for beta, stable alias, current branch, or custom branch releases backed by repo-owned scripts.",
+    "developerName": "MultiClaude",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/nguyennguyenit/MultiClaude",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "defaultPrompt": [
+      "$release beta",
+      "$release main",
+      "$release current"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

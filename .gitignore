@@ -5,7 +5,7 @@ node_modules/
 
 # Build outputs
 dist/
-release/
+/release/
 out/
 
 # IDE

@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -12,6 +9,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -28,11 +29,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -78,13 +81,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.event.inputs.tag || '' }}"
-          if [ -z "$TAG" ]; then TAG="${GITHUB_REF#refs/tags/}"; fi
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            echo "Missing required release tag input."
+            exit 1
+          fi
+          if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "Expected draft release $TAG to exist before uploading assets."
+            exit 1
+          fi
           echo "Uploading artifacts to release $TAG..."
           for file in artifacts/*; do
             if [ -f "$file" ]; then
               echo "Uploading: $file"
-              gh release upload "$TAG" "$file" --repo "$GITHUB_REPOSITORY" --clobber || true
+              gh release upload "$TAG" "$file" --repo "$GITHUB_REPOSITORY" --clobber
             fi
           done
           echo "Upload complete!"
