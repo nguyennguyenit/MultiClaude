@@ -906,7 +906,9 @@ export function useTerminal({
     clearUserViewportInteraction,
     markUserViewportInteraction,
     followLiveOutput,
-    shouldSendEnhancedEnter
+    shouldSendEnhancedEnter,
+    registerTerminalDebugHandle,
+    syncViewportState
   ])
 
   // Write data to terminal with auto cursor restore and smart scroll
@@ -1118,7 +1120,7 @@ export function useTerminal({
         } catch { /* ignore notification errors */ }
       }
     }, REFRESH_DEBOUNCE)
-  }, [attachContextLostListener, clearTextureAtlas, performFit])
+  }, [attachContextLostListener, clearTextureAtlas, performFit, terminalId])
 
   // Keep refreshFnRef in sync with refresh callback for context lost handler
   useEffect(() => {
@@ -1202,7 +1204,7 @@ export function useTerminal({
         }
       }, TERMINAL_DISPOSE_DELAY)
     }
-  }, [cancelScheduledFit, clearUserViewportInteraction])
+  }, [cancelScheduledFit, clearUserViewportInteraction, unregisterTerminalDebugHandle])
 
   // Watch the actual xterm container so maximize/unmaximize refits after
   // the terminal render area has reached its final size.
@@ -1285,7 +1287,7 @@ export function useTerminal({
       }
     })
     return unsubscribe
-  }, [attachContextLostListener, clearTextureAtlas])
+  }, [attachContextLostListener, clearTextureAtlas, terminalId])
 
   // Sync terminal font changes for already-mounted terminals.
   useEffect(() => {
