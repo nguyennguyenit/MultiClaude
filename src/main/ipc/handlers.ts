@@ -556,11 +556,17 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // YOLO Mode handlers
   safeHandle(IPC_CHANNELS.YOLO_MODE_GET, async (_, projectPath: string) => {
+    const knownPaths = projectStore.getProjects().map(p => p.path)
+    if (!knownPaths.includes(projectPath)) return false
     const settingsPath = join(projectPath, '.claude', 'settings.local.json')
     return existsSync(settingsPath)
   })
 
   safeHandle(IPC_CHANNELS.YOLO_MODE_SET, async (_, { projectPath, enabled }: { projectPath: string; enabled: boolean }) => {
+    const knownPaths = projectStore.getProjects().map(p => p.path)
+    if (!knownPaths.includes(projectPath)) {
+      return { success: false, error: 'Path not in project store' }
+    }
     const claudeDir = join(projectPath, '.claude')
     const settingsPath = join(claudeDir, 'settings.local.json')
 
@@ -591,7 +597,8 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Image handlers
   safeHandle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
-    if (existsSync(filePath)) {
+    // Security: only allow opening files in multiClaude-screenshots directory
+    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
       shell.openPath(filePath)
       return true
     }

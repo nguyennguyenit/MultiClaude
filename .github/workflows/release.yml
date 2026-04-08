@@ -80,10 +80,15 @@ jobs:
       - name: Upload to existing release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ inputs.tag }}"
+          TAG="${RELEASE_TAG}"
           if [ -z "$TAG" ]; then
             echo "Missing required release tag input."
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+            echo "Invalid tag format: $TAG (expected vX.Y.Z or vX.Y.Z-beta.N)"
             exit 1
           fi
           if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
