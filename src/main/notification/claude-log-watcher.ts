@@ -2,7 +2,6 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { EventEmitter } from 'events'
-import type { TaskEvent } from '@shared/types'
 import { JsonlEventParser } from './jsonl-event-parser'
 
 /** Debounce delay to handle fs.watch firing multiple times per write */

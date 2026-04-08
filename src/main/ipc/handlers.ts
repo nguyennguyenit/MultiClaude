@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
-import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs'
+import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
@@ -597,38 +597,14 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Image handlers
   safeHandle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
-    // Security: only allow opening files in multiClaude-screenshots directory
-    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
+    // Security: only allow opening existing files with image extensions
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']
+    const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'))
+    if (existsSync(filePath) && imageExtensions.includes(ext)) {
       shell.openPath(filePath)
       return true
     }
     return false
-  })
-
-  safeHandle(IPC_CHANNELS.IMAGE_DELETE, (_, filePath: string) => {
-    // Security: only allow deleting files in multiClaude-screenshots directory
-    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
-      try {
-        unlinkSync(filePath)
-        return true
-      } catch {
-        return false
-      }
-    }
-    return false
-  })
-
-  safeHandle(IPC_CHANNELS.IMAGE_READ_BASE64, (_, filePath: string) => {
-    // Security: only allow reading files in multiClaude-screenshots directory
-    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
-      try {
-        const buffer = readFileSync(filePath)
-        return buffer.toString('base64')
-      } catch {
-        return null
-      }
-    }
-    return null
   })
 
   // List screenshot files sorted by modification time (newest first)

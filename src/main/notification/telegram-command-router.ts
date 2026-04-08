@@ -1,6 +1,6 @@
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
-import type { Project, Terminal, NotificationEventType } from '@shared/types'
+import type { Project, Terminal } from '@shared/types'
 import { cleanTerminalOutput } from './terminal-output-cleaner'
 import { buildDetailSummary } from './terminal-summary-formatter'
 import { formatDetailMessage } from './detail-message-formatter'
@@ -337,9 +337,8 @@ export class TelegramCommandRouter {
       const knownTypes = new Set<string>(['reviewNeeded', 'taskComplete', 'taskFailed'])
 
       if (secondColon !== -1 && knownTypes.has(rest.slice(0, secondColon))) {
-        const eventType = rest.slice(0, secondColon) as NotificationEventType
         const tId = rest.slice(secondColon + 1)
-        await this.handleTailById(tId, eventType)
+        await this.handleTailById(tId)
       } else {
         await this.handleTailById(rest)
       }
@@ -365,7 +364,7 @@ export class TelegramCommandRouter {
     }
   }
 
-  private async handleTailById(terminalId: string, eventType?: NotificationEventType): Promise<void> {
+  private async handleTailById(terminalId: string): Promise<void> {
     // Use all terminals (not scoped) — called from callback with exact terminalId
     const terminals = this.terminalManager.list()
     let terminal = terminals.find(t => t.id === terminalId)
