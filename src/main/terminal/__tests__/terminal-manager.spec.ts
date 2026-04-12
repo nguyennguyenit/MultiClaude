@@ -6,6 +6,10 @@ const mockSpawnSync = vi.hoisted(() => vi.fn())
 const mockExistsSync = vi.hoisted(() => vi.fn())
 const mockReaddirSync = vi.hoisted(() => vi.fn())
 
+vi.mock('../macos-shell-detector', () => ({
+  detectMacosShells: vi.fn().mockResolvedValue([]),
+}))
+
 // Mock node-pty
 const mockPty = {
   onData: vi.fn((cb) => { mockPty._dataCallback = cb }),
@@ -403,6 +407,139 @@ describe('TerminalManager', () => {
     it('returns true when terminals exist', () => {
       manager.create()
       expect(manager.hasTerminals()).toBe(true)
+    })
+  })
+
+  describe('getShellCommand on macOS/Linux', () => {
+    let platformSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+      // Reset manager to pick up platform mock
+      manager.destroyAll()
+    })
+
+    afterEach(() => {
+      platformSpy.mockRestore()
+    })
+
+    it('uses default shell when shellPath not provided', () => {
+      manager.create()
+      expect(pty.spawn).toHaveBeenCalledWith(
+        expect.any(String), // default shell
+        expect.any(Array),
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+    })
+
+    it('uses shellPath when provided and in allowlist', async () => {
+      // Pre-populate the allowlist via initializeShells mocked to resolve with fish
+      const { detectMacosShells: mockDetect } = await import('../macos-shell-detector')
+      vi.mocked(mockDetect as unknown as (...args: unknown[]) => unknown).mockResolvedValueOnce([
+        { path: '/usr/local/bin/fish', name: 'fish', isDefault: false, kind: 'unix' as const },
+      ])
+
+      const freshManager = new TerminalManager()
+      freshManager.initializeShells()
+      // Wait for the detection promise to settle
+      await freshManager.getAvailableShells()
+
+      freshManager.create({ shellPath: '/usr/local/bin/fish' })
+      expect(pty.spawn).toHaveBeenCalledWith(
+        '/usr/local/bin/fish',
+        expect.any(Array),
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+      freshManager.destroyAll()
+    })
+
+    it('falls back to default shell when shellPath not in allowlist (security)', async () => {
+      const { detectMacosShells: mockDetect } = await import('../macos-shell-detector')
+      vi.mocked(mockDetect as unknown as (...args: unknown[]) => unknown).mockResolvedValueOnce([
+        { path: '/bin/zsh', name: 'zsh', isDefault: true, kind: 'unix' as const },
+      ])
+
+      const freshManager = new TerminalManager()
+      freshManager.initializeShells()
+      await freshManager.getAvailableShells()
+
+      freshManager.create({ shellPath: '/tmp/evil-shell' })
+      expect(pty.spawn).toHaveBeenCalledWith(
+        expect.not.stringContaining('evil'),
+        expect.any(Array),
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+      freshManager.destroyAll()
+    })
+
+    it('ignores shellPath on Windows — existing Windows tests unaffected', () => {
+      platformSpy.mockReturnValue('win32')
+      const winManager = new TerminalManager()
+      winManager.create({ shell: { type: 'cmd' }, shellPath: '/tmp/ignored' })
+      // On Windows, cmd.exe is used regardless of shellPath
+      expect(pty.spawn).toHaveBeenCalledWith(
+        expect.stringContaining('cmd'),
+        expect.any(Array),
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+      winManager.destroyAll()
+    })
+
+    it('returns --login for fish shell (H2)', async () => {
+      const { detectMacosShells: mockDetect } = await import('../macos-shell-detector')
+      vi.mocked(mockDetect as unknown as (...args: unknown[]) => unknown).mockResolvedValueOnce([
+        { path: '/usr/local/bin/fish', name: 'fish', isDefault: false, kind: 'unix' as const },
+      ])
+
+      const freshManager = new TerminalManager()
+      freshManager.initializeShells()
+      await freshManager.getAvailableShells()
+
+      freshManager.create({ shellPath: '/usr/local/bin/fish' })
+      expect(pty.spawn).toHaveBeenCalledWith(
+        '/usr/local/bin/fish',
+        ['--login'],
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+      freshManager.destroyAll()
+    })
+
+    it('returns -l for bash/zsh/sh (H2)', async () => {
+      const { detectMacosShells: mockDetect } = await import('../macos-shell-detector')
+      vi.mocked(mockDetect as unknown as (...args: unknown[]) => unknown).mockResolvedValueOnce([
+        { path: '/bin/zsh', name: 'zsh', isDefault: true, kind: 'unix' as const },
+      ])
+
+      const freshManager = new TerminalManager()
+      freshManager.initializeShells()
+      await freshManager.getAvailableShells()
+
+      freshManager.create({ shellPath: '/bin/zsh' })
+      expect(pty.spawn).toHaveBeenCalledWith(
+        '/bin/zsh',
+        ['-l'],
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+      freshManager.destroyAll()
+    })
+
+    it('returns [] for unknown shell name (H2)', async () => {
+      const { detectMacosShells: mockDetect } = await import('../macos-shell-detector')
+      vi.mocked(mockDetect as unknown as (...args: unknown[]) => unknown).mockResolvedValueOnce([
+        { path: '/usr/local/bin/nu', name: 'nu', isDefault: false, kind: 'unix' as const },
+      ])
+
+      const freshManager = new TerminalManager()
+      freshManager.initializeShells()
+      await freshManager.getAvailableShells()
+
+      freshManager.create({ shellPath: '/usr/local/bin/nu' })
+      expect(pty.spawn).toHaveBeenCalledWith(
+        '/usr/local/bin/nu',
+        [],
+        expect.objectContaining({ name: 'xterm-256color' })
+      )
+      freshManager.destroyAll()
     })
   })
 })

@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
   TERMINAL_CREATED: 'terminal:created',
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
+  TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
 
   // Project channels
   PROJECT_LIST: 'project:list',

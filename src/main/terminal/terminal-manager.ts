@@ -5,7 +5,9 @@ import { EventEmitter } from 'events'
 import { existsSync, readdirSync } from 'fs'
 import path from 'path'
 import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS } from '@shared/constants'
-import type { Terminal, TerminalSession, WindowsShell, AgentType } from '@shared/types'
+import type { Terminal, TerminalSession, WindowsShell, AgentType, ShellInfo, WslInfo, CreateTerminalOptions } from '@shared/types'
+import { detectMacosShells } from './macos-shell-detector'
+import { detectWsl } from './wsl-detector'
 
 const DESTROY_TIMEOUT_MS = 3000
 // Max exited terminals to keep for notification button lookups
@@ -32,6 +34,10 @@ export class TerminalManager extends EventEmitter {
   private resolvedWindowsPowerShellCommand: string | null = null
   private systemSuspended = false // Track system suspend state
   private nextTerminalNumber = 1
+  // Shell list caching (C3: store Promise, not raw array — prevents startup race)
+  private shellsPromise: Promise<ShellInfo[]> | null = null
+  // WSL info cache (set from startup on Windows)
+  wslInfo: WslInfo | null = null
 
   constructor() {
     super()
@@ -78,6 +84,69 @@ export class TerminalManager extends EventEmitter {
     return process.env.SHELL || '/bin/bash'
   }
 
+  /**
+   * Store the shell detection promise at startup (C3: deferred promise prevents race).
+   * Must be called after wslInfo is populated on Windows.
+   */
+  initializeShells(): void {
+    if (process.platform === 'win32') {
+      // Detect WSL now so buildWindowsShellInfoList has distros available
+      if (!this.wslInfo) {
+        this.wslInfo = detectWsl()
+      }
+      this.shellsPromise = Promise.resolve(this.buildWindowsShellInfoList())
+    } else {
+      this.shellsPromise = detectMacosShells()
+    }
+  }
+
+  /** Returns the cached shell list. Returns [] before initializeShells() is called. */
+  async getAvailableShells(): Promise<ShellInfo[]> {
+    const shells = await (this.shellsPromise ?? Promise.resolve([]))
+    // Populate synchronous allowlist so isAllowedShell() works immediately after this call
+    this.resolvedShellPaths = new Set(shells.map(s => s.path))
+    return shells
+  }
+
+  /** Build ShellInfo[] from Windows shell options (cmd, powershell, WSL distros). */
+  private buildWindowsShellInfoList(): ShellInfo[] {
+    const list: ShellInfo[] = [
+      {
+        path: process.env.COMSPEC || 'cmd.exe',
+        name: 'Command Prompt',
+        isDefault: !this.settings?.windowsShell || this.settings.windowsShell.type === 'cmd',
+        kind: 'cmd',
+      },
+      {
+        path: this.resolvedWindowsPowerShellCommand ?? 'powershell.exe',
+        name: 'PowerShell',
+        isDefault: this.settings?.windowsShell?.type === 'powershell',
+        kind: 'powershell',
+      },
+    ]
+
+    const distros = this.wslInfo?.distros ?? []
+    for (const d of distros) {
+      list.push({
+        path: `wsl://${d.name}`,
+        name: d.name,
+        isDefault: this.settings?.windowsShell?.type === 'wsl' &&
+          (this.settings.windowsShell as { type: 'wsl'; distro: string }).distro === d.name,
+        kind: 'wsl',
+      })
+    }
+
+    return list
+  }
+
+  // Settings reference for Windows shell info (injected from startup)
+  private settings: { windowsShell?: WindowsShell } | null = null
+
+  /** Provide settings context so buildWindowsShellInfoList can mark the default. */
+  setSettings(s: { windowsShell?: WindowsShell }): void {
+    this.settings = s
+  }
+
   private resolveWindowsPowerShellCommand(): string {
     if (this.resolvedWindowsPowerShellCommand) {
       return this.resolvedWindowsPowerShellCommand
@@ -120,17 +189,15 @@ export class TerminalManager extends EventEmitter {
   }
 
   /**
-   * Get shell command and args based on WindowsShell option
-   * Non-Windows: uses default shell
-   * Windows: supports cmd, powershell, or wsl distro
+   * Get shell command and args based on WindowsShell option or custom shellPath.
+   * Non-Windows: if shellPath is provided and in the allowlist, use it; else use default shell.
+   * Windows: shellPath is ignored — uses WindowsShell union.
    */
-  private getShellCommand(shell?: WindowsShell): { command: string; args: string[] } {
-    // Non-Windows: use detected default shell (this.shell handles macOS chsh correctly)
+  private getShellCommand(shell?: WindowsShell, shellPath?: string): { command: string; args: string[] } {
+    // Non-Windows: use shellPath if provided and allowlisted, else default
     if (process.platform !== 'win32') {
-      return {
-        command: this.shell,
-        args: ['-l']
-      }
+      const cmd = shellPath && this.isAllowedShell(shellPath) ? shellPath : this.shell
+      return { command: cmd, args: this.getShellArgs(cmd) }
     }
 
     // Windows: check shell option
@@ -165,6 +232,38 @@ export class TerminalManager extends EventEmitter {
   private generateId(): string {
     return `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   }
+
+  /**
+   * Map shell binary name to login args (H2: per-shell arg mapping).
+   * fish uses --login, POSIX shells use -l, unknown shells get no args.
+   */
+  private getShellArgs(shellPath: string): string[] {
+    const name = path.basename(shellPath).split('-')[0].toLowerCase()
+    if (name === 'fish') return ['--login']
+    if (['bash', 'zsh', 'sh', 'ksh', 'tcsh'].includes(name)) return ['-l']
+    return []
+  }
+
+  /**
+   * Check if shellPath is in the cached allowlist (M3: symlink-safe via realpathSync).
+   * Falls back to raw path comparison if realpathSync fails (e.g. in test environments).
+   * Always returns false if shells have not been initialized yet.
+   */
+  private isAllowedShell(shellPath: string): boolean {
+    if (!this.resolvedShellPaths) return false
+    try {
+      const { realpathSync } = require('fs') as typeof import('fs')
+      const resolved = realpathSync(shellPath)
+      return this.resolvedShellPaths.has(resolved)
+    } catch {
+      // realpathSync fails when path doesn't exist (e.g. non-existent mock paths in tests).
+      // Fall back to direct string comparison against stored allowlist.
+      return this.resolvedShellPaths.has(shellPath)
+    }
+  }
+
+  // Synchronous allowlist populated when shellsPromise settles (used by isAllowedShell)
+  private resolvedShellPaths: Set<string> | null = null
 
   private extractClaudeSessionId(command: string): string | undefined {
     const match = command.match(/(?:^|\s)--resume(?:=|\s+)(\S+)/)
@@ -287,12 +386,12 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
-  create(options: { cwd?: string; projectId?: string; shell?: WindowsShell } = {}): Terminal {
+  create(options: CreateTerminalOptions = {}): Terminal {
     const id = this.generateId()
     const cwd = options.cwd || os.homedir()
 
-    // Determine shell command and args based on shell option
-    const { command, args } = this.getShellCommand(options.shell)
+    // Determine shell command and args based on shell option and optional shellPath
+    const { command, args } = this.getShellCommand(options.shell, options.shellPath)
 
     const ptyProcess = pty.spawn(command, args, {
       name: 'xterm-256color',

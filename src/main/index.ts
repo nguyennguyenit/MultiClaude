@@ -51,6 +51,9 @@ function createWindow() {
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
 
+  // Kick off shell detection in the background (C3: stored as promise, no await needed)
+  terminalManager.initializeShells()
+
   // Register IPC handlers
   registerIpcHandlers(mainWindow, {
     terminalManager,

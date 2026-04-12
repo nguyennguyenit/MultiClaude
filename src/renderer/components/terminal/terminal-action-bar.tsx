@@ -1,11 +1,15 @@
-import { useState, useCallback } from 'react'
-import type { WindowsShell } from '@shared/types'
+import { useState, useCallback, useRef } from 'react'
+import { ShellSelectorDropdown } from './shell-selector-dropdown'
+import type { ShellInfo } from '@shared/types'
 
 interface TerminalActionBarProps {
   terminalCount: number
   terminalLimit: number
   yoloEnabled: boolean
-  onAddTerminal: (shell?: WindowsShell) => void
+  availableShells: ShellInfo[]
+  selectedShell: ShellInfo | null
+  onShellSelect: (shell: ShellInfo | null) => void
+  onAddTerminal: (shell?: ShellInfo) => void
   onToggleYolo: (enabled: boolean) => void
   onKillAll: () => void
   onCycleLayout?: () => void
@@ -48,6 +52,9 @@ export function TerminalActionBar({
   terminalCount,
   terminalLimit,
   yoloEnabled,
+  availableShells,
+  selectedShell,
+  onShellSelect,
   onAddTerminal,
   onToggleYolo,
   onKillAll,
@@ -55,6 +62,8 @@ export function TerminalActionBar({
   disabled
 }: TerminalActionBarProps) {
   const [showKillConfirm, setShowKillConfirm] = useState(false)
+  const [shellOpen, setShellOpen] = useState(false)
+  const shellBtnRef = useRef<HTMLButtonElement>(null)
 
   const handleConfirmKill = useCallback(() => {
     setShowKillConfirm(false)
@@ -65,11 +74,44 @@ export function TerminalActionBar({
   // Use visibility:hidden so the 24px bottom bar height is always accounted for in the flex layout.
   if (terminalCount === 0) return <div className="action-bar" style={{ visibility: 'hidden' }} />
 
+  const shellLabel = selectedShell ? `>_ ${selectedShell.name} ▾` : '>_ ▾'
+
   return (
     <div className={`action-bar${showKillConfirm ? ' action-bar-confirm-open' : ''}`}>
       {/* Left group: shell indicator + terminal controls */}
       <div className="action-bar-group">
-        <span className="action-bar-shell-indicator" title="Current shell">&gt;_</span>
+        <div className="shell-btn-anchor">
+          <button
+            ref={shellBtnRef}
+            type="button"
+            className="action-bar-shell-btn"
+            title={availableShells.length === 0 ? 'No shells detected' : 'Select shell (restart app to pick up newly installed shells)'}
+            aria-haspopup="listbox"
+            aria-expanded={shellOpen}
+            onClick={() => setShellOpen(p => !p)}
+            disabled={availableShells.length === 0}
+          >
+            {shellLabel}
+          </button>
+          {shellOpen && (
+            <ShellSelectorDropdown
+              shells={availableShells}
+              selectedShell={selectedShell}
+              anchorRef={shellBtnRef}
+              onSelect={(shell) => { onShellSelect(shell); setShellOpen(false) }}
+              onClose={() => setShellOpen(false)}
+            />
+          )}
+        </div>
+        <div className="action-bar-separator" />
+        <ActionBarBtn
+          icon="⚡"
+          title={yoloEnabled ? 'YOLO Mode ON — click to disable' : 'YOLO Mode OFF — click to enable'}
+          onClick={() => onToggleYolo(!yoloEnabled)}
+          disabled={disabled}
+          className={yoloEnabled ? 'yolo-active' : ''}
+          aria-pressed={yoloEnabled}
+        />
         <div className="action-bar-separator" />
         <ActionBarBtn
           icon="+"
@@ -80,6 +122,14 @@ export function TerminalActionBar({
         {onCycleLayout && (
           <ActionBarBtn icon="⊞" title="Toggle Layout" onClick={onCycleLayout} />
         )}
+      </div>
+
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Right group: count + Kill All */}
+      <div className="action-bar-group">
+        <span className="action-bar-count">{terminalCount} / {terminalLimit}</span>
         <div className="action-bar-separator" />
         <div className={`kill-confirm-anchor${showKillConfirm ? ' is-open' : ''}`}>
           <ActionBarBtn
@@ -91,7 +141,7 @@ export function TerminalActionBar({
           />
           {showKillConfirm && (
             <div className="kill-confirm-popup" role="dialog" aria-label={`Kill all ${terminalCount} terminals`}>
-              <p>Kill all {terminalCount} terminals?</p>
+              <p>Terminate {terminalCount} terminals?</p>
               <div className="kill-confirm-btns">
                 <button type="button" onClick={() => setShowKillConfirm(false)}>Cancel</button>
                 <button type="button" onClick={handleConfirmKill} className="confirm">Kill All</button>
@@ -99,23 +149,6 @@ export function TerminalActionBar({
             </div>
           )}
         </div>
-      </div>
-
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
-      {/* Right group: count + YOLO */}
-      <div className="action-bar-group">
-        <span className="action-bar-count">{terminalCount} / {terminalLimit}</span>
-        <div className="action-bar-separator" />
-        <ActionBarBtn
-          icon="⚡"
-          title={yoloEnabled ? 'YOLO Mode ON — click to disable' : 'YOLO Mode OFF — click to enable'}
-          onClick={() => onToggleYolo(!yoloEnabled)}
-          disabled={disabled}
-          className={yoloEnabled ? 'yolo-active' : ''}
-          aria-pressed={yoloEnabled}
-        />
       </div>
     </div>
   )

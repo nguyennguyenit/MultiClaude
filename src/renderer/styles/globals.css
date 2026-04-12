@@ -832,13 +832,13 @@ button, input, select, textarea, optgroup, option {
 /* Horizontal handle: sits between rows, drag up/down */
 .terminal-resize-handle--horizontal {
   width: 100%;
-  height: 4px;
+  height: 1px;
   cursor: row-resize;
 }
 
 /* Vertical handle: sits between columns, drag left/right */
 .terminal-resize-handle--vertical {
-  width: 4px;
+  width: 1px;
   height: 100%;
   cursor: col-resize;
 }
@@ -1034,20 +1034,20 @@ button, input, select, textarea, optgroup, option {
   justify-content: center;
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-primary);
   cursor: pointer;
   border-radius: 3px;
   font-size: 13px;
-  transition: color var(--transition-fast), background var(--transition-fast);
-  opacity: 0.7;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+  opacity: 0.65;
   flex-shrink: 0;
 }
 
-.action-bar-btn:hover:not(:disabled) { opacity: 1; color: var(--text-primary); background: var(--hover); }
-.action-bar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.action-bar-btn.danger:hover:not(:disabled) { color: #f7768e; }
-.action-bar-btn.yolo-active { color: #f97316; opacity: 1; }
-.action-bar-btn.yolo-active:hover { color: #fb923c; }
+.action-bar-btn:hover:not(:disabled) { opacity: 1; background: var(--hover); }
+.action-bar-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+.action-bar-btn.danger:hover:not(:disabled) { color: #f7768e; opacity: 1; }
+.action-bar-btn.yolo-active { color: #f97316; opacity: 1; outline: 1px solid #f97316; outline-offset: -1px; border-radius: 3px; }
+.action-bar-btn.yolo-active:hover { color: #fb923c; opacity: 1; outline-color: #fb923c; }
 
 .action-bar-separator {
   width: 1px;
@@ -1058,20 +1058,101 @@ button, input, select, textarea, optgroup, option {
   opacity: 0.5;
 }
 
-.action-bar-shell-indicator {
+/* Shell picker button in action bar */
+.shell-btn-anchor {
+  position: relative;
+}
+
+.action-bar-shell-btn {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 3px;
   font-size: 11px;
-  color: var(--text-muted);
   font-family: var(--terminal-font);
-  padding: 0 4px;
-  opacity: 0.6;
+  padding: 0 5px;
+  opacity: 0.65;
   white-space: nowrap;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.action-bar-shell-btn:hover:not(:disabled) { opacity: 1; background: var(--hover); }
+.action-bar-shell-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* Shell dropdown popup */
+.shell-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.shell-dropdown-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 10px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shell-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.shell-dropdown-item:hover { background: var(--hover); }
+.shell-dropdown-item.selected { color: var(--accent); }
+
+.shell-dropdown-check {
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.shell-dropdown-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-dropdown-badge {
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
 }
 
 .action-bar-count {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-primary);
   padding: 0 4px;
-  opacity: 0.6;
+  opacity: 0.65;
   white-space: nowrap;
 }
 
@@ -2311,25 +2392,37 @@ button, input, select, textarea, optgroup, option {
   justify-content: flex-end;
 }
 
-.kill-confirm-btns .status-btn {
-  min-width: 82px;
-  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+.kill-confirm-btns button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
 }
 
-.kill-confirm-btns .status-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+.kill-confirm-btns button:not(.confirm) {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  color: var(--text-primary);
 }
 
-.kill-confirm-btns .status-btn.confirm {
-  background: rgba(247, 118, 142, 0.08);
-  border-color: rgba(247, 118, 142, 0.55);
+.kill-confirm-btns button:not(.confirm):hover {
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, var(--text-primary) 30%);
+  border-color: color-mix(in srgb, var(--border) 50%, var(--text-primary) 50%);
 }
 
-.kill-confirm-btns .status-btn.confirm:hover:not(:disabled) {
-  background: rgba(247, 118, 142, 0.14);
-  border-color: rgba(247, 118, 142, 0.78);
+.kill-confirm-btns button.confirm {
+  background: rgba(247, 118, 142, 0.15);
+  border-color: rgba(247, 118, 142, 0.6);
+  color: #f7768e;
+}
+
+.kill-confirm-btns button.confirm:hover {
+  background: rgba(247, 118, 142, 0.28);
+  border-color: rgba(247, 118, 142, 0.9);
+  color: #ff8fa3;
 }
 
 /* ============================================

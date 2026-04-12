@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, AppFontId, ActivityBarState } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, AppFontId, ActivityBarState, ShellInfo } from '@shared/types'
 import { DEFAULT_SETTINGS, APP_FONTS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
@@ -54,6 +54,7 @@ interface SettingsState {
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setWindowsShell: (shell: WindowsShell) => void
+  setDefaultShell: (shell: ShellInfo | null) => Promise<void>
   setUiStyle: (style: UiStyle) => void
   setModernFontFamily: (fontId: AppFontId) => void
   setTerminalFontFamily: (fontId: TerminalFontId) => void
@@ -185,6 +186,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
     })
+  },
+
+  // Persist selected shell to disk immediately (cross-platform shell persistence)
+  setDefaultShell: async (shell) => {
+    const updated = { ...get().savedSettings, defaultShell: shell ?? undefined }
+    try {
+      await window.electron.settings.set({ defaultShell: shell ?? undefined })
+      set({ savedSettings: updated })
+    } catch (err) {
+      console.error('[settings] Failed to persist defaultShell:', err)
+    }
   },
 
   setUiStyle: (style) => {

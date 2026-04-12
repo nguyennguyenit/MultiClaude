@@ -145,6 +145,15 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Terminal handlers
   safeHandle(IPC_CHANNELS.TERMINAL_CREATE, async (_, options) => {
+    // C2: Validate shellPath at IPC boundary before it reaches terminal-manager
+    if (options?.shellPath !== undefined) {
+      if (
+        typeof options.shellPath !== 'string' ||
+        !/^\/[^;\|&\x00-\x1f]{1,512}$/.test(options.shellPath)
+      ) {
+        throw new Error('Invalid shellPath')
+      }
+    }
     const terminal = terminalManager.create(options)
     // Note: registerTerminalCwd is handled by the 'created' event listener above,
     // which fires for all terminals (both renderer-originated and remote-originated).
@@ -184,6 +193,9 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
     return detectWsl()
   })
+
+  // Shell list handler — cached at startup, returns same promise on subsequent calls
+  safeHandle(IPC_CHANNELS.TERMINAL_GET_SHELLS, () => terminalManager.getAvailableShells())
 
   // Project handlers
   safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {

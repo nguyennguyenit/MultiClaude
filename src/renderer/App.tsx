@@ -11,9 +11,9 @@ import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { joinPathsForTerminal } from './utils'
+import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
-import type { WindowsShell, Project } from '@shared/types'
+import type { ShellInfo, Project } from '@shared/types'
 
 function App() {
   const terminals = useAppStore((state) => state.terminals)
@@ -52,6 +52,10 @@ function App() {
   const [pendingSetupProject, setPendingSetupProject] = useState<Project | null>(null)
 
   const prevProjectIdRef = useRef<string | null>(null)
+
+  // Shell switcher state (loaded from IPC on mount, persisted via settings)
+  const [availableShells, setAvailableShells] = useState<ShellInfo[]>([])
+  const [selectedShell, setSelectedShell] = useState<ShellInfo | null>(null)
 
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
@@ -129,7 +133,7 @@ function App() {
   }, [projects, switchToProject, removeProject, setActiveProject, setActiveTerminal])
 
   // Handler: Add new terminal in active project
-  const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
+  const handleAddTerminal = useCallback(async (shell?: ShellInfo) => {
     // Get fresh state to avoid stale closure
     const { terminals } = useAppStore.getState()
     const currentProjectTerminals = activeProjectId
@@ -146,22 +150,33 @@ function App() {
       return
     }
 
-    // Use default shell from saved settings if not specified (Windows only)
-    // Use savedSettings (persisted to disk) instead of pendingSettings to ensure consistency
-    const effectiveShell = shell ?? useSettingsStore.getState().savedSettings.windowsShell
+    // Resolve the effective shell (caller arg > app-level selection > saved settings for Windows)
+    const effectiveShell = shell ?? selectedShell
+    const savedSettings = useSettingsStore.getState().savedSettings
+
+    // H6: use kind field instead of process.platform
+    const isUnixShell = effectiveShell?.kind === 'unix'
+    const isWindowsShell = effectiveShell && !isUnixShell
 
     try {
       const terminal = await window.electron.terminal.create({
         cwd: activeProject?.path,
         projectId: activeProject?.id,
-        shell: effectiveShell
+        shellPath: isUnixShell ? effectiveShell.path : undefined,
+        shell: isWindowsShell ? shellInfoToWindowsShell(effectiveShell) : savedSettings.windowsShell,
       })
       addTerminal(terminal)
     } catch (err) {
       console.error('[handleAddTerminal] Failed to create terminal:', err)
       useToastStore.getState().addToast('Failed to create terminal. Please try again.', 'error')
     }
-  }, [activeProject, activeProjectId, addTerminal])
+  }, [activeProject, activeProjectId, addTerminal, selectedShell])
+
+  // Handler: Shell selection — update state and persist to disk
+  const handleShellSelect = useCallback((shell: ShellInfo | null) => {
+    setSelectedShell(shell)
+    useSettingsStore.getState().setDefaultShell(shell)
+  }, [])
 
   // Handler: Close terminal by id (or active terminal if no id provided)
   const handleCloseTerminal = useCallback(async (terminalId?: string) => {
@@ -271,6 +286,21 @@ function App() {
     loadNotificationSettings()
     detectWsl()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load available shells on mount; restore saved default shell if still present
+  useEffect(() => {
+    window.electron.terminal.getAvailableShells().then(shells => {
+      setAvailableShells(shells)
+      // Validate saved default shell still exists in the list; reset if not
+      const savedDefault = useSettingsStore.getState().savedSettings.defaultShell
+      if (savedDefault) {
+        const stillValid = shells.some(s => s.path === savedDefault.path)
+        setSelectedShell(stillValid ? savedDefault : null)
+      }
+    }).catch(() => {
+      // getAvailableShells is best-effort — continue without shell list
+    })
   }, [])
 
   // Load YOLO status when project changes
@@ -523,6 +553,9 @@ function App() {
           terminalCount={visibleTerminals.length}
           terminalLimit={getTerminalLimitValue()}
           yoloEnabled={yoloEnabled}
+          availableShells={availableShells}
+          selectedShell={selectedShell}
+          onShellSelect={handleShellSelect}
           onAddTerminal={handleAddTerminal}
           onToggleYolo={handleYoloToggle}
           onKillAll={handleKillAll}
