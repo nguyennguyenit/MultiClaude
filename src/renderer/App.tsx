@@ -1,7 +1,8 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
-import { Toolbar, ProjectBar } from './components/toolbar'
+import { Toolbar } from './components/toolbar'
 import { UpdateBanner } from './components/update-banner'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
+import { YoloWarningDialog } from './components/terminal/yolo-warning-dialog'
 import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
@@ -43,6 +44,7 @@ function App() {
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [showYoloDialog, setShowYoloDialog] = useState(false)
 
   // Git setup dialog state
   const [gitInitDialogOpen, setGitInitDialogOpen] = useState(false)
@@ -176,13 +178,29 @@ function App() {
     window.electron.terminal.write(terminalId, formatted)
   }, [])
 
-  // Handler: Toggle YOLO mode
+  // Handler: Toggle YOLO mode (shows first-time warning dialog per project)
   const handleYoloToggle = useCallback(async (enabled: boolean) => {
     if (!activeProject) return
-    const result = await window.electron.yolo.set(activeProject.path, enabled)
-    if (result.success) {
-      setYoloEnabled(enabled)
+
+    if (enabled) {
+      const warningKey = `yolo-warned-${activeProject.path}`
+      if (!localStorage.getItem(warningKey)) {
+        setShowYoloDialog(true)
+        return
+      }
     }
+
+    const result = await window.electron.yolo.set(activeProject.path, enabled)
+    if (result.success) setYoloEnabled(enabled)
+  }, [activeProject])
+
+  // Handler: User confirmed YOLO warning dialog
+  const handleYoloConfirm = useCallback(async () => {
+    if (!activeProject) return
+    localStorage.setItem(`yolo-warned-${activeProject.path}`, '1')
+    setShowYoloDialog(false)
+    const result = await window.electron.yolo.set(activeProject.path, true)
+    if (result.success) setYoloEnabled(true)
   }, [activeProject])
 
   // Handler: Kill all terminals in active project (with delay to prevent WebGL warnings)
@@ -452,7 +470,15 @@ function App() {
         }}
       />
 
-      {/* Toolbar - replaces old titlebar + activity bar */}
+      {/* YOLO first-time warning dialog */}
+      {showYoloDialog && (
+        <YoloWarningDialog
+          onConfirm={handleYoloConfirm}
+          onCancel={() => setShowYoloDialog(false)}
+        />
+      )}
+
+      {/* Toolbar with inline Chrome-style project tabs */}
       <Toolbar
         onAddTerminal={handleAddTerminal}
         terminalCount={visibleTerminals.length}
@@ -460,6 +486,11 @@ function App() {
         onToggleGitHub={() => togglePanel('github')}
         onToggleSettings={() => togglePanel('settings')}
         activePanel={activePanel}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={handleSelectProject}
+        onAddProject={handleAddProject}
+        onDeleteProject={handleDeleteProject}
       />
       <UpdateBanner />
 
@@ -467,14 +498,6 @@ function App() {
       <div className="main-content">
         {activeProjectId ? (
           <div className="terminal-area">
-            <TerminalActionBar
-              terminalCount={visibleTerminals.length}
-              terminalLimit={getTerminalLimitValue()}
-              yoloEnabled={yoloEnabled}
-              onAddTerminal={handleAddTerminal}
-              onToggleYolo={handleYoloToggle}
-              onKillAll={handleKillAll}
-            />
             <div data-testid="terminal-area" style={{ flex: 1, minHeight: 0 }}>
               <TerminalGrid
                 terminals={terminals}
@@ -488,21 +511,23 @@ function App() {
                 onTitleChange={updateTerminalTitle}
               />
             </div>
-
           </div>
         ) : (
           <WelcomeScreen onAddProject={handleAddProject} />
         )}
       </div>
 
-      {/* Project bar - horizontal tab list below terminal */}
-      <ProjectBar
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onSelectProject={handleSelectProject}
-        onAddProject={handleAddProject}
-        onDeleteProject={handleDeleteProject}
-      />
+      {/* Bottom icon action bar — replaces ProjectBar space */}
+      {activeProjectId && (
+        <TerminalActionBar
+          terminalCount={visibleTerminals.length}
+          terminalLimit={getTerminalLimitValue()}
+          yoloEnabled={yoloEnabled}
+          onAddTerminal={handleAddTerminal}
+          onToggleYolo={handleYoloToggle}
+          onKillAll={handleKillAll}
+        />
+      )}
     </div>
   )
 }

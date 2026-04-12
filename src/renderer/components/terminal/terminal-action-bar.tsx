@@ -8,10 +8,42 @@ interface TerminalActionBarProps {
   onAddTerminal: (shell?: WindowsShell) => void
   onToggleYolo: (enabled: boolean) => void
   onKillAll: () => void
+  onCycleLayout?: () => void
   disabled?: boolean
 }
 
-/** Slim terminal status bar: count, add terminal, YOLO toggle, Kill All */
+/** Icon-only action button for the bottom bar */
+function ActionBarBtn({
+  icon,
+  title,
+  onClick,
+  disabled,
+  className = '',
+  'aria-pressed': ariaPressed
+}: {
+  icon: string
+  title: string
+  onClick: () => void
+  disabled?: boolean
+  className?: string
+  'aria-pressed'?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      className={`action-bar-btn${className ? ` ${className}` : ''}`}
+      title={title}
+      aria-label={title}
+      aria-pressed={ariaPressed}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {icon}
+    </button>
+  )
+}
+
+/** 24px icon-only bottom action bar (VS Code Antigravity style) */
 export function TerminalActionBar({
   terminalCount,
   terminalLimit,
@@ -19,6 +51,7 @@ export function TerminalActionBar({
   onAddTerminal,
   onToggleYolo,
   onKillAll,
+  onCycleLayout,
   disabled
 }: TerminalActionBarProps) {
   const [showKillConfirm, setShowKillConfirm] = useState(false)
@@ -28,65 +61,61 @@ export function TerminalActionBar({
     onKillAll()
   }, [onKillAll])
 
-  // Hide when no terminals
-  if (terminalCount === 0) return null
+  // Reserve layout space even when no terminals open (prevents layout shift on first terminal open).
+  // Use visibility:hidden so the 24px bottom bar height is always accounted for in the flex layout.
+  if (terminalCount === 0) return <div className="action-bar" style={{ visibility: 'hidden' }} />
 
   return (
-    <div className={`terminal-status-bar${showKillConfirm ? ' terminal-status-bar-confirm-open' : ''}`}>
-      <span className="terminal-count-label">{terminalCount} / {terminalLimit} terminals</span>
+    <div className={`action-bar${showKillConfirm ? ' action-bar-confirm-open' : ''}`}>
+      {/* Left group: shell indicator + terminal controls */}
+      <div className="action-bar-group">
+        <span className="action-bar-shell-indicator" title="Current shell">&gt;_</span>
+        <div className="action-bar-separator" />
+        <ActionBarBtn
+          icon="+"
+          title={terminalCount >= terminalLimit ? `Terminal limit (${terminalLimit}) reached` : 'New Terminal (Ctrl+T)'}
+          onClick={() => onAddTerminal()}
+          disabled={disabled || terminalCount >= terminalLimit}
+        />
+        {onCycleLayout && (
+          <ActionBarBtn icon="⊞" title="Toggle Layout" onClick={onCycleLayout} />
+        )}
+        <div className="action-bar-separator" />
+        <div className={`kill-confirm-anchor${showKillConfirm ? ' is-open' : ''}`}>
+          <ActionBarBtn
+            icon="🗑"
+            title="Kill All Terminals"
+            onClick={() => setShowKillConfirm(p => !p)}
+            disabled={disabled}
+            className="danger"
+          />
+          {showKillConfirm && (
+            <div className="kill-confirm-popup" role="dialog" aria-label={`Kill all ${terminalCount} terminals`}>
+              <p>Kill all {terminalCount} terminals?</p>
+              <div className="kill-confirm-btns">
+                <button type="button" onClick={() => setShowKillConfirm(false)}>Cancel</button>
+                <button type="button" onClick={handleConfirmKill} className="confirm">Kill All</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
-      {/* Add new terminal button */}
-      <button
-        type="button"
-        onClick={() => onAddTerminal()}
-        disabled={disabled || terminalCount >= terminalLimit}
-        className="status-btn primary"
-        title={terminalCount >= terminalLimit ? `Terminal limit (${terminalLimit}) reached` : 'New Terminal (Ctrl+T)'}
-      >
-        + New
-      </button>
-
+      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* YOLO toggle - dot indicator shows state */}
-      <button
-        type="button"
-        onClick={() => onToggleYolo(!yoloEnabled)}
-        disabled={disabled}
-        className="status-btn"
-        style={yoloEnabled ? { color: '#f97316', borderColor: 'rgba(249,115,22,0.4)', background: 'rgba(249,115,22,0.08)' } : undefined}
-        title={yoloEnabled ? 'YOLO Mode: ON — Click to disable' : 'YOLO Mode: OFF — Click to enable'}
-      >
-        ⚡ YOLO
-      </button>
-
-      {/* Kill All with confirmation */}
-      <div className={`kill-confirm-anchor${showKillConfirm ? ' is-open' : ''}`}>
-        <button
-          type="button"
-          onClick={() => setShowKillConfirm(prev => !prev)}
-          disabled={disabled || terminalCount === 0}
-          className="status-btn danger"
-          aria-expanded={showKillConfirm}
-          aria-haspopup="dialog"
-          style={{ color: '#f7768e', borderColor: 'rgba(247,118,142,0.4)', background: 'rgba(247,118,142,0.08)' }}
-        >
-          Kill All
-        </button>
-
-        {showKillConfirm && (
-          <div className="kill-confirm-popup" role="dialog" aria-label={`Kill all ${terminalCount} terminals`}>
-            <p>Kill all {terminalCount} terminals?</p>
-            <div className="kill-confirm-btns">
-              <button type="button" onClick={() => setShowKillConfirm(false)} className="status-btn">
-                Cancel
-              </button>
-              <button type="button" onClick={handleConfirmKill} className="status-btn danger confirm">
-                Kill All
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Right group: count + YOLO */}
+      <div className="action-bar-group">
+        <span className="action-bar-count">{terminalCount} / {terminalLimit}</span>
+        <div className="action-bar-separator" />
+        <ActionBarBtn
+          icon="⚡"
+          title={yoloEnabled ? 'YOLO Mode ON — click to disable' : 'YOLO Mode OFF — click to enable'}
+          onClick={() => onToggleYolo(!yoloEnabled)}
+          disabled={disabled}
+          className={yoloEnabled ? 'yolo-active' : ''}
+          aria-pressed={yoloEnabled}
+        />
       </div>
     </div>
   )
