@@ -11,7 +11,6 @@ import type { ProjectStore } from '../project/project-store'
 import type { SettingsStore } from '../settings'
 import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
-import { applyVietnameseImePatch, findClaudePath, getClaudeVersion } from '../vietnamese-ime-patcher'
 import { detectWsl } from '../terminal/wsl-detector'
 import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
 
@@ -712,18 +711,6 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       console.error('[handlers] Failed to reset settings:', error)
       throw error
     }
-  })
-
-  // Vietnamese IME patch handlers
-  // No customPath from renderer - prevents arbitrary file write (security)
-  safeHandle(IPC_CHANNELS.VIETNAMESE_IME_PATCH, async () => {
-    return applyVietnameseImePatch()
-  })
-
-  safeHandle(IPC_CHANNELS.VIETNAMESE_IME_STATUS, async () => {
-    const claudePath = findClaudePath()
-    const version = getClaudeVersion()
-    return { claudePath, version }
   })
 
   // Window handlers

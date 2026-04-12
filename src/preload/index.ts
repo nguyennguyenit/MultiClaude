@@ -149,10 +149,6 @@ export interface ElectronAPI {
     install: () => Promise<void>
     onStatusChanged: (callback: (state: UpdateState) => void) => () => void
   }
-  vietnameseIme: {
-    patch: () => Promise<{ success: boolean; alreadyPatched?: boolean; message?: string; claudePath?: string; claudeVersion?: string }>
-    status: () => Promise<{ claudePath: string | null; version: string | null }>
-  }
   /**
    * Settings API for app-wide preferences persistence.
    * Settings are stored via electron-store to disk.
@@ -340,10 +336,6 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
     }
-  },
-  vietnameseIme: {
-    patch: () => ipcRenderer.invoke(IPC_CHANNELS.VIETNAMESE_IME_PATCH),
-    status: () => ipcRenderer.invoke(IPC_CHANNELS.VIETNAMESE_IME_STATUS)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),

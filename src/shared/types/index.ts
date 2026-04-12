@@ -258,10 +258,6 @@ export interface AppSettings {
   terminalStyleOptions?: TerminalStyleOptions
   // Legacy: Activity Bar state (removed in VibeTerminal reskin)
   activityBarState?: ActivityBarState
-  // Vietnamese IME fix settings
-  vietnameseImeFix?: boolean
-  vietnameseImeClaudeVersion?: string
-  vietnameseImeClaudePath?: string
 }
 
 // GitHub Issues/PRs types
