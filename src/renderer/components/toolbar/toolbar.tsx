@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { ToolbarButton } from './toolbar-button'
-import logoImg from '../../assets/logo.png'
-import type { WindowState } from '@shared/types'
+import type { WindowState, Project } from '@shared/types'
 
 // Detect macOS for traffic light padding
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -18,6 +17,12 @@ interface ToolbarProps {
   onToggleGitHub: () => void
   onToggleSettings: () => void
   activePanel: string | null
+  // Project tab props
+  projects: Project[]
+  activeProjectId: string | null
+  onSelectProject: (id: string | null) => void
+  onAddProject: () => void
+  onDeleteProject: (id: string) => void
 }
 
 function IconGitHub() {
@@ -37,36 +42,130 @@ function IconSettings() {
   )
 }
 
+/** Single project tab inside the toolbar */
+function ToolbarProjectTab({
+  project,
+  index,
+  isActive,
+  onSelect,
+  onDelete,
+  scrollContainerRef
+}: {
+  project: Project
+  index: number
+  isActive: boolean
+  onSelect: (id: string) => void
+  onDelete: (id: string) => void
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isActive && ref.current && scrollContainerRef.current) {
+      requestAnimationFrame(() => {
+        const el = ref.current
+        const container = scrollContainerRef.current
+        if (!el || !container) return
+        // Scroll the tab container directly to center the active tab.
+        // Avoids scrollIntoView({ inline: 'center' }) which can scroll ancestor
+        // elements (including the document viewport), causing layout misalignment.
+        const targetLeft = el.offsetLeft - (container.clientWidth - el.offsetWidth) / 2
+        container.scrollTo({
+          left: Math.max(0, Math.min(targetLeft, container.scrollWidth - container.clientWidth)),
+          behavior: 'smooth'
+        })
+      })
+    }
+  }, [isActive, scrollContainerRef])
+
+  return (
+    <div
+      ref={ref}
+      className={`toolbar-tab${isActive ? ' active' : ''}`}
+      data-testid={`project-tab-${project.id}`}
+    >
+      {index < 9 && <span className="toolbar-tab-badge">{index + 1}</span>}
+      <button
+        type="button"
+        className="toolbar-tab-btn"
+        onClick={() => onSelect(project.id)}
+        title={project.path}
+      >
+        {project.name}
+      </button>
+      <button
+        type="button"
+        className="toolbar-tab-delete"
+        onClick={(e) => { e.stopPropagation(); onDelete(project.id) }}
+        aria-label={`Remove project ${project.name}`}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
 import { WindowControls } from './window-controls'
 
-/** Compact 32px toolbar replacing the titlebar + activity bar */
+/** Compact 34px toolbar with inline Chrome-style project tabs */
 export function Toolbar({
   onAddTerminal: _onAddTerminal,
   terminalCount: _terminalCount,
   terminalLimit: _terminalLimit,
   onToggleGitHub,
   onToggleSettings,
-  activePanel
+  activePanel,
+  projects,
+  activeProjectId,
+  onSelectProject,
+  onAddProject,
+  onDeleteProject
 }: ToolbarProps) {
   const [windowState, setWindowState] = useState(DEFAULT_WINDOW_STATE)
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const checkOverflow = useCallback(() => {
+    const el = tabsRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 0)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+
+  useEffect(() => {
+    checkOverflow()
+    const el = tabsRef.current
+    el?.addEventListener('scroll', checkOverflow)
+    window.addEventListener('resize', checkOverflow)
+    return () => {
+      el?.removeEventListener('scroll', checkOverflow)
+      window.removeEventListener('resize', checkOverflow)
+    }
+  }, [checkOverflow, projects])
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault()
+      e.currentTarget.scrollLeft += e.deltaY * 0.5
+    }
+  }
+
+  const scroll = (dir: 'left' | 'right') => {
+    if (!tabsRef.current) return
+    tabsRef.current.scrollLeft += dir === 'left' ? -120 : 120
+  }
 
   useEffect(() => {
     if (!isMac) return
-
     let isSubscribed = true
 
     window.electron.window.getState()
-      .then((state) => {
-        if (isSubscribed) {
-          setWindowState(state)
-        }
-      })
+      .then((state) => { if (isSubscribed) setWindowState(state) })
       .catch(() => {})
 
     const unsubscribe = window.electron.window.onStateChanged((state) => {
-      if (isSubscribed) {
-        setWindowState(state)
-      }
+      if (isSubscribed) setWindowState(state)
     })
 
     return () => {
@@ -80,18 +179,51 @@ export function Toolbar({
       {/* Drag region sits behind interactive elements */}
       <div className="toolbar-drag" />
 
-      {/* Left group: keep clear of traffic lights unless the macOS window is expanded */}
+      {/* Left group: keep clear of traffic lights unless fullscreen */}
       <div
         className="toolbar-group toolbar-group-left"
         style={{ paddingLeft: isMac && !windowState.isFullScreen ? 80 : 8 }}
-      >
-        <div className="toolbar-brand">
-          <img src={logoImg} alt="MultiClaude" className="toolbar-brand-logo" />
-          <span className="toolbar-brand-name">MultiClaude</span>
+      />
+
+      {/* Middle: scrollable project tabs */}
+      <div className="toolbar-tabs-container" data-testid="project-tabs-container">
+        {canScrollLeft && (
+          <button type="button" className="toolbar-tabs-arrow" onClick={() => scroll('left')}>‹</button>
+        )}
+        <div ref={tabsRef} className="toolbar-tabs" onWheel={handleWheel}>
+          {projects.length === 0 && (
+            <span className="toolbar-tabs-empty" data-testid="project-tabs-empty">
+              No projects — click + to add
+            </span>
+          )}
+          {projects.map((p, i) => (
+            <ToolbarProjectTab
+              key={p.id}
+              project={p}
+              index={i}
+              isActive={p.id === activeProjectId}
+              onSelect={onSelectProject}
+              onDelete={onDeleteProject}
+              scrollContainerRef={tabsRef}
+            />
+          ))}
+          <button
+            type="button"
+            className="toolbar-tabs-add"
+            data-testid="project-tabs-add"
+            onClick={onAddProject}
+            title="Add Project"
+            aria-label="Add Project"
+          >
+            +
+          </button>
         </div>
+        {canScrollRight && (
+          <button type="button" className="toolbar-tabs-arrow" onClick={() => scroll('right')}>›</button>
+        )}
       </div>
 
-      {/* Right group: panel toggles + update indicator + custom window controls */}
+      {/* Right group: panel toggles + window controls */}
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
         <ToolbarButton
           icon={<IconGitHub />}
@@ -106,7 +238,6 @@ export function Toolbar({
           active={activePanel === 'settings'}
           testId="settings-button"
         />
-        {/* Only show custom window controls on non-macOS platforms since macOS has native traffic lights on the left */}
         {!isMac && <WindowControls />}
       </div>
     </div>

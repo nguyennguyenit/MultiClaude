@@ -41,7 +41,7 @@ button, input, select, textarea, optgroup, option {
 
 :root {
   /* Layout dimensions */
-  --toolbar-height: 32px;
+  --toolbar-height: 34px;
   --tab-height: 26px;
   --panel-width: 340px;
   --transition-fast: 0.15s ease;
@@ -363,7 +363,8 @@ button, input, select, textarea, optgroup, option {
   display: flex;
   align-items: center;
   gap: 2px;
-  -webkit-app-region: no-drag;
+  /* no-drag removed: only interactive children (toolbar-btn, window-controls)
+     mark themselves no-drag; non-interactive space exposes toolbar-drag */
   position: relative;
   z-index: 1;
 }
@@ -372,12 +373,11 @@ button, input, select, textarea, optgroup, option {
   transition: padding-left var(--transition-fast);
 }
 
-/* App branding: logo + name */
+/* App branding: logo + name — non-interactive, exposes toolbar-drag region */
 .toolbar-brand {
   display: flex;
   align-items: center;
   gap: 6px;
-  -webkit-app-region: no-drag;
 }
 
 .toolbar-brand-logo {
@@ -397,6 +397,152 @@ button, input, select, textarea, optgroup, option {
   letter-spacing: 0.2px;
 }
 
+/* Thin vertical separator between logo and tabs */
+.toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 6px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+/* Chrome-style scrollable project tabs in toolbar */
+.toolbar-tabs-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  /* no-drag removed: only interactive children mark no-drag so the
+     empty tab space exposes the toolbar-drag region beneath */
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  height: 100%;
+}
+
+.toolbar-tabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.toolbar-tabs::-webkit-scrollbar { display: none; }
+
+.toolbar-tab {
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-tab.active {
+  background: var(--tab-active-bg);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.toolbar-tab-btn {
+  padding: 0 6px;
+  min-width: 80px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  height: 100%;
+}
+
+.toolbar-tab.active .toolbar-tab-btn {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.toolbar-tab-badge {
+  font-size: 9px;
+  padding: 0 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border-radius: 3px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-tab-delete {
+  opacity: 0;
+  padding: 0 4px;
+  height: 100%;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  transition: opacity var(--transition-fast);
+}
+
+.toolbar-tab:hover .toolbar-tab-delete { opacity: 0.6; }
+.toolbar-tab-delete:hover { opacity: 1 !important; }
+
+.toolbar-tabs-arrow {
+  flex-shrink: 0;
+  width: 16px;
+  height: 100%;
+  background: var(--bg-secondary);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+  z-index: 2;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-tabs-arrow:hover { color: var(--text-primary); }
+
+.toolbar-tabs-add {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: 0 3px;
+  align-self: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-tabs-add:hover {
+  color: var(--text-primary);
+  background: var(--hover);
+}
+
+.toolbar-tabs-empty {
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
 .toolbar-btn {
   width: 28px;
   height: 28px;
@@ -412,6 +558,7 @@ button, input, select, textarea, optgroup, option {
   border-radius: 4px;
   transition: opacity var(--transition-fast), background var(--transition-fast);
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .toolbar-btn:hover {
@@ -852,6 +999,135 @@ button, input, select, textarea, optgroup, option {
   background: rgba(239, 68, 68, 0.1);
   border-color: rgba(239, 68, 68, 0.3);
 }
+
+/* ============================================
+   Bottom Icon Action Bar (24px, VS Code Antigravity style)
+   ============================================ */
+
+.action-bar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 2px;
+  position: relative;
+  z-index: 10;
+  -webkit-app-region: no-drag;
+}
+
+.action-bar-confirm-open { z-index: 30; }
+
+.action-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.action-bar-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 13px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.action-bar-btn:hover:not(:disabled) { opacity: 1; color: var(--text-primary); background: var(--hover); }
+.action-bar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.action-bar-btn.danger:hover:not(:disabled) { color: #f7768e; }
+.action-bar-btn.yolo-active { color: #f97316; opacity: 1; }
+.action-bar-btn.yolo-active:hover { color: #fb923c; }
+
+.action-bar-separator {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  margin: 0 3px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.action-bar-shell-indicator {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--terminal-font);
+  padding: 0 4px;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.action-bar-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 4px;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+/* ============================================
+   YOLO Warning Dialog
+   ============================================ */
+
+.yolo-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.yolo-dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  max-width: 380px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.yolo-dialog h3 { margin: 0 0 12px; font-size: 15px; color: var(--text-primary); }
+.yolo-dialog p { font-size: 13px; color: var(--text-secondary); margin: 0 0 8px; line-height: 1.5; }
+.yolo-dialog-sub { font-size: 11px !important; color: var(--text-muted) !important; }
+.yolo-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+.yolo-btn-cancel {
+  padding: 6px 14px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.yolo-btn-confirm {
+  padding: 6px 14px;
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  color: #f97316;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.yolo-btn-confirm:hover { background: rgba(249, 115, 22, 0.25); }
 
 /* ============================================
    Terminal Status Bar (slim action bar, Phase 3)
@@ -2010,7 +2286,7 @@ button, input, select, textarea, optgroup, option {
 .kill-confirm-popup {
   position: absolute;
   right: 0;
-  top: calc(100% + 4px);
+  bottom: calc(100% + 4px);
   display: flex;
   flex-direction: column;
   gap: 10px;
