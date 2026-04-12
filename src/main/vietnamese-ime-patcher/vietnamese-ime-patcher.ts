@@ -37,7 +37,11 @@ export function findClaudePath(): string | null {
         try {
           return execSync(`realpath "${p}"`).toString().trim()
         } catch { /* fallthrough */ }
+        return p
       }
+      // On Windows, 'where claude' returns claude.cmd/.ps1 wrapper — not patchable.
+      // Skip wrappers and fall through to find the real cli.js
+      if (p.endsWith('.cmd') || p.endsWith('.ps1')) continue
       return p
     }
   }
