@@ -10,7 +10,6 @@ import { NotificationManager } from './notification'
 import { registerIpcHandlers } from './ipc/handlers'
 import { registerGitHubHandlers } from './ipc/github-handlers'
 import { initAutoUpdater } from './updater'
-import { applyVietnameseImePatch, getClaudeVersion } from './vietnamese-ime-patcher'
 
 // ES module compatibility for __dirname
 const __filename = fileURLToPath(import.meta.url)
@@ -52,6 +51,9 @@ function createWindow() {
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
 
+  // Kick off shell detection in the background (C3: stored as promise, no await needed)
+  terminalManager.initializeShells()
+
   // Register IPC handlers
   registerIpcHandlers(mainWindow, {
     terminalManager,
@@ -67,26 +69,6 @@ function createWindow() {
 
   // Initialize auto-updater
   initAutoUpdater(mainWindow)
-
-  // Auto re-patch Vietnamese IME fix when Claude version changes
-  try {
-    const settings = settingsStore.getSettings()
-    if (settings.vietnameseImeFix) {
-      const currentVersion = getClaudeVersion()
-      if (currentVersion && currentVersion !== settings.vietnameseImeClaudeVersion) {
-        console.log(`[main] Claude version changed (${settings.vietnameseImeClaudeVersion} → ${currentVersion}), re-patching IME fix...`)
-        const result = applyVietnameseImePatch(settings.vietnameseImeClaudePath || undefined)
-        if (result.success) {
-          settingsStore.setSettings({ vietnameseImeClaudeVersion: currentVersion })
-          console.log('[main] Vietnamese IME fix re-applied successfully')
-        } else {
-          console.warn('[main] Vietnamese IME re-patch failed:', result.message)
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[main] Vietnamese IME startup check failed:', err)
-  }
 
   // Load the app
   if (VITE_DEV_SERVER_URL) {

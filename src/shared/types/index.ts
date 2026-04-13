@@ -215,6 +215,22 @@ export type WindowsShell =
   | { type: 'powershell' }
   | { type: 'wsl'; distro: string }
 
+// Cross-platform shell descriptor — renderer-facing type for shell picker
+export interface ShellInfo {
+  path: string          // realpathSync-resolved absolute path (or sentinel like 'cmd.exe')
+  name: string          // display name: 'zsh', 'fish', 'bash', 'Command Prompt', etc.
+  isDefault: boolean    // true if this matches the user's login shell / default Windows shell
+  kind: 'unix' | 'cmd' | 'powershell' | 'wsl'  // discriminant — no name-matching needed
+}
+
+// Options for creating a new terminal
+export interface CreateTerminalOptions {
+  cwd?: string
+  projectId?: string
+  shell?: WindowsShell   // Windows: drive the PTY via existing WindowsShell union
+  shellPath?: string     // macOS/Linux: realpathSync-resolved absolute path for custom shell
+}
+
 // Terminal limit types
 export type TerminalLimitPreset = 2 | 4 | 9 | 'custom'
 export interface TerminalLimit {
@@ -249,6 +265,8 @@ export interface AppSettings {
   terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
   windowsShell?: WindowsShell
+  // Cross-platform: persisted default shell selection
+  defaultShell?: ShellInfo
   // Legacy fields - kept optional for backward compat with saved settings + hook
   themeMode?: ThemeMode
   // Main app/UI font family (non-terminal)
@@ -258,10 +276,6 @@ export interface AppSettings {
   terminalStyleOptions?: TerminalStyleOptions
   // Legacy: Activity Bar state (removed in VibeTerminal reskin)
   activityBarState?: ActivityBarState
-  // Vietnamese IME fix settings
-  vietnameseImeFix?: boolean
-  vietnameseImeClaudeVersion?: string
-  vietnameseImeClaudePath?: string
 }
 
 // GitHub Issues/PRs types

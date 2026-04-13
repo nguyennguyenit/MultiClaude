@@ -31,13 +31,14 @@ import type {
 // Type-safe API for renderer
 export interface ElectronAPI {
   terminal: {
-    create: (options?: { cwd?: string; projectId?: string; shell?: WindowsShell }) => Promise<Terminal>
+    create: (options?: { cwd?: string; projectId?: string; shell?: WindowsShell; shellPath?: string }) => Promise<Terminal>
     destroy: (id: string) => Promise<boolean>
     write: (terminalId: string, data: string) => void
     resize: (terminalId: string, cols: number, rows: number) => void
     list: () => Promise<Terminal[]>
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     detectWsl: () => Promise<WslInfo>
+    getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
@@ -147,10 +148,6 @@ export interface ElectronAPI {
     install: () => Promise<void>
     onStatusChanged: (callback: (state: UpdateState) => void) => () => void
   }
-  vietnameseIme: {
-    patch: () => Promise<{ success: boolean; alreadyPatched?: boolean; message?: string; claudePath?: string; claudeVersion?: string }>
-    status: () => Promise<{ claudePath: string | null; version: string | null }>
-  }
   /**
    * Settings API for app-wide preferences persistence.
    * Settings are stored via electron-store to disk.
@@ -186,6 +183,7 @@ const api: ElectronAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST),
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
     detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
+    getAvailableShells: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SHELLS),
     onOutput: (callback) => {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)
@@ -336,10 +334,6 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATUS_CHANGED, listener)
     }
-  },
-  vietnameseIme: {
-    patch: () => ipcRenderer.invoke(IPC_CHANNELS.VIETNAMESE_IME_PATCH),
-    status: () => ipcRenderer.invoke(IPC_CHANNELS.VIETNAMESE_IME_STATUS)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),

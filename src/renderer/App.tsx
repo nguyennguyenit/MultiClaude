@@ -1,7 +1,8 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
-import { Toolbar, ProjectBar } from './components/toolbar'
+import { Toolbar } from './components/toolbar'
 import { UpdateBanner } from './components/update-banner'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
+import { YoloWarningDialog } from './components/terminal/yolo-warning-dialog'
 import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
@@ -10,9 +11,9 @@ import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
-import { joinPathsForTerminal } from './utils'
+import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
-import type { WindowsShell, Project } from '@shared/types'
+import type { ShellInfo, Project } from '@shared/types'
 
 function App() {
   const terminals = useAppStore((state) => state.terminals)
@@ -43,6 +44,7 @@ function App() {
 
   // YOLO mode state
   const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [showYoloDialog, setShowYoloDialog] = useState(false)
 
   // Git setup dialog state
   const [gitInitDialogOpen, setGitInitDialogOpen] = useState(false)
@@ -50,6 +52,10 @@ function App() {
   const [pendingSetupProject, setPendingSetupProject] = useState<Project | null>(null)
 
   const prevProjectIdRef = useRef<string | null>(null)
+
+  // Shell switcher state (loaded from IPC on mount, persisted via settings)
+  const [availableShells, setAvailableShells] = useState<ShellInfo[]>([])
+  const [selectedShell, setSelectedShell] = useState<ShellInfo | null>(null)
 
   // Get active project for terminal creation
   const activeProject = projects.find(p => p.id === activeProjectId)
@@ -127,7 +133,7 @@ function App() {
   }, [projects, switchToProject, removeProject, setActiveProject, setActiveTerminal])
 
   // Handler: Add new terminal in active project
-  const handleAddTerminal = useCallback(async (shell?: WindowsShell) => {
+  const handleAddTerminal = useCallback(async (shell?: ShellInfo) => {
     // Get fresh state to avoid stale closure
     const { terminals } = useAppStore.getState()
     const currentProjectTerminals = activeProjectId
@@ -144,22 +150,33 @@ function App() {
       return
     }
 
-    // Use default shell from saved settings if not specified (Windows only)
-    // Use savedSettings (persisted to disk) instead of pendingSettings to ensure consistency
-    const effectiveShell = shell ?? useSettingsStore.getState().savedSettings.windowsShell
+    // Resolve the effective shell (caller arg > app-level selection > saved settings for Windows)
+    const effectiveShell = shell ?? selectedShell
+    const savedSettings = useSettingsStore.getState().savedSettings
+
+    // H6: use kind field instead of process.platform
+    const isUnixShell = effectiveShell?.kind === 'unix'
+    const isWindowsShell = effectiveShell && !isUnixShell
 
     try {
       const terminal = await window.electron.terminal.create({
         cwd: activeProject?.path,
         projectId: activeProject?.id,
-        shell: effectiveShell
+        shellPath: isUnixShell ? effectiveShell.path : undefined,
+        shell: isWindowsShell ? shellInfoToWindowsShell(effectiveShell) : savedSettings.windowsShell,
       })
       addTerminal(terminal)
     } catch (err) {
       console.error('[handleAddTerminal] Failed to create terminal:', err)
       useToastStore.getState().addToast('Failed to create terminal. Please try again.', 'error')
     }
-  }, [activeProject, activeProjectId, addTerminal])
+  }, [activeProject, activeProjectId, addTerminal, selectedShell])
+
+  // Handler: Shell selection — update state and persist to disk
+  const handleShellSelect = useCallback((shell: ShellInfo | null) => {
+    setSelectedShell(shell)
+    useSettingsStore.getState().setDefaultShell(shell)
+  }, [])
 
   // Handler: Close terminal by id (or active terminal if no id provided)
   const handleCloseTerminal = useCallback(async (terminalId?: string) => {
@@ -176,13 +193,29 @@ function App() {
     window.electron.terminal.write(terminalId, formatted)
   }, [])
 
-  // Handler: Toggle YOLO mode
+  // Handler: Toggle YOLO mode (shows first-time warning dialog per project)
   const handleYoloToggle = useCallback(async (enabled: boolean) => {
     if (!activeProject) return
-    const result = await window.electron.yolo.set(activeProject.path, enabled)
-    if (result.success) {
-      setYoloEnabled(enabled)
+
+    if (enabled) {
+      const warningKey = `yolo-warned-${activeProject.path}`
+      if (!localStorage.getItem(warningKey)) {
+        setShowYoloDialog(true)
+        return
+      }
     }
+
+    const result = await window.electron.yolo.set(activeProject.path, enabled)
+    if (result.success) setYoloEnabled(enabled)
+  }, [activeProject])
+
+  // Handler: User confirmed YOLO warning dialog
+  const handleYoloConfirm = useCallback(async () => {
+    if (!activeProject) return
+    localStorage.setItem(`yolo-warned-${activeProject.path}`, '1')
+    setShowYoloDialog(false)
+    const result = await window.electron.yolo.set(activeProject.path, true)
+    if (result.success) setYoloEnabled(true)
   }, [activeProject])
 
   // Handler: Kill all terminals in active project (with delay to prevent WebGL warnings)
@@ -253,6 +286,21 @@ function App() {
     loadNotificationSettings()
     detectWsl()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load available shells on mount; restore saved default shell if still present
+  useEffect(() => {
+    window.electron.terminal.getAvailableShells().then(shells => {
+      setAvailableShells(shells)
+      // Validate saved default shell still exists in the list; reset if not
+      const savedDefault = useSettingsStore.getState().savedSettings.defaultShell
+      if (savedDefault) {
+        const stillValid = shells.some(s => s.path === savedDefault.path)
+        setSelectedShell(stillValid ? savedDefault : null)
+      }
+    }).catch(() => {
+      // getAvailableShells is best-effort — continue without shell list
+    })
   }, [])
 
   // Load YOLO status when project changes
@@ -452,7 +500,15 @@ function App() {
         }}
       />
 
-      {/* Toolbar - replaces old titlebar + activity bar */}
+      {/* YOLO first-time warning dialog */}
+      {showYoloDialog && (
+        <YoloWarningDialog
+          onConfirm={handleYoloConfirm}
+          onCancel={() => setShowYoloDialog(false)}
+        />
+      )}
+
+      {/* Toolbar with inline Chrome-style project tabs */}
       <Toolbar
         onAddTerminal={handleAddTerminal}
         terminalCount={visibleTerminals.length}
@@ -460,6 +516,11 @@ function App() {
         onToggleGitHub={() => togglePanel('github')}
         onToggleSettings={() => togglePanel('settings')}
         activePanel={activePanel}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={handleSelectProject}
+        onAddProject={handleAddProject}
+        onDeleteProject={handleDeleteProject}
       />
       <UpdateBanner />
 
@@ -467,14 +528,6 @@ function App() {
       <div className="main-content">
         {activeProjectId ? (
           <div className="terminal-area">
-            <TerminalActionBar
-              terminalCount={visibleTerminals.length}
-              terminalLimit={getTerminalLimitValue()}
-              yoloEnabled={yoloEnabled}
-              onAddTerminal={handleAddTerminal}
-              onToggleYolo={handleYoloToggle}
-              onKillAll={handleKillAll}
-            />
             <div data-testid="terminal-area" style={{ flex: 1, minHeight: 0 }}>
               <TerminalGrid
                 terminals={terminals}
@@ -488,21 +541,26 @@ function App() {
                 onTitleChange={updateTerminalTitle}
               />
             </div>
-
           </div>
         ) : (
           <WelcomeScreen onAddProject={handleAddProject} />
         )}
       </div>
 
-      {/* Project bar - horizontal tab list below terminal */}
-      <ProjectBar
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onSelectProject={handleSelectProject}
-        onAddProject={handleAddProject}
-        onDeleteProject={handleDeleteProject}
-      />
+      {/* Bottom icon action bar — replaces ProjectBar space */}
+      {activeProjectId && (
+        <TerminalActionBar
+          terminalCount={visibleTerminals.length}
+          terminalLimit={getTerminalLimitValue()}
+          yoloEnabled={yoloEnabled}
+          availableShells={availableShells}
+          selectedShell={selectedShell}
+          onShellSelect={handleShellSelect}
+          onAddTerminal={handleAddTerminal}
+          onToggleYolo={handleYoloToggle}
+          onKillAll={handleKillAll}
+        />
+      )}
     </div>
   )
 }

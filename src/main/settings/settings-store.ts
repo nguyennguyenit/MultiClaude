@@ -112,25 +112,6 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
       : defaults.uiStyle
   }
 
-  // Validate vietnameseImeFix (boolean passthrough)
-  if (settings.vietnameseImeFix !== undefined) {
-    validated.vietnameseImeFix = typeof settings.vietnameseImeFix === 'boolean'
-      ? settings.vietnameseImeFix
-      : defaults.vietnameseImeFix
-  }
-  // vietnameseImeClaudeVersion: string validation
-  if (settings.vietnameseImeClaudeVersion !== undefined) {
-    validated.vietnameseImeClaudeVersion = typeof settings.vietnameseImeClaudeVersion === 'string'
-      ? settings.vietnameseImeClaudeVersion
-      : defaults.vietnameseImeClaudeVersion
-  }
-  // vietnameseImeClaudePath: string validation
-  if (settings.vietnameseImeClaudePath !== undefined) {
-    validated.vietnameseImeClaudePath = typeof settings.vietnameseImeClaudePath === 'string'
-      ? settings.vietnameseImeClaudePath
-      : defaults.vietnameseImeClaudePath
-  }
-
   // Validate terminalStyleOptions
   if (settings.terminalStyleOptions !== undefined) {
     const opts = settings.terminalStyleOptions

@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
   TERMINAL_CREATED: 'terminal:created',
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
+  TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
 
   // Project channels
   PROJECT_LIST: 'project:list',
@@ -118,10 +119,6 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESET: 'settings:reset',
-  // Vietnamese IME channels
-  VIETNAMESE_IME_PATCH: 'vietnamese-ime:patch',
-  VIETNAMESE_IME_STATUS: 'vietnamese-ime:status',
-
   // Windows channels
   WINDOW_GET_STATE: 'window:get-state',
   WINDOW_STATE_CHANGED: 'window:state-changed',

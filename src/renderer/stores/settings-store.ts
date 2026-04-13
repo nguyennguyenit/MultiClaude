@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, AppFontId, ActivityBarState } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, AppFontId, ActivityBarState, ShellInfo } from '@shared/types'
 import { DEFAULT_SETTINGS, APP_FONTS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
@@ -54,13 +54,12 @@ interface SettingsState {
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setWindowsShell: (shell: WindowsShell) => void
+  setDefaultShell: (shell: ShellInfo | null) => Promise<void>
   setUiStyle: (style: UiStyle) => void
   setModernFontFamily: (fontId: AppFontId) => void
   setTerminalFontFamily: (fontId: TerminalFontId) => void
   setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
   setActivityBarState: (state: ActivityBarState) => void
-  setVietnameseImeFix: (enabled: boolean) => void
-
   // Actions
   saveSettings: () => Promise<void>      // Persist pending → saved
   cancelSettings: () => void             // Revert pending → saved
@@ -89,8 +88,6 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.modernFontFamily !== b.modernFontFamily) return false
   if (a.terminalFontFamily !== b.terminalFontFamily) return false
   if (a.activityBarState !== b.activityBarState) return false
-  if (a.vietnameseImeFix !== b.vietnameseImeFix) return false
-
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
   const bLimit = b.terminalLimit
@@ -191,6 +188,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
+  // Persist selected shell to disk immediately (cross-platform shell persistence)
+  setDefaultShell: async (shell) => {
+    const updated = { ...get().savedSettings, defaultShell: shell ?? undefined }
+    try {
+      await window.electron.settings.set({ defaultShell: shell ?? undefined })
+      set({ savedSettings: updated })
+    } catch (err) {
+      console.error('[settings] Failed to persist defaultShell:', err)
+    }
+  },
+
   setUiStyle: (style) => {
     const pending = { ...get().pendingSettings, uiStyle: style }
     set({
@@ -233,14 +241,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setActivityBarState: (state) => {
     const pending = { ...get().pendingSettings, activityBarState: state }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
-  setVietnameseImeFix: (enabled) => {
-    const pending = { ...get().pendingSettings, vietnameseImeFix: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

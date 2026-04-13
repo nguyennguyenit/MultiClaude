@@ -78,10 +78,21 @@ MultiClaude v3.1.0-beta.1 is an Electron 33 + React 19 + TypeScript desktop appl
 
 #### Toolbar & UI Components (VibeTerminal v1.2)
 - **Toolbar** (32px compact header replacing activity bar + project tabs):
-  - **toolbar.tsx**: Main toolbar with left brand area and right-side GitHub, Settings, and window controls
+  - **toolbar.tsx**: Main toolbar with left (add terminal + project dropdown) and right (GitHub, Settings, Update) groups
   - **toolbar-button.tsx**: Reusable icon button with optional badge/highlight
+  - **project-dropdown.tsx**: Project selector dropdown with add project button
   - Features: macOS traffic light padding (72px left), drag region behind buttons
   - Keyboard shortcuts: Ctrl+T (new terminal), Ctrl+G (toggle GitHub panel)
+- **Shell Switcher** (NEW - macOS/Linux/Windows support):
+  - **Action Bar Shell Dropdown**: Clickable `>_ <shell> ▾` dropdown in terminal action bar for per-platform shell selection
+  - **macOS/Linux Detection**: Detects installed shells from `/etc/shells` + common paths (bash, zsh, fish, etc.), validates executable via `macos-shell-detector.ts`
+  - **Windows Support**: Reuses existing `WindowsShell` union (cmd, PowerShell, WSL distros)
+  - **Type System**: `ShellInfo` interface with `kind` field for unified handling across platforms
+  - **IPC Endpoint**: `GET_AVAILABLE_SHELLS` returns platform-specific list via `terminal-manager.ts`
+  - **Persistence**: Selected shell persisted to `AppSettings.defaultShell`, restored on app load with validation
+  - **Components**: `shell-selector-dropdown.tsx` renders dropdown, unified across action bar + settings UI
+  - **Scope**: New terminals spawn with selected shell; existing terminals unaffected (restart app to refresh shell list)
+  - **Security**: Command injection prevention for `dscl`, path validation, distro name validation, symlink awareness
 - **Slide Panels** (modal dialogs replaced with side panels):
   - Position: Right edge on landscape (340px wide), bottom edge on portrait
   - GitHub Panel: Accessed via Ctrl+G or toolbar, toggles github-view.tsx content
@@ -203,6 +214,7 @@ src/
 │   ├── terminal/            # PTY management
 │   │   ├── terminal-manager.ts
 │   │   ├── wsl-detector.ts      # WSL detection (Windows)
+│   │   ├── macos-shell-detector.ts  # Shell detection (macOS/Linux)
 │   │   └── pty-handler.ts
 │   ├── git/                 # Git operations
 │   │   ├── git-manager.ts
@@ -212,8 +224,6 @@ src/
 │   ├── notification/        # Notification system
 │   │   ├── notification-manager.ts
 │   │   ├── secure-storage.ts
-│   ├── vietnamese-ime-patcher/  # Vietnamese IME support (NEW)
-│   │   └── vietnamese-ime-patcher.ts
 │   │   ├── pattern-detector.ts
 │   │   ├── focus-detector.ts        # Window/terminal focus tracking
 │   │   ├── task-tracker.ts          # Task ID deduplication with TTL
@@ -248,6 +258,7 @@ src/
 │   │   │   ├── terminal-pane.tsx
 │   │   │   ├── terminal-view.tsx
 │   │   │   ├── terminal-action-bar.tsx
+│   │   │   ├── shell-selector-dropdown.tsx  # Shell switcher dropdown
 │   │   │   └── index.ts
 │   ├── sidebar/         # Project/settings sidebar
 │   │   ├── sidebar.tsx
@@ -271,6 +282,7 @@ src/
 │   ├── toolbar/                     # 32px compact header
 │   │   ├── toolbar.tsx
 │   │   ├── toolbar-button.tsx
+│   │   ├── project-dropdown.tsx
 │   │   └── index.ts
 │   ├── git-panel/                   # Git operations UI
 │   ├── github-view/                 # GitHub integration UI
@@ -448,11 +460,12 @@ interface ProjectTerminal {
 - **Electron Forge**: Native packaging for Win/Mac/Linux
 - **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
 - **Build**: `npm run build` (creates distributable)
-- **Release Command**: Claude Code native skill `/release <target>` backed by `scripts/release/`
-  - Command: `/release <target>` where target is `current`, `main`, `beta`, or branch name
-  - Includes preview validation before execute
+- **Release Command**: Repo-local Codex skill `$release <target>` backed by `scripts/release/`
+  - Preview: `node scripts/release/release-command.mjs preview --target <target>`
+  - Execute: `node scripts/release/release-command.mjs execute --target <target> --version <version> --release-type <stable|prerelease> --confirm`
+  - Shell fallback: `npm run release -- --target <target>` and `npm run release:execute -- ...`
   - Requires valid `gh auth status` and a clean working tree
-  - Draft-first workflow: creates draft, dispatches `.github/workflows/release.yml` via `workflow_dispatch`, waits for CI assets
+  - Pushes the release tag first, creates the draft release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, waits for CI assets to upload into that draft, then pushes the branch commit
 - **Packaging Scripts**: `npm run build` / `npm run build:ci` for local and CI packaging
   - Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer release workflow
 - **Testing**: Vitest with V8 coverage (60% thresholds)
