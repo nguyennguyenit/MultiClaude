@@ -2,6 +2,8 @@ import { useEffect, useRef, memo, CSSProperties, useCallback, useState } from 'r
 import { useTerminal } from '../../hooks/use-terminal'
 import { useAppStore, useImageStore } from '../../stores'
 import { resolveImagePathFromLine } from './terminal-image-path-resolver'
+import { processTerminalOutputChunk } from './terminal-output-handler'
+import { registerTerminalOutputHandler } from '../../utils/terminal-output-dispatcher'
 
 // Helper to find all image paths in line and return the one at given column
 function findImagePathAtColumn(lineText: string, col: number, terminalId: string): { start: number; end: number } | null {
@@ -285,20 +287,18 @@ export const TerminalView = memo(function TerminalView({
     return () => clearTimeout(timer)
   }, [])
 
-  // Listen for terminal output
+  // Listen for terminal output via the shared app-level dispatcher
   useEffect(() => {
-    const unsubscribe = window.electron.terminal.onOutput(({ terminalId: id, data }) => {
-      if (id === terminalId) {
-        const visibleData = write(data)
-        // Notify parent of output for streaming detection
-        onOutput?.()
-        // Skip appending during restore period to prevent duplicate prompts
-        if (!skipAppendRef.current && visibleData) {
-          appendOutput(terminalId, visibleData)
-        }
-      }
+    return registerTerminalOutputHandler(terminalId, (data) => {
+      processTerminalOutputChunk({
+        terminalId,
+        data,
+        write,
+        onOutput,
+        skipAppend: skipAppendRef.current,
+        appendOutput
+      })
     })
-    return unsubscribe
   }, [terminalId, write, appendOutput, onOutput])
 
   // Focus when becomes active, blur when inactive

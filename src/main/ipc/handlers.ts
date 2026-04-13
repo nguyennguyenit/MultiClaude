@@ -149,7 +149,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (options?.shellPath !== undefined) {
       if (
         typeof options.shellPath !== 'string' ||
-        !/^\/[^;\|&\x00-\x1f]{1,512}$/.test(options.shellPath)
+        !/^\/[^;|&\x00-\x1f]{1,512}$/.test(options.shellPath)
       ) {
         throw new Error('Invalid shellPath')
       }

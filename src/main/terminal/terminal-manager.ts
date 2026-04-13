@@ -2,7 +2,7 @@ import * as pty from '@lydell/node-pty'
 import os from 'os'
 import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readdirSync, realpathSync } from 'fs'
 import path from 'path'
 import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS } from '@shared/constants'
 import type { Terminal, TerminalSession, WindowsShell, AgentType, ShellInfo, WslInfo, CreateTerminalOptions } from '@shared/types'
@@ -252,7 +252,6 @@ export class TerminalManager extends EventEmitter {
   private isAllowedShell(shellPath: string): boolean {
     if (!this.resolvedShellPaths) return false
     try {
-      const { realpathSync } = require('fs') as typeof import('fs')
       const resolved = realpathSync(shellPath)
       return this.resolvedShellPaths.has(resolved)
     } catch {

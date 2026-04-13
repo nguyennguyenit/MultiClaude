@@ -13,8 +13,8 @@ const COMMON_SHELL_DIRS = [
 
 const COMMON_SHELL_NAMES = ['zsh', 'bash', 'fish', 'sh', 'tcsh', 'ksh']
 const MAX_ETC_SHELLS_ENTRIES = 50
-const USERNAME_RE = /^[a-z_][a-z0-9_.\-]{0,30}$/
-const ABSOLUTE_PATH_RE = /^\/[a-zA-Z0-9._\/-]+$/
+const USERNAME_RE = /^[a-z_][a-z0-9_.-]{0,30}$/
+const ABSOLUTE_PATH_RE = /^\/[a-zA-Z0-9._/-]+$/
 
 /**
  * Resolve the user's default login shell.

@@ -12,6 +12,8 @@ import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
+import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
+import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { ShellInfo, Project } from '@shared/types'
 
@@ -31,6 +33,8 @@ function App() {
   const setActiveProject = useAppStore((state) => state.setActiveProject)
   const setActiveTerminal = useAppStore((state) => state.setActiveTerminal)
   const switchToProject = useAppStore((state) => state.switchToProject)
+  const savedDefaultShell = useSettingsStore((state) => state.savedSettings.defaultShell)
+  const setDefaultShell = useSettingsStore((state) => state.setDefaultShell)
 
   // Active slide panel: 'github' | 'settings' | null
   const [activePanel, setActivePanel] = useState<string | null>(null)
@@ -55,6 +59,7 @@ function App() {
 
   // Shell switcher state (loaded from IPC on mount, persisted via settings)
   const [availableShells, setAvailableShells] = useState<ShellInfo[]>([])
+  const [hasLoadedShells, setHasLoadedShells] = useState(false)
   const [selectedShell, setSelectedShell] = useState<ShellInfo | null>(null)
 
   // Get active project for terminal creation
@@ -292,16 +297,21 @@ function App() {
   useEffect(() => {
     window.electron.terminal.getAvailableShells().then(shells => {
       setAvailableShells(shells)
-      // Validate saved default shell still exists in the list; reset if not
-      const savedDefault = useSettingsStore.getState().savedSettings.defaultShell
-      if (savedDefault) {
-        const stillValid = shells.some(s => s.path === savedDefault.path)
-        setSelectedShell(stillValid ? savedDefault : null)
-      }
+      setHasLoadedShells(true)
     }).catch(() => {
       // getAvailableShells is best-effort — continue without shell list
     })
   }, [])
+
+  useEffect(() => {
+    void reconcileSavedDefaultShell({
+      hasLoadedShells,
+      shells: availableShells,
+      savedDefault: savedDefaultShell,
+      setSelectedShell,
+      persistDefaultShell: setDefaultShell
+    })
+  }, [availableShells, hasLoadedShells, savedDefaultShell, setDefaultShell])
 
   // Load YOLO status when project changes
   useEffect(() => {
@@ -413,6 +423,8 @@ function App() {
     })
     return unsubscribe
   }, [])
+
+  useEffect(() => attachTerminalOutputDispatcher(window.electron.terminal.onOutput), [])
 
   // Handle terminal title changes (from OSC escape sequences)
   useEffect(() => {
