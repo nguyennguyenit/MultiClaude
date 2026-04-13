@@ -33,7 +33,7 @@ const REFRESH_DEBOUNCE = 100  // Debounce refresh to prevent spam
 const COPY_TOAST_DEBOUNCE = 2000  // Debounce copy notification to prevent spam on rapid selections
 const FONT_LOAD_REFIT_DELAY = 100  // Delay after font load to refit terminal
 const RESIZE_REFIT_SETTLE_DELAY = 120  // Second fit after layout settles on maximize/unmaximize
-const TERMINAL_MIN_CONTRAST_RATIO = 4.5  // Keep black-on-gray ANSI spans readable in Codex/Claude output
+const TERMINAL_MIN_CONTRAST_RATIO = 2.0  // Reduced from 4.5 — less CPU scan overhead, still readable for Claude/Codex output
 const USER_SCROLL_WHEEL_GRACE = 180  // Keep wheel scroll intent alive long enough to win the next write callback
 const USER_SCROLL_DRAG_GRACE = 1200  // Allow scrollbar dragging to continue across streaming output
 // NOTE: Cursor restore delay removed - CLI manages its own cursor
@@ -520,7 +520,7 @@ export function useTerminal({
       allowProposedApi: true,
       windowsMode: false,     // Don't auto-convert \r to \r\n - fixes in-place status line updates
       convertEol: false,      // Don't auto-convert line endings - preserves cursor positioning
-      scrollback: 50000       // Large scrollback buffer for extensive CLI output
+      scrollback: 5000        // Reduced from 50k — was ~37MB/terminal, now ~3.7MB (configurable in Settings later)
     })
 
     const fitAddon = new FitAddon()

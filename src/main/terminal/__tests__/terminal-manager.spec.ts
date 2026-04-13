@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import * as pty from '@lydell/node-pty'
 import { TerminalManager } from '../terminal-manager'
+import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
 
 const mockSpawnSync = vi.hoisted(() => vi.fn())
 const mockExistsSync = vi.hoisted(() => vi.fn())
@@ -326,15 +327,15 @@ describe('TerminalManager', () => {
       expect(sessions[0].projectId).toBe('proj-1')
     })
 
-    it('preserves buffered output beyond 100KB for restore', () => {
+    it('trims buffered output to TRIM_TO when exceeding BUFFER_MAX', () => {
       const term = manager.create()
-      const largeOutput = 'x'.repeat(150000)
+      const largeOutput = 'x'.repeat(TERMINAL_OUTPUT_BUFFER_MAX + 25)
 
       mockPty._dataCallback?.(largeOutput)
 
       const sessions = manager.getSessions()
       expect(sessions[0].id).toBe(term.id)
-      expect(sessions[0].outputBuffer).toHaveLength(150000)
+      expect(sessions[0].outputBuffer).toHaveLength(TERMINAL_OUTPUT_BUFFER_TRIM_TO)
     })
 
     it('can attach a Claude session ID to a live Claude terminal by cwd', () => {
