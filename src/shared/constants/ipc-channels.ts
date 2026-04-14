@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   TERMINAL_CREATED: 'terminal:created',
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
   TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
+  TERMINAL_SHOW_CONTEXT_MENU: 'terminal:show-context-menu',
 
   // Project channels
   PROJECT_LIST: 'project:list',

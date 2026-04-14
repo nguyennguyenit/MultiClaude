@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
+import { BrowserWindow, ipcMain, dialog, shell, app, screen, Menu, clipboard } from 'electron'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -196,6 +196,34 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Shell list handler — cached at startup, returns same promise on subsequent calls
   safeHandle(IPC_CHANNELS.TERMINAL_GET_SHELLS, () => terminalManager.getAvailableShells())
+
+  safeHandle(IPC_CHANNELS.TERMINAL_SHOW_CONTEXT_MENU, async (_, {
+    terminalId,
+    x,
+    y
+  }: {
+    terminalId: string
+    x: number
+    y: number
+  }) => {
+    const menu = Menu.buildFromTemplate([
+      {
+        label: 'Paste',
+        click: () => {
+          const text = clipboard.readText()
+          if (text) {
+            terminalManager.write(terminalId, text)
+          }
+        }
+      }
+    ])
+
+    menu.popup({
+      window,
+      x: Math.max(0, Math.round(x)),
+      y: Math.max(0, Math.round(y))
+    })
+  })
 
   // Project handlers
   safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {

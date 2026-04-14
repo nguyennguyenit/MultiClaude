@@ -745,19 +745,15 @@ export function useTerminal({
       syncFontAfterLoad()
     }, TERMINAL_INIT_DELAY)
 
-    // Right-click paste (prevent context menu)
-    terminal.element?.addEventListener('contextmenu', async (e) => {
+    // Right-click opens a native menu so paste happens only after explicit confirmation.
+    terminal.element?.addEventListener('contextmenu', (e) => {
+      if (!(e instanceof MouseEvent)) return
       e.preventDefault()
-      try {
-        const text = await navigator.clipboard.readText()
-        // Write directly to PTY to avoid duplicate from terminal.paste()
-        if (text) {
-          followLiveOutput()
-          window.electron.terminal.write(terminalId, text)
-        }
-      } catch {
-        // Clipboard permission denied - ignore silently
-      }
+      void window.electron.terminal.showContextMenu({
+        terminalId,
+        x: e.clientX,
+        y: e.clientY
+      })
     })
 
     // Intercept global shortcuts before xterm processes them

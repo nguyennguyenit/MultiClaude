@@ -153,6 +153,46 @@ test.describe('Terminal Pane Interactions', () => {
     expect(clipboardText).not.toBe('SENTINEL')
   })
 
+  test('right-click does not paste clipboard text immediately', async ({ window }) => {
+    const terminalIds = await window.evaluate(() => {
+      const store = (window as unknown as {
+        __APP_STORE__?: {
+          getState: () => {
+            activeTerminalId: string | null
+          }
+        }
+      }).__APP_STORE__
+
+      const state = store?.getState()
+      return {
+        activeTerminalId: state?.activeTerminalId ?? null
+      }
+    })
+
+    expect(terminalIds.activeTerminalId).toBeTruthy()
+
+    const terminalScreen = window.locator(`[data-terminal-id="${terminalIds.activeTerminalId}"] .xterm-screen`)
+    await expect(terminalScreen).toBeVisible()
+
+    const pastedMarker = 'RIGHT_CLICK_MENU_SENTINEL'
+    await window.evaluate((text) => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          readText: async () => text,
+          writeText: async () => {}
+        }
+      })
+    }, pastedMarker)
+
+    await terminalScreen.click({ button: 'right' })
+    await window.waitForTimeout(WAIT_TIMES.LONG)
+
+    await expect(window.locator(`text=${pastedMarker}`)).toHaveCount(0)
+
+    await window.keyboard.press('Escape').catch(() => {})
+  })
+
   test.skip('new title saves on Enter', async ({ window }) => {
     // Skip: Title updates require store state propagation which doesn't work reliably in test env
     const terminalPane = window.locator('.terminal-pane').first()
