@@ -11,7 +11,11 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'release', 'src/__tests__/e2e'],
-    setupFiles: ['src/main/__tests__/setup.ts'],
+    setupFiles: ['src/main/__tests__/setup.ts', 'src/renderer/__tests__/setup.ts'],
+    environmentMatchGlobs: [
+      ['src/renderer/hooks/__tests__/**/*.spec.ts', 'jsdom'],
+      ['src/renderer/utils/__tests__/terminal-scroll-machine.spec.ts', 'node'],
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
