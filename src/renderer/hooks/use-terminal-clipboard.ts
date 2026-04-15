@@ -1,11 +1,11 @@
 /**
- * useTerminalClipboard — manages selection auto-copy, image paste, and context menu.
+ * useTerminalClipboard — manages image paste and context menu.
  *
  * Responsibilities:
- *   - Auto-copy text selections to clipboard (with debounce and toast debounce)
  *   - Handle Ctrl+V / Cmd+V: detect images in clipboard and save to temp file;
  *     fall back to plain text paste via PTY write
- *   - Register right-click context menu handler via electron IPC
+ *   - Register right-click context menu handler via electron IPC (Copy when selection
+ *     exists, always Paste)
  *   - Expose attachClipboardListeners(terminal) — called by initTerminal after terminal.open()
  *   - Expose getCtrlVHandler(terminal) — used in attachCustomKeyEventHandler
  *
@@ -13,32 +13,20 @@
  */
 import { useRef, useCallback } from 'react'
 import type { RefObject } from 'react'
-import type { Terminal as XTerm, IDisposable } from '@xterm/xterm'
-import { useToastStore, useImageStore } from '../stores'
-
-const COPY_TOAST_DEBOUNCE = 2000  // ms between copy notifications
-
-export interface ClipboardViewportEventListener {
-  target: EventTarget
-  type: string
-  handler: EventListener
-}
+import type { Terminal as XTerm } from '@xterm/xterm'
+import { useImageStore } from '../stores'
 
 interface UseTerminalClipboardParams {
-  terminalRef: RefObject<XTerm | null>
-  disposedRef: RefObject<boolean>
   terminalId: string
 }
 
 interface UseTerminalClipboardResult {
   /**
-   * Call after terminal.open() to wire up all clipboard-related event listeners.
-   * Returns cleanup handles the orchestrator must dispose on unmount.
+   * Call after terminal.open() to wire up clipboard-related event listeners
+   * (right-click context menu). Copy on selection has been removed — users copy
+   * via right-click menu or Cmd/Ctrl+C.
    */
-  attachClipboardListeners: (terminal: XTerm) => {
-    selectionChangeDisposable: IDisposable
-    selectionListeners: ClipboardViewportEventListener[]
-  }
+  attachClipboardListeners: (terminal: XTerm) => void
   /**
    * Build the Ctrl+V key handler.
    * Pass the result to terminal.attachCustomKeyEventHandler in initTerminal.
@@ -51,109 +39,23 @@ interface UseTerminalClipboardResult {
   followLiveOutputRef: RefObject<(() => void) | null>
 }
 
-export function useTerminalClipboard(params: UseTerminalClipboardParams): UseTerminalClipboardResult {
-  const { terminalId } = params
-
-  const lastCopyToastTimeRef = useRef(0)
-  const selectionCopyPendingRef = useRef(false)
-  const selectionChangedSinceMouseDownRef = useRef(false)
-  const selectionCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastSelectionSnapshotRef = useRef('')
-  const terminalRefForHandlers = useRef<XTerm | null>(null)
+export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams): UseTerminalClipboardResult {
 
   /**
    * Ref that orchestrator fills with followLiveOutput() after useTerminalScroll is set up.
    */
   const followLiveOutputRef = useRef<(() => void) | null>(null)
 
-  const copySelectionToClipboard = useCallback(async (selectionOverride?: string) => {
-    const selection = selectionOverride ?? terminalRefForHandlers.current?.getSelection()
-    if (!selection) return
-
-    try {
-      await navigator.clipboard.writeText(selection)
-      const now = Date.now()
-      if (now - lastCopyToastTimeRef.current > COPY_TOAST_DEBOUNCE) {
-        useToastStore.getState().addToast('Copied to clipboard', 'info')
-        lastCopyToastTimeRef.current = now
-      }
-    } catch {
-      // Clipboard permission denied — ignore silently
-    }
-  }, [])
-
   const attachClipboardListeners = useCallback((terminal: XTerm) => {
-    // Store terminal ref for handlers that need it after open()
-    terminalRefForHandlers.current = terminal
-
-    // ── Selection auto-copy helpers ──────────────────────────────────────────
-    const clearSelectionCopyTimer = () => {
-      if (selectionCopyTimerRef.current) {
-        clearTimeout(selectionCopyTimerRef.current)
-        selectionCopyTimerRef.current = null
-      }
-    }
-
-    const scheduleSelectionCopy = () => {
-      clearSelectionCopyTimer()
-      selectionCopyTimerRef.current = setTimeout(() => {
-        selectionCopyTimerRef.current = null
-        const selection = lastSelectionSnapshotRef.current || terminal.getSelection()
-        void copySelectionToClipboard(selection)
-      }, 80)
-    }
-
-    const finalizeSelectionCopy = async () => {
-      if (!selectionCopyPendingRef.current) return
-
-      const didSelectionChange = selectionChangedSinceMouseDownRef.current
-      selectionCopyPendingRef.current = false
-      selectionChangedSinceMouseDownRef.current = false
-      clearSelectionCopyTimer()
-
-      if (!didSelectionChange) return
-      const selection = terminal.getSelection() || lastSelectionSnapshotRef.current
-      lastSelectionSnapshotRef.current = ''
-      await copySelectionToClipboard(selection)
-    }
-
-    // ── xterm selection-change disposable ────────────────────────────────────
-    const selectionChangeDisposable = terminal.onSelectionChange(() => {
-      if (selectionCopyPendingRef.current) {
-        selectionChangedSinceMouseDownRef.current = true
-        const selection = terminal.getSelection()
-        if (selection) lastSelectionSnapshotRef.current = selection
-        scheduleSelectionCopy()
-      }
-    })
-
-    // ── DOM mouse listeners on terminal element ──────────────────────────────
-    const selectionListeners: ClipboardViewportEventListener[] = []
-    const addSelectionListener = (target: EventTarget, type: string, handler: EventListener) => {
-      target.addEventListener(type, handler)
-      selectionListeners.push({ target, type, handler })
-    }
-
-    if (terminal.element) {
-      addSelectionListener(terminal.element, 'mousedown', (event) => {
-        if (!(event instanceof MouseEvent) || event.button !== 0) return
-        selectionCopyPendingRef.current = true
-        selectionChangedSinceMouseDownRef.current = false
-        lastSelectionSnapshotRef.current = ''
-      })
-      addSelectionListener(window, 'mouseup', () => { void finalizeSelectionCopy() })
-      addSelectionListener(window, 'blur', () => { void finalizeSelectionCopy() })
-    }
-
     // ── Right-click context menu ─────────────────────────────────────────────
     terminal.element?.addEventListener('contextmenu', (e) => {
       if (!(e instanceof MouseEvent)) return
       e.preventDefault()
-      void window.electron.terminal.showContextMenu({ terminalId, x: e.clientX, y: e.clientY })
+      const selection = terminal.getSelection() || undefined
+      void window.electron.terminal.showContextMenu({ terminalId, x: e.clientX, y: e.clientY, selection })
     })
 
-    return { selectionChangeDisposable, selectionListeners }
-  }, [copySelectionToClipboard, terminalId])
+  }, [terminalId])
 
   /**
    * Returns the Ctrl+V / Cmd+V key handler for use in attachCustomKeyEventHandler.

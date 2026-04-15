@@ -4,6 +4,7 @@ const {
   buildFromTemplateMock,
   popupMock,
   readTextMock,
+  writeTextMock,
   ipcHandleMock,
   ipcRemoveHandlerMock,
   ipcOnMock,
@@ -15,6 +16,7 @@ const {
     buildFromTemplateMock: vi.fn(),
     popupMock: vi.fn(),
     readTextMock: vi.fn(),
+    writeTextMock: vi.fn(),
     ipcHandleMock: vi.fn((channel: string, listener: (...args: unknown[]) => unknown) => {
       registry.set(channel, listener)
     }),
@@ -54,7 +56,8 @@ vi.mock('electron', () => ({
     buildFromTemplate: buildFromTemplateMock
   },
   clipboard: {
-    readText: readTextMock
+    readText: readTextMock,
+    writeText: writeTextMock
   }
 }))
 
@@ -131,7 +134,7 @@ describe('terminal context menu IPC handler', () => {
     readTextMock.mockReturnValue('clipboard text')
   })
 
-  it('registers a terminal context-menu handler that shows a Paste item and only pastes on click', async () => {
+  it('shows only Paste when no selection is provided', async () => {
     const window = createWindowMock()
     const managers = createManagersMock()
 
@@ -144,18 +147,37 @@ describe('terminal context menu IPC handler', () => {
 
     expect(buildFromTemplateMock).toHaveBeenCalledTimes(1)
     const template = buildFromTemplateMock.mock.calls[0]?.[0]
-    expect(template).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ label: 'Paste' })
-      ])
-    )
+    expect(template).toEqual([expect.objectContaining({ label: 'Paste' })])
     expect(managers.terminalManager.write).not.toHaveBeenCalled()
 
-    const pasteItem = template[0]
+    const pasteItem = template.find((item: { label?: string }) => item.label === 'Paste')
     await pasteItem.click()
 
     expect(readTextMock).toHaveBeenCalledTimes(1)
     expect(managers.terminalManager.write).toHaveBeenCalledWith('term-1', 'clipboard text')
     expect(popupMock).toHaveBeenCalledWith({ window, x: 25, y: 40 })
+  })
+
+  it('shows Copy + separator + Paste when selection is provided, Copy writes to clipboard', async () => {
+    const window = createWindowMock()
+    const managers = createManagersMock()
+
+    registerIpcHandlers(window as never, managers as never)
+
+    const handler = handleRegistry.get('terminal:show-context-menu')
+    await handler?.({}, { terminalId: 'term-1', x: 10, y: 20, selection: 'selected text' })
+
+    const template = buildFromTemplateMock.mock.calls[0]?.[0]
+    expect(template).toEqual([
+      expect.objectContaining({ label: 'Copy' }),
+      expect.objectContaining({ type: 'separator' }),
+      expect.objectContaining({ label: 'Paste' })
+    ])
+
+    const copyItem = template.find((item: { label?: string }) => item.label === 'Copy')
+    copyItem.click()
+
+    expect(writeTextMock).toHaveBeenCalledWith('selected text')
+    expect(managers.terminalManager.write).not.toHaveBeenCalled()
   })
 })

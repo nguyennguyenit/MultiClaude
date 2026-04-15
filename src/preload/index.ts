@@ -39,7 +39,7 @@ export interface ElectronAPI {
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     detectWsl: () => Promise<WslInfo>
     getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
-    showContextMenu: (options: { terminalId: string; x: number; y: number }) => Promise<void>
+    showContextMenu: (options: { terminalId: string; x: number; y: number; selection?: string }) => Promise<void>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void

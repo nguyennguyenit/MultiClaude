@@ -14,7 +14,7 @@ import { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { useTerminalWebGL } from './use-terminal-webgl'
 import { useTerminalFontTheme } from './use-terminal-font-theme'
 import { useTerminalKeyboard } from './use-terminal-keyboard'
-import { useTerminalClipboard, type ClipboardViewportEventListener } from './use-terminal-clipboard'
+import { useTerminalClipboard } from './use-terminal-clipboard'
 import { useTerminalVisibility } from './use-terminal-visibility'
 import { useTerminalInit } from './use-terminal-init'
 import { useTerminalScroll } from './use-terminal-scroll'
@@ -52,9 +52,7 @@ export function useTerminal({
   const scrollMachineRef = useRef(new TerminalScrollMachine())
   const userViewportInteractingRef = useRef(false)
   const scrollDisposableRef = useRef<IDisposable | null>(null)
-  const selectionChangeDisposableRef = useRef<IDisposable | null>(null)
   const viewportListenersRef = useRef<ViewportEventListener[] | null>(null)
-  const selectionListenersRef = useRef<ClipboardViewportEventListener[] | null>(null)
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
 
@@ -109,7 +107,7 @@ export function useTerminal({
   })
 
   const { attachClipboardListeners, getCtrlVHandler, followLiveOutputRef } =
-    useTerminalClipboard({ terminalRef, disposedRef, terminalId })
+    useTerminalClipboard({ terminalId })
   useEffect(() => { followLiveOutputRef.current = followLiveOutput }, [followLiveOutput, followLiveOutputRef])
 
   useTerminalVisibility({
@@ -121,7 +119,6 @@ export function useTerminal({
     terminalRef, fitAddonRef, disposedRef, containerRef, terminalId,
     initialOutput, initialViewportY, isActiveRef, isHiddenRef, scrollMachineRef,
     userViewportInteractingRef, viewportListenersRef, scrollDisposableRef,
-    selectionChangeDisposableRef, selectionListenersRef,
     syncViewportState, clearUserViewportInteraction, markUserViewportInteraction,
     shouldSendEnhancedEnter, attachClipboardListeners, getCtrlVHandler,
     followLiveOutput, reconcileWebGL, syncFontAfterLoad, registerTerminalDebugHandle,
@@ -156,21 +153,17 @@ export function useTerminal({
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
-      const selectionChangeDisposable = selectionChangeDisposableRef.current
       const viewportListeners = viewportListenersRef.current
-      const selectionListeners = selectionListenersRef.current
 
       terminalRef.current = null; fitAddonRef.current = null; webglAddonRef.current = null
-      scrollDisposableRef.current = null; selectionChangeDisposableRef.current = null
-      viewportListenersRef.current = null; selectionListenersRef.current = null
+      scrollDisposableRef.current = null; viewportListenersRef.current = null
       unregisterTerminalDebugHandle()
 
       for (const l of viewportListeners ?? []) l.target.removeEventListener(l.type, l.handler)
-      for (const l of selectionListeners ?? []) l.target.removeEventListener(l.type, l.handler)
 
       setTimeout(() => {
         try {
-          scrollDisposable?.dispose(); selectionChangeDisposable?.dispose()
+          scrollDisposable?.dispose()
           webglAddon?.dispose(); fitAddon?.dispose(); terminal?.dispose()
         } catch { /* may already be disposed */ }
       }, TERMINAL_DISPOSE_DELAY)

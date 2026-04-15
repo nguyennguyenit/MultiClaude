@@ -200,23 +200,35 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   safeHandle(IPC_CHANNELS.TERMINAL_SHOW_CONTEXT_MENU, async (_, {
     terminalId,
     x,
-    y
+    y,
+    selection
   }: {
     terminalId: string
     x: number
     y: number
+    selection?: string
   }) => {
-    const menu = Menu.buildFromTemplate([
-      {
-        label: 'Paste',
-        click: () => {
-          const text = clipboard.readText()
-          if (text) {
-            terminalManager.write(terminalId, text)
-          }
+    const template: Electron.MenuItemConstructorOptions[] = []
+
+    if (selection) {
+      template.push({
+        label: 'Copy',
+        click: () => { clipboard.writeText(selection) }
+      })
+      template.push({ type: 'separator' })
+    }
+
+    template.push({
+      label: 'Paste',
+      click: () => {
+        const text = clipboard.readText()
+        if (text) {
+          terminalManager.write(terminalId, text)
         }
       }
-    ])
+    })
+
+    const menu = Menu.buildFromTemplate(template)
 
     menu.popup({
       window,

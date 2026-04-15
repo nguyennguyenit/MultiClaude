@@ -22,7 +22,6 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import type { UserScrollIntent } from '../utils/terminal-scroll-utils'
-import type { ClipboardViewportEventListener } from './use-terminal-clipboard'
 import {
   isViewportNearBottom,
   isPointerOnViewportScrollbar,
@@ -61,16 +60,11 @@ interface UseTerminalInitParams {
   userViewportInteractingRef: RefObject<boolean>
   viewportListenersRef: RefObject<ViewportEventListener[] | null>
   scrollDisposableRef: RefObject<IDisposable | null>
-  selectionChangeDisposableRef: RefObject<IDisposable | null>
-  selectionListenersRef: RefObject<ClipboardViewportEventListener[] | null>
   syncViewportState: (buffer: XTerm['buffer']['active'], intent?: UserScrollIntent | null) => void
   clearUserViewportInteraction: () => void
   markUserViewportInteraction: (durationMs: number) => void
   shouldSendEnhancedEnter: () => boolean
-  attachClipboardListeners: (terminal: XTerm) => {
-    selectionChangeDisposable: IDisposable
-    selectionListeners: ClipboardViewportEventListener[]
-  }
+  attachClipboardListeners: (terminal: XTerm) => void
   getCtrlVHandler: () => (e: KeyboardEvent) => boolean | undefined
   followLiveOutput: () => void
   reconcileWebGL: () => void
@@ -100,8 +94,6 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     userViewportInteractingRef,
     viewportListenersRef,
     scrollDisposableRef,
-    selectionChangeDisposableRef,
-    selectionListenersRef,
     syncViewportState,
     clearUserViewportInteraction,
     markUserViewportInteraction,
@@ -248,9 +240,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     registerTerminalDebugHandle()
 
     // ── Clipboard listeners ──────────────────────────────────────────────────
-    const { selectionChangeDisposable, selectionListeners } = attachClipboardListeners(terminal)
-    selectionChangeDisposableRef.current = selectionChangeDisposable
-    selectionListenersRef.current = selectionListeners
+    attachClipboardListeners(terminal)
 
     // ── Deferred initialisation (WebGL, fit, restore) ────────────────────────
     setTimeout(() => {
@@ -360,8 +350,6 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     userViewportInteractingRef,
     viewportListenersRef,
     scrollDisposableRef,
-    selectionChangeDisposableRef,
-    selectionListenersRef,
     syncViewportState,
     clearUserViewportInteraction,
     markUserViewportInteraction,

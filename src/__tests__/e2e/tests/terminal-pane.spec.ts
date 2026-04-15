@@ -111,47 +111,6 @@ test.describe('Terminal Pane Interactions', () => {
     await expect(titleInput).toBeFocused()
   })
 
-  test('selection copy still completes when mouseup happens below the terminal surface', async ({ window }) => {
-    const terminalIds = await window.evaluate(() => {
-      const store = (window as unknown as {
-        __APP_STORE__?: {
-          getState: () => {
-            activeTerminalId: string | null
-            terminals: Array<{ id: string }>
-          }
-        }
-      }).__APP_STORE__
-
-      const state = store?.getState()
-      return {
-        activeTerminalId: state?.activeTerminalId ?? null
-      }
-    })
-
-    expect(terminalIds.activeTerminalId).toBeTruthy()
-
-    const sourceScreen = window.locator(`[data-terminal-id="${terminalIds.activeTerminalId}"] .xterm-screen`)
-
-    await expect(sourceScreen).toBeVisible()
-
-    const sourceBox = await sourceScreen.boundingBox()
-    const viewport = await window.evaluate(() => ({ width: globalThis.innerWidth, height: globalThis.innerHeight }))
-
-    expect(sourceBox).not.toBeNull()
-    if (!sourceBox) return
-
-    await window.evaluate(() => navigator.clipboard.writeText('SENTINEL'))
-
-    await window.mouse.move(sourceBox.x + 120, sourceBox.y + 40)
-    await window.mouse.down()
-    await window.mouse.move(sourceBox.x + 320, viewport.height - 20, { steps: 20 })
-    await window.mouse.up()
-
-    await expect(window.locator('text=Copied to clipboard')).toBeVisible({ timeout: 2000 })
-
-    const clipboardText = await window.evaluate(async () => navigator.clipboard.readText())
-    expect(clipboardText).not.toBe('SENTINEL')
-  })
 
   test('right-click does not paste clipboard text immediately', async ({ window }) => {
     const terminalIds = await window.evaluate(() => {
