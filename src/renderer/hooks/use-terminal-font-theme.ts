@@ -115,7 +115,12 @@ export function useTerminalFontTheme(params: UseTerminalFontThemeParams): {
 
       if (!themeChanged) return
 
-      terminalRef.current.options.theme = getCurrentTerminalTheme()
+      const newTheme = getCurrentTerminalTheme()
+      terminalRef.current.options.theme = newTheme
+
+      // Sync viewport background to new theme (xterm v6 no longer does this automatically)
+      const viewport = terminalRef.current.element?.querySelector('.xterm-viewport') as HTMLElement | null
+      if (viewport && newTheme.background) viewport.style.backgroundColor = newTheme.background
 
       // Delegate WebGL reload to orchestrator — it knows about webglAddonRef
       onWebGLReload()

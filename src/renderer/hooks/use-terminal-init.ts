@@ -155,6 +155,14 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
 
     terminal.open(container)
 
+    // xterm v6 removed the automatic viewport background-color sync that v5 did.
+    // The .xterm-viewport covers the full .xterm area (position:absolute top/bottom:0)
+    // so its #000 default shows as a black border around the rendered rows.
+    // Fix: set viewport bg to the terminal theme background color.
+    const themeBackground = getCurrentTerminalTheme().background
+    const viewportEl = container.querySelector('.xterm-viewport') as HTMLElement | null
+    if (viewportEl && themeBackground) viewportEl.style.backgroundColor = themeBackground
+
     // ── WebLinks addon ───────────────────────────────────────────────────────
     const webLinksAddon = new WebLinksAddon((event, uri) => {
       if (event.button !== 0) return
