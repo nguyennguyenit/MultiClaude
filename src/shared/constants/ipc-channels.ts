@@ -106,6 +106,9 @@ export const IPC_CHANNELS = {
   IMAGE_OPEN: 'image:open',
   IMAGE_LIST_SCREENSHOTS: 'image:list-screenshots',
 
+  // Media channels (unified image + video)
+  MEDIA_OPEN: 'media:open',
+
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',
 

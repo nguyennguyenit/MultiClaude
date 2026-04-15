@@ -29,7 +29,10 @@ import {
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
 import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
-import { useSettingsStore, useToastStore } from '../stores'
+import { useSettingsStore, useToastStore, usePendingMediaStore } from '../stores'
+import { registerDisplayWriter, writeToDisplay } from '../stores/display-writer-registry'
+import { createOnDataHandler } from './use-terminal-ondata-handler'
+import { joinPathsForTerminal } from '../utils/terminal-path-utils'
 import { getTerminalFontFamilyById, isAllowedExternalUrl } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
@@ -239,6 +242,9 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     fitAddonRef.current = fitAddon
     registerTerminalDebugHandle()
 
+    // Register display writer so renderer-side media tokens can be written to xterm display
+    registerDisplayWriter(terminalId, (text) => terminal.write(text))
+
     // ── Clipboard listeners ──────────────────────────────────────────────────
     attachClipboardListeners(terminal)
 
@@ -290,6 +296,10 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         if (sequence) {
           e.preventDefault()
           followLiveOutput()
+          const paths = usePendingMediaStore.getState().flush(terminalId)
+          if (paths.length > 0) {
+            window.electron.terminal.write(terminalId, joinPathsForTerminal(paths))
+          }
           window.electron.terminal.write(terminalId, sequence)
           return false
         }
@@ -307,29 +317,43 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     // and swallow extra DELs from the IME.
     let imeDelDebt = 0
 
-    terminal.onData((data) => {
-      followLiveOutput()
+    const baseHandler = createOnDataHandler({
+      terminalId,
+      write: (id, data) => window.electron.terminal.write(id, data),
+      writeDisplay: (text) => writeToDisplay(terminalId, text),
+      followLiveOutput,
+      pending: {
+        flush: (id) => usePendingMediaStore.getState().flush(id),
+        clear: (id) => usePendingMediaStore.getState().clear(id),
+        getQueue: (id) => usePendingMediaStore.getState().getQueue(id),
+        decrementCharsAfter: (id) => usePendingMediaStore.getState().decrementCharsAfter(id),
+        incrementCharsAfter: (id) => usePendingMediaStore.getState().incrementCharsAfter(id),
+        popToken: (id) => usePendingMediaStore.getState().popToken(id)
+      }
+    })
 
-      if (data === '\x7f') {
-        if (imeDelDebt > 0) {
-          imeDelDebt--
-          return
-        }
-        window.electron.terminal.write(terminalId, data)
+    terminal.onData((data) => {
+      // IME DEL-debt: swallow extra DELs that the IME emits after NFC collapse
+      if (data === '\x7f' && imeDelDebt > 0) {
+        imeDelDebt--
         return
       }
 
-      const nfcData = data.normalize('NFC')
-      const origLen = [...data].length
-      const nfcLen = [...nfcData].length
-
-      if (origLen > nfcLen) {
-        imeDelDebt += origLen - nfcLen
-      } else {
-        imeDelDebt = 0
+      // Normalize payloads that may carry NFD text; track debt.
+      if (data !== '\x7f' && data !== '\r' && data !== '\x03' && !data.includes('\r')) {
+        const nfcData = data.normalize('NFC')
+        const origLen = [...data].length
+        const nfcLen = [...nfcData].length
+        if (origLen > nfcLen) {
+          imeDelDebt += origLen - nfcLen
+        } else {
+          imeDelDebt = 0
+        }
+        baseHandler(nfcData)
+        return
       }
 
-      window.electron.terminal.write(terminalId, nfcData)
+      baseHandler(data)
     })
 
     // ── Resize handler ───────────────────────────────────────────────────────

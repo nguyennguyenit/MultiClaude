@@ -9,9 +9,12 @@ import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
-import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { writeToDisplay } from './stores/display-writer-registry'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
+import { buildMediaToken, classifyMediaFile } from './utils/media-classifier'
+import { formatPathForTerminal } from './utils/terminal-path-utils'
 import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
 import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
@@ -193,9 +196,20 @@ function App() {
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
-    const formatted = joinPathsForTerminal(paths)
-    if (!formatted) return
-    window.electron.terminal.write(terminalId, formatted)
+    for (const filePath of paths) {
+      const mediaType = classifyMediaFile(filePath)
+      if (mediaType) {
+        const entry = useImageStore.getState().addImage(terminalId, filePath, mediaType)
+        const token = buildMediaToken(mediaType, entry.index)
+        usePendingMediaStore.getState().push(terminalId, {
+          path: filePath,
+          displayLength: token.length
+        })
+        writeToDisplay(terminalId, token + ' ')
+      } else {
+        window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
+      }
+    }
   }, [])
 
   // Handler: Toggle YOLO mode (shows first-time warning dialog per project)

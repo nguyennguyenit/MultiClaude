@@ -1,7 +1,8 @@
 import { useEffect, useRef, memo, CSSProperties, useCallback, useState } from 'react'
 import { useTerminal } from '../../hooks/use-terminal'
 import { useAppStore, useImageStore } from '../../stores'
-import { resolveImagePathFromLine } from './terminal-image-path-resolver'
+import { resolveMediaPathFromLine } from './terminal-image-path-resolver'
+import { classifyMediaFile } from '../../utils/media-classifier'
 import { processTerminalOutputChunk } from './terminal-output-handler'
 import { registerTerminalOutputHandler } from '../../utils/terminal-output-dispatcher'
 
@@ -9,10 +10,10 @@ import { registerTerminalOutputHandler } from '../../utils/terminal-output-dispa
 function findImagePathAtColumn(lineText: string, col: number, terminalId: string): { start: number; end: number } | null {
   const matches: { start: number; end: number }[] = []
 
-  // Check [Image #X] patterns (all occurrences)
-  const imageRefRegex = /\[Image #\d+\]/g
+  // Check [Image #X] Claude refs + [Image N] / [Video N] input tokens
+  const tokenRegex = /\[(?:Image(?:\s#)?|Video)\s\d+\]/g
   let match
-  while ((match = imageRefRegex.exec(lineText)) !== null) {
+  while ((match = tokenRegex.exec(lineText)) !== null) {
     matches.push({ start: match.index, end: match.index + match[0].length })
   }
 
@@ -35,6 +36,12 @@ function findImagePathAtColumn(lineText: string, col: number, terminalId: string
   // Check any absolute path to image formats (all occurrences)
   const imageExtRegex = /[/~][^\s"]*\.(?:png|jpg|jpeg|gif|webp|bmp|svg)/gi
   while ((match = imageExtRegex.exec(lineText)) !== null) {
+    matches.push({ start: match.index, end: match.index + match[0].length })
+  }
+
+  // Check any absolute path to video formats (all occurrences)
+  const videoExtRegex = /[/~][^\s"]*\.(?:mp4|mov|avi|mkv|webm|m4v|wmv)/gi
+  while ((match = videoExtRegex.exec(lineText)) !== null) {
     matches.push({ start: match.index, end: match.index + match[0].length })
   }
 
@@ -180,8 +187,8 @@ export const TerminalView = memo(function TerminalView({
     setHighlightArea(null)
   }, [])
 
-  // Image preview popup state
-  const handleImageClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
+  // Media click (image: image.open, video: media.open)
+  const handleMediaClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
     const terminal = terminalRef.current
     if (!terminal || !terminal.element) return
 
@@ -213,23 +220,27 @@ export const TerminalView = memo(function TerminalView({
     const imageStore = useImageStore.getState()
     const trackedImages = imageStore.getImages(terminalId)
 
-    let foundPath = resolveImagePathFromLine({
+    let foundPath = resolveMediaPathFromLine({
       lineText,
       trackedImages
     })
 
     if (!foundPath && lineText.includes('[Image #')) {
       const screenshotPaths = await window.electron.image.listScreenshots()
-      foundPath = resolveImagePathFromLine({
+      foundPath = resolveMediaPathFromLine({
         lineText,
         trackedImages,
         screenshotPaths
       })
     }
 
-    // Open image in external viewer if found
     if (foundPath) {
-      window.electron.image.open(foundPath)
+      const kind = classifyMediaFile(foundPath)
+      if (kind === 'video') {
+        window.electron.media.open(foundPath)
+      } else {
+        window.electron.image.open(foundPath)
+      }
     }
   }, [terminalRef, terminalId])
 
@@ -239,8 +250,8 @@ export const TerminalView = memo(function TerminalView({
       focus()
       showCursor()
     }
-    // Check if clicked on image path
-    handleImageClick(e)
+    // Check if clicked on media path
+    handleMediaClick(e)
   }
 
   const handleKeyDownCapture = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {

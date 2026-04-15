@@ -14,7 +14,9 @@
 import { useRef, useCallback } from 'react'
 import type { RefObject } from 'react'
 import type { Terminal as XTerm } from '@xterm/xterm'
-import { useImageStore } from '../stores'
+import { useImageStore, usePendingMediaStore } from '../stores'
+import { writeToDisplay } from '../stores/display-writer-registry'
+import { buildMediaToken } from '../utils/media-classifier'
 
 interface UseTerminalClipboardParams {
   terminalId: string
@@ -87,11 +89,13 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
               const filePath = await window.electron.clipboard.saveImage(base64Data)
               if (filePath) {
                 followLiveOutputRef.current?.()
-                useImageStore.getState().addImage(terminalId, filePath)
-                const formatted = /[\s"'`$\\!&|;<>(){}[\]*?#~]/.test(filePath)
-                  ? `"${filePath.replace(/"/g, '\\"')}"`
-                  : filePath
-                window.electron.terminal.write(terminalId, formatted)
+                const entry = useImageStore.getState().addImage(terminalId, filePath, 'image')
+                const token = buildMediaToken('image', entry.index)
+                usePendingMediaStore.getState().push(terminalId, {
+                  path: filePath,
+                  displayLength: token.length
+                })
+                writeToDisplay(terminalId, token + ' ')
               }
             } catch (err) {
               console.error('Failed to process clipboard image:', err)

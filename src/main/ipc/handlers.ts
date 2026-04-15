@@ -658,6 +658,20 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return false
   })
 
+  // Media (image + video) handler
+  safeHandle(IPC_CHANNELS.MEDIA_OPEN, (_, filePath: string) => {
+    const mediaExtensions = [
+      '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+      '.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.wmv'
+    ]
+    const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'))
+    if (existsSync(filePath) && mediaExtensions.includes(ext)) {
+      shell.openPath(filePath)
+      return true
+    }
+    return false
+  })
+
   // List screenshot files sorted by modification time (newest first)
   safeHandle(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, () => {
     const screenshotDir = join(tmpdir(), 'multiClaude-screenshots')

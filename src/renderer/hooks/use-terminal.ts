@@ -20,6 +20,7 @@ import { useTerminalInit } from './use-terminal-init'
 import { useTerminalScroll } from './use-terminal-scroll'
 import { useTerminalFit } from './use-terminal-fit'
 import { useTerminalDebug } from './use-terminal-debug'
+import { unregisterDisplayWriter } from '../stores/display-writer-registry'
 import type { ViewportEventListener } from './terminal-hook-types'
 
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
@@ -158,6 +159,7 @@ export function useTerminal({
       terminalRef.current = null; fitAddonRef.current = null; webglAddonRef.current = null
       scrollDisposableRef.current = null; viewportListenersRef.current = null
       unregisterTerminalDebugHandle()
+      unregisterDisplayWriter(terminalId)
 
       for (const l of viewportListeners ?? []) l.target.removeEventListener(l.type, l.handler)
 
