@@ -39,6 +39,12 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | on | `terminal:output` | - | `{ terminalId, data }` | 🔄 |
 | on | `terminal:exit` | - | `{ terminalId, exitCode }` | 🔄 |
 | on | `terminal:title-change` | - | `{ terminalId, title }` | 🔄 |
+| invoke | `terminal:load-pane-tree` | `projectId: string` | `PaneTree \| null` | ✅ |
+| invoke | `terminal:save-pane-tree` | `{ projectId, tree: PaneTree \| null }` | void | ✅ |
+
+> `terminal:show-context-menu` removed — right-click is now a themed React Portal menu in renderer; no IPC round-trip.
+>
+> `savePaneTree` runs recursive shape validation on payload (rejects malformed input without throwing); on-read migration in `loadPaneTree` bumps legacy flat layouts to `schemaVersion: 2`.
 
 ### Project Module
 

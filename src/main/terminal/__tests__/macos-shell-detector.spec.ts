@@ -28,7 +28,6 @@ vi.mock('child_process', async () => {
 
 // Import after mocks are set
 import { detectMacosShells } from '../macos-shell-detector'
-import * as fs from 'fs'
 
 describe('detectMacosShells', () => {
   beforeEach(() => {

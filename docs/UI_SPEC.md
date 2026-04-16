@@ -103,16 +103,17 @@ App
 **State Condition**: Active project selected
 
 **Layout**:
-- Auto-flex terminal grid (equal splits, no resizable panel handles)
+- Pane tree layout: recursive binary splits (tmux/iTerm-style) managed by `PaneTreeStore`
 - Per-pane bottom tab bar showing terminal title
-- Add cell placeholder when terminals < 9
+- Themed context menu (Ctrl+Right-Click or right-click on split-button) for split/close actions
 
-**Grid Layouts**:
-| Terminals | Columns | Rows | Layout |
-|-----------|---------|------|--------|
-| 1 | 1 | 1 | Full pane |
-| 2-3 | 2 | varies | Flex columns |
-| 4+ | 3 | varies | Flex 3-column grid |
+**Split Actions** (context menu):
+| Action | Hotkey | Result |
+|--------|--------|--------|
+| Split Vertical | Cmd+K V (macOS) | Divide pane left-right |
+| Split Horizontal | Cmd+K H (macOS) | Divide pane top-bottom |
+| Close Pane | - | Destroy pane + reconcile tree |
+| Copy Terminal Output | - | Copy from terminal + clipboard |
 
 **Pane Features**:
 - Editable title (double-click to edit, Enter/Escape to confirm/cancel)
@@ -123,17 +124,21 @@ App
 **Actions**:
 | Action | Handler | Result |
 |--------|---------|--------|
-| Click pane | `setActiveTerminal` | Focus terminal, enable keyboard input |
+| Click pane | `setActivePaneId` | Focus terminal, enable keyboard input |
 | Double-click title | inline edit | Rename terminal |
-| Click "+" cell | `handleAddTerminal` | Create new terminal |
-| Click close | `handleCloseTerminal` | Destroy terminal |
+| Right-click pane | context menu | Split/close via themed Portal menu |
+| Click split-button | dropdown menu | Alternative split/close access |
+| Click close icon | `closePane` | Destroy pane, reconcile tree |
 | Drag file | `onInsertFilePath` | Insert file path into terminal |
 | Ctrl+V image | auto-save & insert | Save temp image, insert path |
 
 **Source**:
-- `src/renderer/components/terminal/terminal-grid.tsx`
-- `src/renderer/components/terminal/terminal-pane.tsx`
-- `src/renderer/components/terminal/terminal-view.tsx`
+- `src/renderer/components/terminal/terminal-grid.tsx` — main pane tree renderer
+- `src/renderer/components/terminal/pane-tree-node.tsx` — recursive split node
+- `src/renderer/components/terminal/terminal-pane.tsx` — single pane with xterm
+- `src/renderer/components/terminal/terminal-view.tsx` — xterm.js wrapper
+- `src/renderer/components/terminal/split-button.tsx` — split action menu
+- `src/renderer/components/context-menu/` — themed context menu (Portal)
 
 ---
 
@@ -247,7 +252,6 @@ Each theme includes:
 | App | `src/renderer/App.tsx` |
 | Toolbar | `src/renderer/components/toolbar/toolbar.tsx` |
 | ToolbarButton | `src/renderer/components/toolbar/toolbar-button.tsx` |
-| ProjectDropdown | `src/renderer/components/toolbar/project-dropdown.tsx` |
 | WelcomeScreen | `src/renderer/components/welcome-screen.tsx` |
 | TerminalGrid | `src/renderer/components/terminal/terminal-grid.tsx` |
 | TerminalPane | `src/renderer/components/terminal/terminal-pane.tsx` |

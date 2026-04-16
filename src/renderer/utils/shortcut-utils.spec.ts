@@ -66,6 +66,44 @@ describe('shortcut-utils', () => {
     }))).toBe(true)
   })
 
+  it.each([
+    ['ArrowRight', 'right'],
+    ['ArrowLeft', 'left'],
+    ['ArrowDown', 'down'],
+    ['ArrowUp', 'up']
+  ] as const)('resolves Cmd+Shift+%s to split-pane %s', (code, direction) => {
+    expect(getGlobalShortcut(createEvent({
+      metaKey: true,
+      shiftKey: true,
+      key: code,
+      code
+    }))).toEqual({ type: 'split-pane', direction })
+
+    expect(getGlobalShortcut(createEvent({
+      ctrlKey: true,
+      shiftKey: true,
+      key: code,
+      code
+    }))).toEqual({ type: 'split-pane', direction })
+  })
+
+  it('does not resolve split-pane without Shift', () => {
+    expect(getGlobalShortcut(createEvent({
+      metaKey: true,
+      key: 'ArrowRight',
+      code: 'ArrowRight'
+    }))).toBeNull()
+  })
+
+  it('bypasses xterm for split-pane shortcuts', () => {
+    expect(shouldBypassXtermShortcut(createEvent({
+      metaKey: true,
+      shiftKey: true,
+      key: 'ArrowRight',
+      code: 'ArrowRight'
+    }))).toBe(true)
+  })
+
   it('ignores regular typing', () => {
     const shortcut = getGlobalShortcut(createEvent({
       key: 'a',

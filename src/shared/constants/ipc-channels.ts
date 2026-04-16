@@ -14,6 +14,8 @@ export const IPC_CHANNELS = {
   TERMINAL_CREATED: 'terminal:created',
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
   TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
+  TERMINAL_LOAD_PANE_TREE: 'terminal:load-pane-tree',
+  TERMINAL_SAVE_PANE_TREE: 'terminal:save-pane-tree',
 
   // Project channels
   PROJECT_LIST: 'project:list',
@@ -103,9 +105,10 @@ export const IPC_CHANNELS = {
 
   // Image channels
   IMAGE_OPEN: 'image:open',
-  IMAGE_DELETE: 'image:delete',
-  IMAGE_READ_BASE64: 'image:read-base64',
   IMAGE_LIST_SCREENSHOTS: 'image:list-screenshots',
+
+  // Media channels (unified image + video)
+  MEDIA_OPEN: 'media:open',
 
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { ShellSelectorDropdown } from './shell-selector-dropdown'
-import type { ShellInfo } from '@shared/types'
+import { SplitButton } from './split-button'
+import type { PaneSplitDirection, ShellInfo } from '@shared/types'
 
 interface TerminalActionBarProps {
   terminalCount: number
@@ -13,6 +14,8 @@ interface TerminalActionBarProps {
   onToggleYolo: (enabled: boolean) => void
   onKillAll: () => void
   onCycleLayout?: () => void
+  onSplit?: (direction: PaneSplitDirection) => void
+  canSplit?: boolean
   disabled?: boolean
 }
 
@@ -59,6 +62,8 @@ export function TerminalActionBar({
   onToggleYolo,
   onKillAll,
   onCycleLayout,
+  onSplit,
+  canSplit = false,
   disabled
 }: TerminalActionBarProps) {
   const [showKillConfirm, setShowKillConfirm] = useState(false)
@@ -113,11 +118,12 @@ export function TerminalActionBar({
           aria-pressed={yoloEnabled}
         />
         <div className="action-bar-separator" />
-        <ActionBarBtn
-          icon="+"
-          title={terminalCount >= terminalLimit ? `Terminal limit (${terminalLimit}) reached` : 'New Terminal (Ctrl+T)'}
-          onClick={() => onAddTerminal()}
-          disabled={disabled || terminalCount >= terminalLimit}
+        <SplitButton
+          atLimit={disabled === true || terminalCount >= terminalLimit}
+          splitDisabled={disabled === true || terminalCount >= terminalLimit || !canSplit || !onSplit}
+          terminalLimit={terminalLimit}
+          onAddTerminal={() => onAddTerminal()}
+          onSplit={(dir) => onSplit?.(dir)}
         />
         {onCycleLayout && (
           <ActionBarBtn icon="⊞" title="Toggle Layout" onClick={onCycleLayout} />

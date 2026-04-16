@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
 import type { Terminal } from '@shared/types'
 import { useAppStore } from './app-store'
+import { resetBufferedTerminalOutputForTests } from './terminal-output-buffer'
 
 const initialState = useAppStore.getState()
 
@@ -18,6 +19,7 @@ function makeTerminal(id = 'term-1', projectId = 'project-1'): Terminal {
 
 describe('useAppStore terminal output buffering', () => {
   beforeEach(() => {
+    resetBufferedTerminalOutputForTests()
     useAppStore.setState(initialState, true)
   })
 

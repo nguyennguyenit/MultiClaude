@@ -7,11 +7,21 @@ export interface ShortcutEventLike {
   code?: string
 }
 
+import type { PaneSplitDirection } from '@shared/types'
+
 export type GlobalShortcut =
   | { type: 'switch-project'; index: number }
   | { type: 'new-terminal' }
   | { type: 'close-terminal' }
   | { type: 'toggle-github-panel' }
+  | { type: 'split-pane'; direction: PaneSplitDirection }
+
+const ARROW_TO_DIRECTION: Record<string, PaneSplitDirection> = {
+  ArrowRight: 'right',
+  ArrowLeft: 'left',
+  ArrowDown: 'down',
+  ArrowUp: 'up'
+}
 
 function getDigitFromEvent(event: ShortcutEventLike): number | null {
   if (event.code && /^Digit[1-9]$/.test(event.code)) {
@@ -31,6 +41,11 @@ export function getGlobalShortcut(event: ShortcutEventLike): GlobalShortcut | nu
     if (digit !== null) {
       return { type: 'switch-project', index: digit - 1 }
     }
+  }
+
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey) {
+    const direction = ARROW_TO_DIRECTION[event.code ?? event.key]
+    if (direction) return { type: 'split-pane', direction }
   }
 
   if ((event.ctrlKey || event.metaKey) && !event.altKey) {

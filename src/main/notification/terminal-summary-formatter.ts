@@ -47,17 +47,6 @@ export interface DetailSummary {
 }
 
 /**
- * Converts inline markdown to Telegram-friendly text (lightweight subset).
- * **bold** → *bold*, `code` → `code`, # heading → *heading*
- */
-export function applyInlineMarkdown(text: string): string {
-  return text
-    .replace(/^#+\s+(.+)$/gm, '*$1*')          // # heading → *heading*
-    .replace(/\*\*(.+?)\*\*/g, '*$1*')          // **bold** → *bold*
-    .replace(/`([^`]+)`/g, '`$1`')              // `code` → `code` (identity, kept for clarity)
-}
-
-/**
  * Cleans raw PTY output for summary display.
  *
  * Key difference from `cleanTerminalOutput`: bare `\r` is treated as a

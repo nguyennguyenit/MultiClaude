@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
-import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs'
+import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { IPC_CHANNELS, DEFAULT_SETTINGS, isAllowedExternalUrl } from '@shared/constants'
@@ -149,7 +149,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (options?.shellPath !== undefined) {
       if (
         typeof options.shellPath !== 'string' ||
-        !/^\/[^;\|&\x00-\x1f]{1,512}$/.test(options.shellPath)
+        !/^\/[^;|&\x00-\x1f]{1,512}$/.test(options.shellPath)
       ) {
         throw new Error('Invalid shellPath')
       }
@@ -196,6 +196,19 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Shell list handler — cached at startup, returns same promise on subsequent calls
   safeHandle(IPC_CHANNELS.TERMINAL_GET_SHELLS, () => terminalManager.getAvailableShells())
+
+  safeHandle(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, async (_, projectId: string) => {
+    if (typeof projectId !== 'string' || !projectId) return null
+    return projectStore.loadPaneTree(projectId)
+  })
+
+  safeHandle(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, async (_, payload: {
+    projectId: string
+    tree: import('@shared/types').PaneTree | null
+  }) => {
+    if (!payload || typeof payload.projectId !== 'string' || !payload.projectId) return
+    projectStore.savePaneTree(payload.projectId, payload.tree ?? null)
+  })
 
   // Project handlers
   safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {
@@ -608,38 +621,28 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Image handlers
   safeHandle(IPC_CHANNELS.IMAGE_OPEN, (_, filePath: string) => {
-    // Security: only allow opening files in multiClaude-screenshots directory
-    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
+    // Security: only allow opening existing files with image extensions
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']
+    const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'))
+    if (existsSync(filePath) && imageExtensions.includes(ext)) {
       shell.openPath(filePath)
       return true
     }
     return false
   })
 
-  safeHandle(IPC_CHANNELS.IMAGE_DELETE, (_, filePath: string) => {
-    // Security: only allow deleting files in multiClaude-screenshots directory
-    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
-      try {
-        unlinkSync(filePath)
-        return true
-      } catch {
-        return false
-      }
+  // Media (image + video) handler
+  safeHandle(IPC_CHANNELS.MEDIA_OPEN, (_, filePath: string) => {
+    const mediaExtensions = [
+      '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+      '.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.wmv'
+    ]
+    const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'))
+    if (existsSync(filePath) && mediaExtensions.includes(ext)) {
+      shell.openPath(filePath)
+      return true
     }
     return false
-  })
-
-  safeHandle(IPC_CHANNELS.IMAGE_READ_BASE64, (_, filePath: string) => {
-    // Security: only allow reading files in multiClaude-screenshots directory
-    if (existsSync(filePath) && filePath.includes('multiClaude-screenshots')) {
-      try {
-        const buffer = readFileSync(filePath)
-        return buffer.toString('base64')
-      } catch {
-        return null
-      }
-    }
-    return null
   })
 
   // List screenshot files sorted by modification time (newest first)

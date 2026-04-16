@@ -3,15 +3,27 @@ import { Toolbar } from './components/toolbar'
 import { UpdateBanner } from './components/update-banner'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { YoloWarningDialog } from './components/terminal/yolo-warning-dialog'
+import { ThemedContextMenu } from './components/context-menu/themed-context-menu'
 import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
-import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useContextMenuStore } from './stores/context-menu-store'
+import { writeToDisplay } from './stores/display-writer-registry'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
+import { getCurrentTerminalTheme } from './hooks/use-terminal-font-theme'
+import { useExecuteSplit } from './hooks/use-execute-split'
+import { usePaneTreeStore, flushPaneTreeSaves } from './stores/pane-tree-store'
+import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
+import { registerSplitHandlers } from './utils/terminal-context-actions'
 import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
+import { buildMediaToken, classifyMediaFile } from './utils/media-classifier'
+import { formatPathForTerminal } from './utils/terminal-path-utils'
+import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
+import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { ShellInfo, Project } from '@shared/types'
 
@@ -31,6 +43,8 @@ function App() {
   const setActiveProject = useAppStore((state) => state.setActiveProject)
   const setActiveTerminal = useAppStore((state) => state.setActiveTerminal)
   const switchToProject = useAppStore((state) => state.switchToProject)
+  const savedDefaultShell = useSettingsStore((state) => state.savedSettings.defaultShell)
+  const setDefaultShell = useSettingsStore((state) => state.setDefaultShell)
 
   // Active slide panel: 'github' | 'settings' | null
   const [activePanel, setActivePanel] = useState<string | null>(null)
@@ -55,6 +69,7 @@ function App() {
 
   // Shell switcher state (loaded from IPC on mount, persisted via settings)
   const [availableShells, setAvailableShells] = useState<ShellInfo[]>([])
+  const [hasLoadedShells, setHasLoadedShells] = useState(false)
   const [selectedShell, setSelectedShell] = useState<ShellInfo | null>(null)
 
   // Get active project for terminal creation
@@ -184,13 +199,36 @@ function App() {
     if (!idToClose) return
     await window.electron.terminal.destroy(idToClose)
     removeTerminal(idToClose)
-  }, [activeTerminalId, removeTerminal])
+    // Collapse the pane tree node for this terminal so parents reflow.
+    if (activeProjectId) {
+      const current = usePaneTreeStore.getState().getTree(activeProjectId)
+      if (current) {
+        usePaneTreeStore.getState().setTree(activeProjectId, closeLeafAndCollapse(current, idToClose))
+      }
+    }
+  }, [activeTerminalId, removeTerminal, activeProjectId])
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
-    const formatted = joinPathsForTerminal(paths)
-    if (!formatted) return
-    window.electron.terminal.write(terminalId, formatted)
+    const isClaudeMode = useAppStore.getState().terminals.find(t => t.id === terminalId)?.isClaudeMode
+    for (const filePath of paths) {
+      const mediaType = classifyMediaFile(filePath)
+      if (mediaType && !isClaudeMode) {
+        const entry = useImageStore.getState().addImage(terminalId, filePath, mediaType)
+        const token = buildMediaToken(mediaType, entry.index)
+        usePendingMediaStore.getState().push(terminalId, {
+          path: filePath,
+          displayLength: token.length
+        })
+        writeToDisplay(terminalId, token + ' ')
+      } else {
+        // Claude mode or non-media file: write path directly to PTY
+        if (mediaType) {
+          useImageStore.getState().addImage(terminalId, filePath, mediaType)
+        }
+        window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
+      }
+    }
   }, [])
 
   // Handler: Toggle YOLO mode (shows first-time warning dialog per project)
@@ -271,12 +309,53 @@ function App() {
     }
   }, [pendingSetupProject])
 
+  // Visible (active project) terminal count — drives split gating
+  const visibleCount = visibleTerminals.length
+  const effectiveLimit = getTerminalLimitValue()
+  const atLimit = visibleCount >= effectiveLimit
+
+  const { executeSplit, canSplit } = useExecuteSplit({
+    projectId: activeProjectId,
+    projectPath: activeProject?.path,
+    activeTerminalId,
+    terminalLimit: effectiveLimit,
+    terminalCount: visibleCount,
+    selectedShell,
+    windowsShellFallback: pendingSettings.windowsShell,
+    addTerminal,
+    notifyLimit: (limit) => {
+      useToastStore.getState().addToast(
+        `Terminal limit reached (${limit}). Close a terminal or increase limit in Settings.`,
+        'warning'
+      )
+    },
+    notifyError: (msg) => {
+      useToastStore.getState().addToast(msg, 'error')
+    }
+  })
+
+  // Expose executeSplit to the terminal right-click menu registry. Keep the
+  // handler wired even when at the limit so menu items render as disabled with
+  // a tooltip (the `disabled` flag in the menu gates the click).
+  useEffect(() => {
+    registerSplitHandlers({
+      executeSplit: (dir, targetId) => void executeSplit(dir, targetId),
+      canSplit,
+      atLimit,
+      limit: effectiveLimit
+    })
+  }, [executeSplit, canSplit, atLimit, effectiveLimit])
+
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onAddTerminal: handleAddTerminal,
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
-    onToggleGitHubPanel: () => togglePanel('github')
+    onToggleGitHubPanel: () => togglePanel('github'),
+    // Always pass the handler — executeSplit's internal gate emits notifyLimit
+    // uniformly, matching the xterm-focused hotkey path. Previously this was
+    // gated by `canSplit`, which made the global hotkey silently no-op at limit.
+    onSplit: (dir) => void executeSplit(dir)
   })
 
 
@@ -292,16 +371,21 @@ function App() {
   useEffect(() => {
     window.electron.terminal.getAvailableShells().then(shells => {
       setAvailableShells(shells)
-      // Validate saved default shell still exists in the list; reset if not
-      const savedDefault = useSettingsStore.getState().savedSettings.defaultShell
-      if (savedDefault) {
-        const stillValid = shells.some(s => s.path === savedDefault.path)
-        setSelectedShell(stillValid ? savedDefault : null)
-      }
+      setHasLoadedShells(true)
     }).catch(() => {
       // getAvailableShells is best-effort — continue without shell list
     })
   }, [])
+
+  useEffect(() => {
+    void reconcileSavedDefaultShell({
+      hasLoadedShells,
+      shells: availableShells,
+      savedDefault: savedDefaultShell,
+      setSelectedShell,
+      persistDefaultShell: setDefaultShell
+    })
+  }, [availableShells, hasLoadedShells, savedDefaultShell, setDefaultShell])
 
   // Load YOLO status when project changes
   useEffect(() => {
@@ -311,6 +395,13 @@ function App() {
       setYoloEnabled(false)
     }
   }, [activeProject])
+
+  // Close any open context menu when the active project changes — otherwise
+  // menu items retain closures to a now-defunct terminal id, e.g. a lingering
+  // Paste would call pasteFromClipboard(oldTerminalId, ...) with no effect.
+  useEffect(() => {
+    useContextMenuStore.getState().closeMenu()
+  }, [activeProjectId])
 
   // Setup notification listener
   useEffect(() => {
@@ -364,6 +455,20 @@ function App() {
     }
   }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily, pendingSettings.modernFontFamily])
 
+  // Sync --terminal-bg CSS var whenever the xterm theme could change.
+  // globals.css uses var(--terminal-bg) on .xterm + .xterm-viewport so every
+  // terminal (including ones mounted before the change) picks it up without
+  // needing a per-instance inline-style sync.
+  useEffect(() => {
+    const bg = getCurrentTerminalTheme().background
+    if (bg) document.documentElement.style.setProperty('--terminal-bg', bg)
+  }, [
+    pendingSettings.colorTheme,
+    pendingSettings.themeMode,
+    pendingSettings.uiStyle,
+    pendingSettings.terminalStyleOptions?.colorPreset,
+  ])
+
   // Load saved projects on mount and validate folder existence
   useEffect(() => {
     const init = async () => {
@@ -414,6 +519,8 @@ function App() {
     return unsubscribe
   }, [])
 
+  useEffect(() => attachTerminalOutputDispatcher(window.electron.terminal.onOutput), [])
+
   // Handle terminal title changes (from OSC escape sequences)
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onTitleChange(({ terminalId, title }) => {
@@ -445,9 +552,10 @@ function App() {
     return unsubscribe
   }, [addTerminal])
 
-  // Save session before close
+  // Save session + flush pending pane-tree saves before close
   useEffect(() => {
     const handleBeforeUnload = async () => {
+      flushPaneTreeSaves()
       await window.electron.session.save()
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
@@ -458,6 +566,9 @@ function App() {
     <div className="app">
       {/* Toast notifications */}
       <ToastContainer />
+
+      {/* Themed context menu (portal) */}
+      <ThemedContextMenu />
 
       {/* Settings modal */}
       <SettingsModal
@@ -559,6 +670,8 @@ function App() {
           onAddTerminal={handleAddTerminal}
           onToggleYolo={handleYoloToggle}
           onKillAll={handleKillAll}
+          onSplit={(dir) => void executeSplit(dir)}
+          canSplit={canSplit}
         />
       )}
     </div>

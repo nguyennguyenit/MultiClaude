@@ -45,11 +45,13 @@ MultiClaude v3.1.0-beta.1 uses the VibeTerminal aesthetic: a minimal, terminal-f
 - Each toggleable via toolbar buttons or keyboard shortcuts
 - 340px wide on landscape, full height container on portrait
 
-**Terminal Grid**:
-- Auto-flex layout replacing react-resizable-panels
-- Equal splits for all panes
-- Per-pane bottom tab bar (not top bar)
-- Grid adapts: 1x1 → 3x4 based on terminal count
+**Terminal Pane Tree**:
+- Binary split tree layout (tmux/iTerm-style) managed via `PaneTreeStore`
+- Recursive pane tree nodes: each node is a terminal or a split container
+- Per-pane bottom tab bar with title, Claude badge, close icon
+- Right-click context menu (themed Portal) for split/close actions
+- Split buttons on each pane provide keyboard-free split access
+- Per-project pane tree persistence via `terminal:load-pane-tree` / `terminal:save-pane-tree` IPC channels
 
 ### Keyboard Shortcuts
 

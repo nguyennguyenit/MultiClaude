@@ -1,3 +1,5 @@
+import type { PaneTree } from './pane-tree'
+
 // Agent type detected from terminal command input
 export type AgentType = 'claude' | 'codex' | 'gemini' | 'aider' | 'generic'
 
@@ -58,6 +60,8 @@ export interface TerminalSession {
 export interface ProjectTerminalLayout {
   projectId: string
   terminals: ProjectTerminal[]
+  paneTree?: PaneTree | null
+  schemaVersion?: number
 }
 
 export interface ProjectTerminal {
@@ -305,3 +309,6 @@ export * from './notification-events'
 
 // Update types
 export * from './update'
+
+// Pane tree layout types
+export * from './pane-tree'

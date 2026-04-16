@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState, AgentType } from '@shared/types'
-import { DEFAULT_ACTIVITY_BAR_STATE, TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
+import { DEFAULT_ACTIVITY_BAR_STATE } from '@shared/constants'
 import type { TerminalKeyboardEnhancementState } from '../utils/keyboard-enhancement-utils'
+import {
+  appendBufferedTerminalOutput,
+  clearBufferedTerminalOutput,
+  getBufferedTerminalOutput
+} from './terminal-output-buffer'
+import { useImageStore } from './image-store'
+import { usePendingMediaStore } from './pending-media-store'
 
 export type ActiveView = 'terminals' | 'github'
 
@@ -19,7 +26,6 @@ function getProjectTerminalIds(terminals: Terminal[], projectId: string | null):
 interface AppState {
   // Terminals
   terminals: Terminal[]
-  terminalOutputs: Record<string, string>
   terminalKeyboardEnhancements: Record<string, TerminalKeyboardEnhancementState>
   activeTerminalId: string | null
   lastActiveTerminalByProjectId: Record<string, string>
@@ -59,21 +65,19 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   // Terminals
   terminals: [],
-  terminalOutputs: {},
   terminalKeyboardEnhancements: {},
   activeTerminalId: null,
   lastActiveTerminalByProjectId: {},
 
-  addTerminal: (terminal) =>
+  addTerminal: (terminal) => {
+    let didAddTerminal = false
+
     set((state) => {
       // Guard against duplicate terminal ids (e.g. renderer + 'created' event race)
       if (state.terminals.some((t) => t.id === terminal.id)) return state
+      didAddTerminal = true
       return {
         terminals: [...state.terminals, terminal],
-        terminalOutputs: {
-          ...state.terminalOutputs,
-          [terminal.id]: ''
-        },
         terminalKeyboardEnhancements: {
           ...state.terminalKeyboardEnhancements
         },
@@ -83,16 +87,22 @@ export const useAppStore = create<AppState>((set, get) => ({
           [getTerminalProjectKey(terminal.projectId)]: terminal.id
         }
       }
-    }),
+    })
+
+    if (didAddTerminal) {
+      clearBufferedTerminalOutput(terminal.id)
+    }
+  },
 
   removeTerminal: (id) =>
     set((state) => {
       const removedTerminal = state.terminals.find((terminal) => terminal.id === id)
       const newTerminals = state.terminals.filter((t) => t.id !== id)
-      const remainingOutputs = { ...state.terminalOutputs }
       const remainingKeyboardEnhancements = { ...state.terminalKeyboardEnhancements }
-      delete remainingOutputs[id]
       delete remainingKeyboardEnhancements[id]
+      clearBufferedTerminalOutput(id)
+      useImageStore.getState().clearImages(id)
+      usePendingMediaStore.getState().clear(id)
 
       const nextLastActiveTerminalByProjectId = { ...state.lastActiveTerminalByProjectId }
       if (removedTerminal) {
@@ -113,7 +123,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       const activeProjectTerminalIds = getProjectTerminalIds(newTerminals, state.activeProjectId)
       return {
         terminals: newTerminals,
-        terminalOutputs: remainingOutputs,
         terminalKeyboardEnhancements: remainingKeyboardEnhancements,
         activeTerminalId:
           state.activeTerminalId === id
@@ -166,20 +175,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
     })),
 
-  getTerminalOutput: (id) => get().terminalOutputs[id] ?? '',
+  getTerminalOutput: (id) => getBufferedTerminalOutput(id),
 
-  appendOutput: (id, data) =>
-    set((state) => ({
-      terminalOutputs: {
-        ...state.terminalOutputs,
-        [id]: (() => {
-          const nextOutput = (state.terminalOutputs[id] ?? '') + data
-          return nextOutput.length > TERMINAL_OUTPUT_BUFFER_MAX
-            ? nextOutput.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
-            : nextOutput
-        })()
-      }
-    })),
+  appendOutput: (id, data) => appendBufferedTerminalOutput(id, data),
 
   getTerminalKeyboardEnhancement: (id) => get().terminalKeyboardEnhancements[id] ?? null,
 

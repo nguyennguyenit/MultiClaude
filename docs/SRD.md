@@ -59,12 +59,12 @@
 
 | ID | Requirement | Status | Screen |
 |----|-------------|--------|--------|
-| FR-03.1 | Git status, init, add remote, push | ✅ Complete | Sidebar |
-| FR-03.2 | File staging/unstaging with visual diff | ✅ Complete | Sidebar |
-| FR-03.3 | Branch management (create, checkout, delete, merge) | ✅ Complete | Sidebar |
-| FR-03.4 | Commit history viewer | ✅ Complete | Sidebar |
-| FR-03.5 | Stash management | ✅ Complete | Sidebar |
-| FR-03.6 | HEAD watcher for external changes | ✅ Complete | Sidebar |
+| FR-03.1 | Git status, init, add remote, push | ✅ Complete | S-03 (Git Slide Panel) |
+| FR-03.2 | File staging/unstaging with visual diff | ✅ Complete | S-03 (Git Slide Panel) |
+| FR-03.3 | Branch management (create, checkout, delete, merge) | ✅ Complete | S-03 (Git Slide Panel) |
+| FR-03.4 | Commit history viewer | ✅ Complete | S-03 (Git Slide Panel) |
+| FR-03.5 | Stash management | ✅ Complete | S-03 (Git Slide Panel) |
+| FR-03.6 | HEAD watcher for external changes | ✅ Complete | S-03 (Git Slide Panel) |
 
 ### FR-04: GitHub Integration
 
@@ -110,8 +110,8 @@
 | S-01 | Welcome | `activeProjectId = null` | FR-02.1 |
 | S-02 | Terminal View | `activeView = 'terminals'` | FR-01.*, FR-02.2, FR-02.3 |
 | S-03 | GitHub View | `activeView = 'github'` | FR-04.* |
-| S-04 | Settings Modal | `settingsModalOpen = true` | FR-05.2-5, FR-06.*, FR-07.2-4 |
-| Sidebar | Git Panel | Always visible | FR-03.* |
+| S-04 | Settings Slide Panel | `activePanel = 'settings'` | FR-05.2-5, FR-06.*, FR-07.2-4 |
+| S-03 | Git Slide Panel | `activePanel = 'git'` | FR-03.* |
 
 ## 5. Non-Functional Requirements
 

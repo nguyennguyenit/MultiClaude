@@ -90,7 +90,8 @@ export function BranchSelector({
           style={{
             background: 'var(--mc-bg-secondary)',
             border: '1px solid var(--mc-border)',
-            boxShadow: 'none'
+            boxShadow: 'none',
+            zIndex: 50
           }}
         >
           {/* Branch list */}

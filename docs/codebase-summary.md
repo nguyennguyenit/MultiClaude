@@ -1,755 +1,244 @@
 # MultiClaude Codebase Summary
 
 ## Overview
-MultiClaude v3.1.0-beta.1 is an Electron 33 + React 19 + TypeScript desktop application for managing multiple Claude Code instances simultaneously. It provides project management, Git integration, GitHub authentication, configurable terminal management (with terminal limits, rendering modes, Windows shell selection), and advanced settings (themes, notifications, Vietnamese IME patching).
 
-**Codebase Stats**: ~10.5K LOC, 92 TypeScript files, 90+ IPC channels
+MultiClaude is an Electron desktop app for running multiple Claude Code sessions in parallel. The repo centers on three concerns:
+
+- terminal orchestration and output handling
+- project/session persistence and layout restore
+- desktop UI state, settings, and integrations
+
+This snapshot reflects the current renderer output refactor:
+
+- scrollback is stored in a non-reactive buffer module
+- `App.tsx` owns one shared terminal output subscription
+- output is routed through a small dispatcher into each mounted `TerminalView`
 
 ## Architecture
 
-### Core Layers
-1. **Main Process** (Node.js) - Terminal spawning, Git operations, project persistence
-2. **IPC Layer** - Bidirectional communication between main and renderer
-3. **Renderer** (React 19 + TypeScript) - UI components, state management, settings
-4. **Shared** - Types, constants, IPC channel definitions
+### Main Process
 
-### Key Components
+The main process handles OS-facing work and long-lived state:
 
-#### Terminal Management (VibeTerminal v1.2)
-- **TerminalManager**: Spawns/destroys PTY processes via node-pty with advanced lifecycle management
-  - **System Suspend/Resume**: Tracks system power events, pauses PTY on suspend to prevent SIGTRAP crashes
-  - **Async Destruction**: `destroyAsync(id)` with graceful exit + 3s timeout + platform-specific force kill fallback
-  - **Batch Destruction**: `destroyAllAsync()` for parallel cleanup via `Promise.allSettled()`
-  - **Output Buffering**: TERMINAL_OUTPUT_BUFFER_MAX/TRIM_TO thresholds with intelligent trim strategy
-  - **OSC Parsing**: Handles OSC escape sequences for terminal title updates via `oscBuffer` accumulation
-  - **Test Coverage**: 6+ async tests covering graceful exit, timeout, force kill, batch operations
-- **WslDetector & Shell Validation**: Windows shell detection (cmd, PowerShell, WSL distros) with distro cleanup on load
-- **Terminal Limits**: Configurable per-project terminal limits (presets: 2, 4, 9, or custom 1-99)
-- **Keyboard Enhancement**: Protocol support for terminal input buffering; state persistence in app-store
-- **Atomic switchToProject()**: Prevents race conditions; updates project + terminal + shell in single state update
-- **Smart Terminal Selection**: Remembers lastActiveTerminalByProjectId; fallback to first or latest terminal
-- **TerminalView**: xterm.js renderer with WebGL addon (controlled by rendering mode setting) + VibeTheme color palette
-- **TerminalGrid**: Auto-flex layout adapts 1x1 → 3x4 based on terminal count and terminal limit
-  - **Single-Parent Pattern**: All project grids render simultaneously; inactive projects hidden via CSS
-  - **Viewport Preservation**: Saves/restores scroll position and isAtBottom state during terminal show/hide
-  - **Smart Scroll**: Auto-scroll to live output during Claude streaming; preserves user scroll intent
-- **TerminalPane**: Flex item with bottom tab bar (not header bar) containing editable title, action buttons
-  - **Bottom Tab Bar**: Shows terminal title, Claude badge, Start Claude button, Close button
-  - **Active Terminal Styling**: Visual distinction via glow effect on active pane
-    - `--terminal-active-glow`: CSS var for active pane outer glow (animated via color-mix)
-    - `--terminal-transition`: Unified 0.15s ease timing for opacity/glow transitions
-    - Active pane: animated glow; Inactive: 0.85 opacity
-    - `will-change: opacity, box-shadow` for GPU-optimized transitions
-  - **Hidden Prop**: `hidden` prop disables WebGL for GPU optimization when terminal not visible
-  - **Add Cell Placeholder**: "+" button cell when terminals < 9, positioned in next grid row
-- **Smart Scroll**: Auto-scroll during output when at bottom; preserves scroll position when user scrolls up
-  - `isAtBottomRef` (ref) for write() logic, `isAtBottom` (state) for UI reactivity
-  - 5-line threshold reduces button flicker on minor scroll changes
-  - `write()` conditionally calls `scrollToBottom()` only when at bottom
-  - **Scroll-to-Bottom Button**: Floating button (bottom-right) with fade animation
-    - Appears when user scrolls 5+ lines from bottom
-    - Opacity-based show/hide (no mount/unmount) for smooth transitions
-    - Accessibility: `aria-label`, `aria-hidden`, `pointer-events-none` when hidden
-    - **Responsive Sizing**: CSS Container Queries with `clamp(20px, 4cqw, 32px)` for 3-4% terminal width scaling
-  - Proper disposable cleanup on unmount
-- **Viewport Preservation on Terminal Hide/Show**: Maintains scroll position when switching terminals within project
-  - **Save Trigger**: During render phase when `isHidden` transitions from false to true (before DOM update)
-  - **Save Mechanism**: Captures `viewportY`, `baseY`, and `isAtBottom` to `savedViewportRef`
-  - **Restore Trigger**: After fit() is called, ratio-based position restoration
-    - Calculates `savedRatio = viewportY / baseY` from saved state
-    - After fit, applies `newViewportY = Math.round(savedRatio * newBaseY)` to maintain proportional position
-    - Clamps position to valid range: `Math.max(0, Math.min(newViewportY, baseY))`
-  - **isAtBottom Tracking**: Preserved and restored to prevent smart scroll from overriding scroll position
-  - **Thread Safety**: Render-phase save ensures capture before CSS `display:none` hides viewport
-- **Terminal Scroll Pinning During Streaming**: Auto-scroll to live output when Claude is active (v3.0.1-beta)
-  - Prevents user scroll hijacking during concurrent write operations
-  - Smart scroll guards against scroll loss during overlapping updates
-- **Sibling Terminal Close Restoration**: Restores output after closing adjacent terminals (v3.0.1-beta)
-  - Prevents blank display when closing terminals in same grid
-- **WebGL Disposal Timing**: Fixed display corruption during rapid project switching via:
-  - `TERMINAL_DISPOSE_DELAY` (100ms) constant for deferred cleanup
-  - WebGL addon ref tracking with proper disposal order (addon before terminal)
-  - Deferred `initialOutput` write until terminal fully mounted
-  - Phase 1: Removed `isTransitioning` state - no longer needed with single-parent pattern
-- **Terminal Refresh**: Manual and automatic WebGL context recovery
-  - Refresh button in TerminalPane header (100ms debounce)
-  - Auto-recovery on WebGL context lost events with toast notification
-  - `use-terminal.ts` exposes `refresh()` callback via `onRefreshReady` prop
+- PTY lifecycle and shell detection
+- project CRUD, session restore, and WSL UNC path conversion
+- Git operations and HEAD watching
+- notifications, credential storage, and task detection
+- updater flow, clipboard image handling, and Vietnamese IME patching
+- IPC handler registration
 
-#### Toolbar & UI Components (VibeTerminal v1.2)
-- **Toolbar** (32px compact header replacing activity bar + project tabs):
-  - **toolbar.tsx**: Main toolbar with left (add terminal + project dropdown) and right (GitHub, Settings, Update) groups
-  - **toolbar-button.tsx**: Reusable icon button with optional badge/highlight
-  - **project-dropdown.tsx**: Project selector dropdown with add project button
-  - Features: macOS traffic light padding (72px left), drag region behind buttons
-  - Keyboard shortcuts: Ctrl+T (new terminal), Ctrl+G (toggle GitHub panel)
-- **Shell Switcher** (NEW - macOS/Linux/Windows support):
-  - **Action Bar Shell Dropdown**: Clickable `>_ <shell> ▾` dropdown in terminal action bar for per-platform shell selection
-  - **macOS/Linux Detection**: Detects installed shells from `/etc/shells` + common paths (bash, zsh, fish, etc.), validates executable via `macos-shell-detector.ts`
-  - **Windows Support**: Reuses existing `WindowsShell` union (cmd, PowerShell, WSL distros)
-  - **Type System**: `ShellInfo` interface with `kind` field for unified handling across platforms
-  - **IPC Endpoint**: `GET_AVAILABLE_SHELLS` returns platform-specific list via `terminal-manager.ts`
-  - **Persistence**: Selected shell persisted to `AppSettings.defaultShell`, restored on app load with validation
-  - **Components**: `shell-selector-dropdown.tsx` renders dropdown, unified across action bar + settings UI
-  - **Scope**: New terminals spawn with selected shell; existing terminals unaffected (restart app to refresh shell list)
-  - **Security**: Command injection prevention for `dscl`, path validation, distro name validation, symlink awareness
-- **Slide Panels** (modal dialogs replaced with side panels):
-  - Position: Right edge on landscape (340px wide), bottom edge on portrait
-  - GitHub Panel: Accessed via Ctrl+G or toolbar, toggles github-view.tsx content
-  - Settings Panel: Accessed via toolbar, toggles settings-panel.tsx content
-  - Each panel has close button and can be toggled via toolbar or keyboard
-- **App.tsx State Cleanup** (Phase 2 of Terminal Cursor Fix)
-  - Removed `projectSwitching` state - no longer needed with single-parent pattern
-  - Removed `sidebarOpen` unused state variable
-  - Removed `handleStartClaude` unused handler
-  - Simplified `handleSelectProject`: instant CSS-only project switch, removed 150ms delay workaround
+### Renderer Process
 
-#### Project Management & Persistence
-- **ProjectStore**: electron-store persistence layer for projects and terminal layouts
-  - Projects: CRUD operations with metadata (id, name, path, gitRemote)
-  - Active project tracking (activeProjectId)
-  - **Terminal Layout Persistence**: Per-project terminal layout storage
-    - `saveTerminalLayout(projectId, layout)`: Store layout snapshot
-    - `loadTerminalLayout(projectId)`: Retrieve saved layout
-    - `deleteTerminalLayout(projectId)`: Clean up on project deletion
-    - `getAllTerminalLayouts()`: Bulk layout retrieval
-  - Session management: Save/load/clear AppSession
-- File-based storage under electron-store (`multiclaude-data`)
+The renderer owns the React UI and local state:
 
-#### Git Integration
-- **GitManager**: Git operations via simple-git
-- **GitHubAuth**: OAuth flow using GitHub CLI (gh command)
-- Channels: status, init, add-remote, push
+- `App.tsx` composes the shell, panels, and shared listeners
+- terminal UI lives under `src/renderer/components/terminal/`
+- Zustand stores handle app state, settings, notifications, updates, toasts, and image state
+- renderer utilities cover terminal output dispatching, file-drop handling, and shell/path helpers
 
-#### Settings & VibeTerminal Themes
-- **SettingsStore** (Main Process): electron-store persistence with validation firewall
-  - Validates: themeMode, colorTheme, terminalRenderMode, terminalLimit (presets + custom), windowsShell (type + distro)
-  - Handles: gpuRendererForClaudeTerminals, vietnameseImeFix, and other boolean toggles
-  - IPC handlers in `src/main/ipc/handlers.ts` with error handling and defaults
-- **SettingsStore** (Zustand Renderer): Dual-flow architecture for safe persistence
-  - **pendingSettings**: Live preview of changes before Save button clicked
-  - **savedSettings**: Disk source of truth, persisted to main process
-  - **hasUnsavedChanges**: Deep equality check (field-by-field, not JSON.stringify)
-  - **localStorage migration**: One-time per session on first load; backward compatible
-  - Save/Cancel buttons: Preview immediately, persist only on explicit Save
-- **SettingsPanel**: Tabbed UI (Appearance, Terminals, Notifications, Updates) with Save/Cancel buttons
-- **TerminalSettings**: Terminal limit presets (2, 4, 9, custom), rendering mode selector, Claude GPU toggle
-  - Vietnamese IME patch UI: status detection, manual patch button, toast notifications
-  - Windows shell selector (cmd/PowerShell/WSL distros) with dropdown
-- **ThemeSelector**: VibeTheme picker with dual systems:
-  - **UI Themes** (7): Default, Dusk, Lime, Ocean, Retro, Neo, Forest → app chrome
-  - **Terminal Palettes** (5): Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark → xterm
-- **ToggleSwitch**: Reusable boolean control for settings (Vietnamese IME, GPU mode, etc.)
-- **VibeTerminal Theme System** (v1.2):
-  - **VibeTheme Interface**: UI colors + ANSI 16-color palette + font stacks with Nerd Font fallbacks
-  - **CSS Variables**: Layout (`--toolbar-height` 32px, `--panel-width` 340px), colors, transitions
-  - **Dynamic Application**: `setTheme(themeId)` in App.tsx updates all CSS vars in globals.css
-  - **xterm Integration**: ANSI palette passed to TerminalView for terminal rendering
-- **Terminal Rendering Modes** (Settings > Terminals):
-  - **Performance**: No WebGL, best for 9+ terminals, lower GPU usage
-  - **Balanced** (default): WebGL only on active terminal, balanced quality/performance
-  - **Quality**: WebGL always enabled, best visual quality
-  - **Claude-safe Mode**: Experimental toggle to keep Claude terminals on canvas renderer
+### Shared Code
 
-#### Notifications
-**Phase 1 - Completed: Types & Constants**
-- **NotificationEventType**: 'taskComplete' | 'taskFailed' | 'reviewNeeded'
-- **OutputMode**: 'auto' | 'stream-json' | 'plain-text' - Parser mode for terminal output
-- **SoundPreset**: 'default' | 'minimal' | 'retro'
-- **NotificationSettings**: Event toggles, sound config, Telegram/Discord flags, output mode, background-only, task summary
-- **TaskEvent**: Unique task event with id, terminalId, type, taskName, projectName, context, timestamp
-- **JsonStreamEvent**: Claude Code stream-json event structure (init, message, tool_use, tool_result, result, error)
-- **ParserType**: Alias for OutputMode (parser-specific usage)
-- **TelegramCredentials**, **DiscordCredentials**: Secure credential interfaces
-- **DETECTION_PATTERNS**: Regex patterns for automatic event detection
-- **ENHANCED_DETECTION_PATTERNS**: Named capture group patterns for task name extraction
+- `src/shared/types/` defines terminal, project, settings, notification, and shell types
+- `src/shared/constants/` defines IPC channel names, buffer trim thresholds, themes, and terminal limits
 
-**Phase 2 - Completed: Core Backend**
-- **NotificationManager**: Central orchestrator for all notification types
-- **SecureStorage**: Electron safeStorage wrapper for credential encryption (Telegram/Discord)
-- **PatternDetector**: Terminal output pattern matching with 300ms debounce
-- **TelegramNotifier**: Telegram Bot API integration via HTTP
-- **DiscordNotifier**: Discord Webhook integration with URL validation
-- 12 IPC handlers for credential management, testing, and retrieval
+## Terminal Subsystem
 
-**Phase 3 - Completed: Renderer UI**
-- **NotificationStore** (Zustand): Settings state management with sound caching
-- **NotificationSettings**: Main settings UI with event toggles, sound preset selector, behavior controls
-- **TelegramConfigModal**: Modal for Telegram botToken/chatId configuration
-- **DiscordConfigModal**: Modal for Discord webhookUrl configuration
-- Sound playback with audio element caching (auto, success, error, info types)
-- Settings persistence via IPC with local optimistic updates
-- Integrated into SettingsPanel with tabbed navigation
+### Current Output Path
 
-**Phase 4 - Completed: Focus Detection & Deduplication**
-- **FocusDetector**: Window/terminal focus tracking to suppress notifications when user is watching
-  - Tracks BrowserWindow focus/blur events
-  - Tracks active terminal ID via IPC (NOTIFICATION_SET_ACTIVE_TERMINAL)
-  - `shouldNotify(terminalId)`: Returns true if window unfocused OR different terminal active
-- **TaskTracker**: Prevents duplicate notifications for same task within TTL window
-  - SHA256 hash-based task ID deduplication (per terminal)
-  - Configurable TTL (TASK_TRACKER_TTL_MS = 5min default)
-  - Auto-cleanup of stale entries (TASK_TRACKER_CLEANUP_INTERVAL_MS = 1min)
-  - `shouldNotify(terminalId, taskId)`: Returns true if task not seen within TTL
-- **NotificationManager Integration**: FocusDetector and TaskTracker integrated into notification flow
-- **Preload API**: Added `setActiveTerminal()` to ElectronAPI for renderer-to-main focus tracking
-- **Test Coverage**: 17 tests for FocusDetector, 14 tests for TaskTracker
+The current terminal output flow is intentionally centralized:
 
-#### Vietnamese IME Support (NEW v3.0.1-beta)
-- **VietnamesePatcher**: Auto-detect and patch Claude CLI for Vietnamese IME support
-  - Auto-runs on app startup to detect issues with Claude CLI and Vietnamese input method
-  - Patches Claude CLI config if needed for proper IME handling
-  - Improves terminal input reliability for Vietnamese language users
-  - Main process module: `src/main/vietnamese-ime-patcher/`
+```text
+PTY output
+  -> main-process IPC event
+  -> App.tsx shared listener
+  -> terminal-output-dispatcher.ts
+  -> TerminalView handler
+  -> xterm.write()
+  -> terminal-output-buffer.ts
+```
+
+Key pieces:
+
+- `src/renderer/utils/terminal-output-dispatcher.ts` keeps a `Map<terminalId, handler>`
+- `src/renderer/components/terminal/terminal-view.tsx` registers a handler for the terminal it owns
+- `src/renderer/components/terminal/terminal-output-handler.ts` wraps `write()`, `onOutput`, and visible-output buffering
+- `src/renderer/stores/terminal-output-buffer.ts` stores scrollback in a plain module-level `Map`
+- `src/renderer/stores/app-store.ts` keeps the old facade methods so call sites still read and append output through the store API
+
+Important behavior:
+
+- output writes do not live in reactive Zustand state
+- `TerminalPane` restores from `initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId)`
+- `addTerminal()` and `removeTerminal()` clear stale buffers for terminal reuse and cleanup
+- `skipAppendRef` suppresses duplicate appends during restore
+
+### Terminal UI Flow
+
+- `TerminalGrid` keeps all project grids mounted and hides inactive ones
+- Each active group renders a `PaneTree` via `PaneTreeNode` — a recursive flex layout (tmux/iTerm-style binary split tree) replacing the legacy auto-grid
+- `TerminalPane` provides tab chrome, restore wiring, and action buttons
+- `TerminalView` owns xterm lifecycle, focus, refresh, scroll tracking, and output processing
+
+This arrangement preserves terminal state across project switching without forcing unmount/remount churn.
+
+### Pane Tree Layout
+
+- Pure model in `src/shared/types/pane-tree.ts` + ops in `src/shared/utils/pane-tree.ts` (`splitLeaf`, `closeLeafAndCollapse`, `updateRatio`, …). `updateRatio` returns the tree unchanged on stale paths (defense-in-depth for drag listeners that outlive tree restructuring).
+- Per-project tree persisted in `electron-store` under `terminalLayouts[projectId].paneTree` with `schemaVersion: 2`. Legacy flat layouts migrate on first read via `migrateFlatToTree` (`pane-tree-migration.ts`) preserving the pre-upgrade visual arrangement for N=1–12 terminals in both orientations. Migration is per-process single-flight; `savePaneTree` refuses to downgrade a future `schemaVersion`; validator caps recursion at depth 32.
+- Renderer store `pane-tree-store.ts` debounces writes (200ms) via `terminal:load-pane-tree` / `terminal:save-pane-tree` IPC. Save rejections surface via `console.error` with projectId context rather than silently swallowing.
+- Split actions (`right` / `left` / `down` / `up`) dispatched from three entry points — right-click menu, hotkeys (⌘⇧→/←/↓/↑), action-bar split-button — all funnel through `useExecuteSplit`. Close routes flow through `closeLeafAndCollapse` so parent splits collapse when a sibling is removed. `useExecuteSplit` wraps `terminal:create` in a 10 s `CREATE_TIMEOUT_MS` race and, on timeout, fires a toast + destroys any late-arriving orphan PTY. In-flight counter guards concurrent hotkey presses from exceeding the limit.
+- Resize uses `usePaneResize` + `ResizeHandle`: pointer capture on the handle itself (no global window listeners), cleanup ref tears down on unmount mid-drag, rect is re-read on each move (window resize tolerance), and ratio is clamped both by `PANE_RATIO_MIN/MAX` and an absolute `minPanePx` (default 80) so deeply nested panes can't starve xterm. Handle is `role="separator"` + `tabIndex=0` with arrow-key adjustment (5% / 1% fine with Shift).
+
+### Themed Context Menu
+
+- React Portal menu in `src/renderer/components/context-menu/` driven by `context-menu-store.ts`. Colors bind to CSS variables (`--bg-primary`, `--hover`, `--border`, …) so theme switches update the open menu live.
+- Replaces the legacy native `Menu.buildFromTemplate` IPC path (removed). Copy/Paste reuses shared `paste-from-clipboard.ts` (image + text); Split actions extend the menu dynamically from `terminal-context-actions.ts`.
+- Menu captures `document.activeElement` on open and restores focus on close (keyboard-a11y). App closes the menu on `activeProjectId` change so stale closures to defunct terminals cannot fire.
+- Paste pipeline: CRLF normalization → (bracketed mode on) strip inner `\x1b[20[01]~` sentinels → wrap → chunk at 64 KB with setTimeout yield. Sentinel stripping prevents attacker-controlled clipboard content from escaping the paste region into typed shell input.
 
 ## File Organization
 
-```
+```text
 src/
-├── main/                     # Electron main process
-│   ├── index.ts             # App window creation, menu
-│   ├── __tests__/           # Test setup and specs
-│   │   ├── setup.ts         # Global mocks (electron-store, node-pty)
-│   │   └── *.spec.ts        # Test files
-│   ├── terminal/            # PTY management
-│   │   ├── terminal-manager.ts
-│   │   ├── wsl-detector.ts      # WSL detection (Windows)
-│   │   ├── macos-shell-detector.ts  # Shell detection (macOS/Linux)
-│   │   └── pty-handler.ts
-│   ├── git/                 # Git operations
-│   │   ├── git-manager.ts
-│   │   └── github-auth.ts
-│   ├── project/             # Project storage
-│   │   └── project-store.ts
-│   ├── notification/        # Notification system
-│   │   ├── notification-manager.ts
-│   │   ├── secure-storage.ts
-│   │   ├── pattern-detector.ts
-│   │   ├── focus-detector.ts        # Window/terminal focus tracking
-│   │   ├── task-tracker.ts          # Task ID deduplication with TTL
-│   │   ├── telegram-notifier.ts
-│   │   ├── discord-notifier.ts
-│   │   ├── output-parser.ts         # Router: auto-detects and locks parser mode
-│   │   ├── json-stream-parser.ts    # NDJSON parser for stream-json output
-│   │   ├── plain-text-parser.ts     # Regex parser with named capture groups
-│   │   ├── parser-utils.ts          # Shared: generateTaskEventId, MAX_REGEX_INPUT_LENGTH
-│   │   ├── __tests__/
-│   │   │   ├── output-parser.spec.ts
-│   │   │   ├── focus-detector.spec.ts   # 17 tests
-│   │   │   └── task-tracker.spec.ts     # 14 tests
-│   │   └── index.ts
-│   ├── clipboard/           # Clipboard operations
-│   │   └── clipboard-handler.ts
-│   ├── updater/             # Auto-update
-│   │   ├── auto-updater.ts
-│   │   └── index.ts
-│   └── ipc/                 # IPC handlers
-│       └── handlers.ts
-├── __tests__/               # Test infrastructure
-│   └── e2e/                 # Playwright E2E tests
-│       ├── playwright.config.ts
-│       ├── fixtures/        # Electron app fixtures, mock data
-│       └── tests/           # Test specs
-├── renderer/                # React UI
+├── main/
+│   ├── terminal/
+│   ├── project/
+│   ├── git/
+│   ├── notification/
+│   ├── clipboard/
+│   ├── updater/
+│   ├── vietnamese-ime-patcher/
+│   └── ipc/
+├── renderer/
 │   ├── App.tsx
 │   ├── components/
-│   │   ├── terminal/        # Terminal UI
-│   │   │   ├── terminal-grid.tsx
-│   │   │   ├── terminal-pane.tsx
-│   │   │   ├── terminal-view.tsx
-│   │   │   ├── terminal-action-bar.tsx
-│   │   │   ├── shell-selector-dropdown.tsx  # Shell switcher dropdown
-│   │   │   └── index.ts
-│   ├── sidebar/         # Project/settings sidebar
-│   │   ├── sidebar.tsx
-│   │   ├── sidebar-header.tsx      # Logo + collapse toggle
-│   │   ├── navigation-item.tsx     # Navigation menu item
-│   │   └── user-account-card.tsx   # GitHub account card
-│   ├── project-tabs/    # Project tab bar
-│   │   ├── project-tabs.tsx
-│   │   └── index.ts
-│   ├── settings/        # Settings panels
-│   │   ├── settings-panel.tsx
-│   │   ├── theme-selector.tsx
-│   │   ├── toggle-switch.tsx       # Reusable boolean toggle control (NEW)
-│   │   ├── notification-settings.tsx
-│   │   ├── telegram-config-modal.tsx
-│   │   ├── discord-config-modal.tsx
-│   │   ├── update-settings.tsx      # In-app update management UI
-│   │   ├── settings-typography.tsx  # Shared typography (SettingsTitle, SettingsSubheading)
-│   │   └── index.ts
-│   ├── update-banner.tsx            # Visual update state component (NEW)
-│   ├── toolbar/                     # 32px compact header
-│   │   ├── toolbar.tsx
-│   │   ├── toolbar-button.tsx
-│   │   ├── project-dropdown.tsx
-│   │   └── index.ts
-│   ├── git-panel/                   # Git operations UI
-│   ├── github-view/                 # GitHub integration UI
-│   ├── toast-container.tsx          # Toast notifications
-│   ├── hooks/               # Custom React hooks
-│   │   ├── use-file-drop.ts       # Drag-drop file paths into terminal
-│   │   ├── use-clipboard-paste.ts # Ctrl+V image paste → temp file → insert path
-│   │   └── index.ts
-│   ├── stores/              # Zustand stores
-│   │   ├── app-store.ts
-│   │   ├── settings-store.ts
-│   │   ├── notification-store.ts
-│   │   ├── update-store.ts          # Update state management
-│   │   └── index.ts
-│   ├── utils/               # Utility functions
-│   │   ├── shell-utils.ts        # WindowsShell key generation
-│   │   └── index.ts
-│   └── styles/              # CSS
-├── preload/                 # IPC bridge
-│   └── index.ts
-└── shared/                  # Shared code
-    ├── types/               # TypeScript interfaces
-    │   ├── index.ts
-    │   ├── notification.ts
-    │   └── notification-events.ts  # TaskEvent, JsonStreamEvent, ParserType
-    └── constants/           # Constants & defaults
-        ├── index.ts
-        ├── ipc-channels.ts
-        ├── notification.ts
-        ├── themes.ts
-        └── terminal-themes.ts
+│   │   ├── terminal/
+│   │   ├── settings/
+│   │   ├── github-view/
+│   │   └── toolbar/
+│   ├── hooks/
+│   ├── stores/
+│   └── utils/
+├── preload/
+└── shared/
 ```
 
-## IPC Channels (86 total)
+Notable renderer files for the refactor:
 
-### Terminal (9 channels)
-- `terminal:create`, `terminal:destroy`, `terminal:input`, `terminal:output`
-- `terminal:resize`, `terminal:list`, `terminal:invoke-claude`, `terminal:title-change`
-- `terminal:detect-wsl`
+- `src/renderer/stores/app-store.ts`
+- `src/renderer/stores/terminal-output-buffer.ts`
+- `src/renderer/utils/terminal-output-dispatcher.ts`
+- `src/renderer/components/terminal/terminal-output-handler.ts`
+- `src/renderer/components/terminal/terminal-view.tsx`
+- `src/renderer/App.tsx`
 
-### Project (7 channels)
-- `project:list`, `project:create`, `project:update`, `project:delete`, `project:set-active`
-- `project:open-folder` (WSL UNC path conversion: `\\wsl$\...` → Linux paths), `project:check-folder`
-
-### Git (38 channels)
-**Basic**: `git:status`, `git:init`, `git:add-remote`, `git:push`
-**File Operations**: `git:file-status`, `git:stage-file`, `git:unstage-file`, `git:stage-all`, `git:discard`, `git:diff`
-**Commit**: `git:commit`
-**Branch**: `git:branches`, `git:create-branch`, `git:checkout-branch`, `git:delete-branch`, `git:merge`
-**Remote**: `git:pull`, `git:fetch`
-**History**: `git:log`
-**Stash**: `git:stash-list`, `git:stash-save`, `git:stash-apply`, `git:stash-pop`, `git:stash-drop`
-**Config**: `git:config-get`, `git:config-set`
-**Branch Diff**: `git:diff-branch`, `git:diff-against-branch`
-**Watcher**: `git:branch-changed`, `git:watch-project`, `git:unwatch-project`
-
-### GitHub (5 channels)
-- `github:auth-status`, `github:login`, `github:logout`, `github:create-repo`
-- `github:issues-list`, `github:prs-list`
-
-### Notifications (13 channels)
-- **Settings**: `notification:get-settings`, `notification:set-settings`
-- **Telegram**: `notification:set-telegram`, `notification:get-telegram-status`, `notification:test-telegram`, `notification:clear-telegram`
-- **Discord**: `notification:set-discord`, `notification:get-discord-status`, `notification:test-discord`, `notification:clear-discord`
-- **Events**: `notification:event`
-- **Focus**: `notification:set-active-terminal`
-
-### Session & App (4 channels)
-- `session:save`, `session:restore`, `app:get-path`, `app:check-for-updates`
-
-### Updates (5 channels)
-- `update:get-state`, `update:check`, `update:download`, `update:install`, `update:status-changed`
-
-### Clipboard (1 channel)
-- `clipboard:save-image`
-
-### File Picker (1 channel)
-- `file-picker:open`
-
-### YOLO Mode (2 channels)
-- `yolo:get`, `yolo:set`
-
-### Settings (3 channels)
-- `settings:get`, `settings:set`, `settings:reset`
-
-## Key Data Structures
+## IPC Surface
 
 ### Terminal
-```typescript
-interface Terminal {
-  id: string
-  title: string
-  cwd: string
-  isClaudeMode: boolean
-  claudeSessionId?: string
-  projectId?: string
-  createdAt: Date
-}
 
-interface WslDistro { name: string; isDefault: boolean }
-interface WslInfo { available: boolean; distros: WslDistro[] }
-type WindowsShell = { type: 'cmd' } | { type: 'powershell' } | { type: 'wsl'; distro: string }
-```
+- create, destroy, list, input, resize, invoke-claude, detect-wsl
+- output, exit, and title-change events
 
 ### Project
-```typescript
-interface Project {
-  id: string
-  name: string
-  path: string
-  gitRemote?: string
-  createdAt: Date
-  updatedAt: Date
-}
-```
 
-### Notification Settings
-```typescript
-interface NotificationSettings {
-  onTaskComplete: boolean
-  onTaskFailed: boolean
-  onReviewNeeded: boolean
-  soundEnabled: boolean
-  soundPreset: SoundPreset
-  telegramEnabled: boolean
-  telegramConfigured: boolean
-  discordEnabled: boolean
-  discordConfigured: boolean
-  // Enhanced notification tracking
-  outputMode: OutputMode        // 'auto' | 'stream-json' | 'plain-text'
-  notifyOnlyBackground: boolean // Only notify when app unfocused
-  includeTaskSummary: boolean   // Include task name in notification
-}
-```
+- list, create, delete, set-active, open-folder, check-folder
 
-### Update State
-```typescript
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+### Git
 
-interface UpdateState {
-  status: UpdateStatus
-  currentVersion: string
-  availableVersion?: string
-  changelog?: string
-  progress?: number  // 0-100 for download progress
-  error?: string
-}
-```
+- status, init, remote, push, branch, stash, diff, log, watch
 
-### Project Terminal Layout (Project Tabs Redesign)
-```typescript
-interface ProjectTerminalLayout {
-  projectId: string
-  terminals: ProjectTerminal[]
-}
+### GitHub
 
-interface ProjectTerminal {
-  id: string
-  title: string
-  position: number  // 0-8 for grid position
-}
-```
+- auth status, login/logout, repo creation, issues, and pull requests
 
-## State Management
+### Notifications
 
-- **Zustand Stores**: SettingsStore (themes, notification settings), AppStore (terminals, projects, projectTerminals)
-- **AppStore.projectTerminals**: Per-project terminal layouts via `setProjectTerminals()` / `getProjectTerminals()`
-- **electron-store**: ProjectStore (persistent project list)
-- **IPC Channels**: Terminal I/O streaming, real-time events
-- **localStorage**: Theme preferences (auto-synced with Zustand)
+- settings persistence, provider configuration, test actions, active-terminal focus
 
-## Build & Deploy
+### Other
 
-- **Bundler**: Vite with TypeScript
-- **Electron Forge**: Native packaging for Win/Mac/Linux
-- **Dev Mode**: `npm run electron:dev` (hot reload via Vite)
-- **Build**: `npm run build` (creates distributable)
-- **Release Command**: Repo-local Codex skill `$release <target>` backed by `scripts/release/`
-  - Preview: `node scripts/release/release-command.mjs preview --target <target>`
-  - Execute: `node scripts/release/release-command.mjs execute --target <target> --version <version> --release-type <stable|prerelease> --confirm`
-  - Shell fallback: `npm run release -- --target <target>` and `npm run release:execute -- ...`
-  - Requires valid `gh auth status` and a clean working tree
-  - Pushes the release tag first, creates the draft release, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, waits for CI assets to upload into that draft, then pushes the branch commit
-- **Packaging Scripts**: `npm run build` / `npm run build:ci` for local and CI packaging
-  - Legacy direct-publish scripts were renamed to `publish:legacy*` and are not the supported maintainer release workflow
-- **Testing**: Vitest with V8 coverage (60% thresholds)
-  - Run tests: `npm test`
-  - Watch mode: `npm run test:watch`
-  - Coverage: `npm run test:coverage`
-  - Release scripts: `npm run test:release`
-- **E2E Testing**: Playwright with Electron fixtures
-  - Run UI tests: `npm run test:ui`
-  - Update snapshots: `npm run test:ui:update`
-  - Headed mode: `npm run test:ui:headed`
-  - Visual regression: `npm run test:visual` / `test:visual:update`
-  - Theme tests: `npm run test:themes`
-  - Config: `src/__tests__/e2e/playwright.config.ts`
-  - Features: Trace on retry, screenshot on failure, video capture
-  - **Test Data** (`fixtures/test-data.ts`): Unified mock data for projects, terminals, themes, viewports
-    - `themeTestCases`: 3 themes (default, ocean, vibrant) × 2 modes = 6 combinations
-    - `viewportSizes`: Named viewport configs (fhd, laptop, hd, tablet, small)
-    - `SIDEBAR_DIMENSIONS`: Min/max width boundaries for responsive tests
-  - **Terminal Screenshot Helpers** (`fixtures/electron-app.ts`): Utilities for consistent visual regression
-    - `TERMINAL_TEST_PROMPT`: Fixed prompt text for deterministic screenshots
-    - `clearTerminalForScreenshot(window, index)`: Clears terminal and injects fixed prompt
-    - `clearAllTerminalsForScreenshot(window)`: Clears all visible terminals for screenshots
-  - **Phases Completed**:
-    - Phase 1-3: Terminal pane, grid, rendering tests
-    - Phase 4: Responsive layout tests - parameterized viewport testing, sidebar toggle, layout consistency
-    - Phase 5: Visual regression tests - theme/mode screenshot comparisons for sidebar, settings modal, terminal, full page, empty state, theme transitions
-    - Phase 6: Interactive & keyboard tests - keyboard shortcuts (Alt+1-9 project switch, Ctrl+N/W terminal mgmt), form inputs (terminal title editing), state transitions (empty states, toasts, error handling)
-  - **Test Counts**: 21 passing, 5 flaky tests skipped (terminal creation timing issues in E2E)
+- settings get/set/reset
+- session save/restore
+- update state and install flow
+- clipboard image save
+- file picker
+- YOLO mode toggle
+- window controls
 
-### GitHub Actions Workflows
+The preload bridge keeps these channels typed and isolated from the renderer.
 
-- **build.yml**: CI builds on push/PR to master/main, manual release via workflow_dispatch
-  - Matrix build: ubuntu, windows, macos
-  - Artifacts uploaded per platform
-- **release.yml**: Draft-release asset upload workflow
-  - Triggers on `workflow_dispatch` only with a required `tag` input
-  - Checks out the exact requested tag before building
-  - Uploads artifacts into an existing draft GitHub release for that tag
-  - Fails if the draft release does not exist or uploads fail
-- **ui-tests.yml**: E2E/visual regression tests on push/PR to main/beta
-  - Runs on ubuntu-latest with Xvfb (virtual framebuffer for headless Electron)
-  - Playwright browser caching for faster runs
-  - Uploads playwright-report and screenshot-diffs artifacts on failure
+## Key State Stores
 
-## Dependencies Overview
+### App Store
 
-### Main Process
-- `@lydell/node-pty`: PTY process spawning
-- `electron-store`: Simple persistence
-- `electron-updater`: Auto-update via GitHub releases
-- `simple-git`: Git wrapper
-- `github-script`: GH CLI integration
+`src/renderer/stores/app-store.ts` manages:
 
-### Renderer
-- `react@19`: UI framework
-- `@xterm/xterm`: Terminal rendering
-- `react-resizable-panels`: Grid layout
-- `zustand`: State management
-- `tailwindcss@4`: Styling
+- terminal list and active terminal selection
+- project list and active project selection
+- per-project last-active terminal tracking
+- terminal keyboard enhancement state
+- terminal layout snapshots
 
-### Testing
-- `vitest`: Unit testing framework
-- `@playwright/test`: E2E testing with Electron support
+The output API remains as a compatibility facade:
+
+- `getTerminalOutput(id)`
+- `appendOutput(id, data)`
+
+Those methods delegate to the plain terminal buffer module instead of storing output in Zustand.
+
+### Settings Store
+
+The settings store uses a pending/saved split:
+
+- `pendingSettings` drives the live UI preview
+- `savedSettings` is the persisted source of truth
+- changes are applied in the renderer and committed on Save
+
+### Other Stores
+
+- `notification-store.ts` handles notification preferences and sound state
+- `update-store.ts` tracks update state
+- `toast-store.ts` queues UI toasts
+- `image-store.ts` tracks pasted and detected images for terminal previews
+
+## Dependencies
+
+Core runtime dependencies include:
+
+- Electron
+- React
+- TypeScript
+- Vite
+- `node-pty`
+- `xterm.js`
+- `electron-store`
+- `simple-git`
+- `electron-updater`
+- `zustand`
 
 ## Development Workflow
 
-1. **Feature Development**: Create plan in `plans/` with phases
-2. **Type Safety**: Define types in `src/shared/types/`
-3. **IPC Layer**: Add channels in `src/shared/constants/ipc-channels.ts`
-4. **Main Process**: Implement handlers in `src/main/ipc/handlers.ts`
-5. **Renderer**: Build UI in `src/renderer/components/`
-6. **Documentation**: Update this file and relevant guides
+Common local commands:
 
-## Notifications Implementation Phases
+```bash
+npm run electron:dev
+npm run build
+npm test
+npm run typecheck
+npm run lint
+```
 
-**Phase 1 - Completed: Types & Constants**
-- Notification event types (NotificationEventType), OutputMode, SoundPreset
-- NotificationSettings interface with enhanced tracking fields (outputMode, notifyOnlyBackground, includeTaskSummary)
-- TaskEvent and JsonStreamEvent interfaces for output parsing
-- TelegramCredentials, DiscordCredentials for secure storage
-- DETECTION_PATTERNS and ENHANCED_DETECTION_PATTERNS (named capture groups)
-- Default settings, sound presets, IPC channel definitions
+The repo also uses a local release command for GitHub release automation.
 
-**Phase 2 - Completed: Core Backend**
-- **NotificationManager**: Central orchestrator, pattern detection, external platform dispatch
-- **SecureStorage**: Encrypted credential storage (Telegram botToken/chatId, Discord webhookUrl)
-- **PatternDetector**: Terminal output analysis with debounce to prevent event spam
-- **TelegramNotifier**: Telegram Bot API integration with test/validation
-- **DiscordNotifier**: Discord Webhook integration with URL format validation
-- **Output Parser Infrastructure**:
-  - **OutputParser**: Router with auto-detection locking (first valid format wins)
-  - **JsonStreamParser**: NDJSON parser for Claude Code `--output-format stream-json`
-  - **PlainTextParser**: Enhanced regex with named capture groups for task extraction
-  - **parser-utils.ts**: Shared utilities (generateTaskEventId, MAX_REGEX_INPUT_LENGTH=10000)
-  - 25 unit tests covering all parser scenarios
-- **IPC Handlers**: 12 handlers covering settings, Telegram/Discord management, testing
-- **Main Process Integration**: NotificationManager lifecycle, terminal output forwarding, app cleanup
+## Current Design Notes
 
-**Phase 3 - Completed: Renderer UI**
-- **NotificationStore**: Zustand store with async settings loading/saving, sound caching
-- **NotificationSettings**: Event toggles (taskComplete, taskFailed, reviewNeeded), sound preset selector
-- **TelegramConfigModal**: Secure credential input and management (configure/clear buttons)
-- **DiscordConfigModal**: Webhook URL input and management
-- **Sound Playback**: Audio element caching for efficient sound playback
-- **Settings Panel Integration**: Notification tab in tabbed settings UI (Appearance/Notifications)
-- **App Integration**: setupNotificationListener() called in App component on mount
+- Single-parent terminal grids avoid unmount churn during project switching
+- The renderer output path is no longer reactive and no longer fans out per terminal
+- Settings still use validation before persistence in the main process
+- Security depends on context isolation, a typed preload bridge, and safeStorage for secrets
 
-**Phase 4 - Completed: Focus Detection & Deduplication**
-- **FocusDetector**: Tracks window focus/blur and active terminal to suppress notifications when user is watching
-- **TaskTracker**: Prevents duplicate notifications using SHA256-based task IDs with 5min TTL
-- **IPC Handler**: NOTIFICATION_SET_ACTIVE_TERMINAL for renderer-to-main focus tracking
-- **Preload API**: `electron.notification.setActiveTerminal(terminalId)` exposed to renderer
-- **NotificationManager**: Integrated both detectors into notification flow
-- **Test Coverage**: 31 new tests (17 FocusDetector + 14 TaskTracker)
+## Related Docs
 
-**Phase 5 - Completed: Rich Platform Messages**
-- **TelegramNotifier**: Rich HTML formatted messages via `sendTaskEvent(event: TaskEvent)`
-  - `formatTaskEvent()`: Emoji + bold labels + HTML escaping
-  - `escapeHtml()`: Escape &, <, > characters
-  - `MAX_FIELD_LENGTH = 256`: Truncation limit
-- **DiscordNotifier**: Colored embeds via `sendTaskEvent(event: TaskEvent)`
-  - `DiscordEmbed` interface: Rich embed structure with fields, timestamp, footer
-  - `sendEmbed()`: Generic embed payload sender
-  - `formatTaskEvent()`: Build embed with color-coded type (green/red/yellow)
-  - Test notification now uses embeds
-- **NotificationManager**: Delegates to `notifier.sendTaskEvent()` instead of inline formatting
-  - Removed duplicate `formatTelegramMessage()`/`formatDiscordMessage()` methods
-
-**Phase 6 - Completed: Settings UI**
-- **NotificationSettings Behavior Section**: New UI section for output parsing and notification behavior
-  - Detection Mode dropdown: auto (recommended), stream-json, plain-text
-  - "Only When Background" toggle: Skip notifications when watching terminal
-  - "Include Task Summary" toggle: Add task name to notifications
-  - Uses OutputMode type from shared/types
-- **App.tsx Active Terminal Sync**: useEffect syncs activeTerminalId with notification.setActiveTerminal IPC
-  - Enables FocusDetector to track which terminal user is watching
-  - Runs on every activeTerminalId change
-
-**Git Panel Performance**: Conditional mount + shared concurrency guard prevents polling when git-panel closed, reducing memory/CPU usage.
-
-**Feature Status**: Feature complete and fully integrated
-
-## Project Tabs Redesign Implementation Phases
-
-**Phase 1 - Completed: Data Models**
-- **ProjectTerminalLayout**: Per-project terminal layout storage (projectId + terminals array)
-- **ProjectTerminal**: Terminal entry with id, title, and grid position (0-8)
-- **AppStore.projectTerminals**: `Record<string, ProjectTerminalLayout>` state in Zustand
-- **Store Methods**: `setProjectTerminals(projectId, layout)`, `getProjectTerminals(projectId)`
-
-**Phase 2 - Completed: UI Components**
-- **ProjectTabs**: Tab bar component for per-project terminal switching
-  - Props: `projects`, `activeProjectId`, `onSelectProject`, `onAddProject`
-  - Displays up to 9 visible tabs with keyboard shortcut badges (Alt+1-9)
-  - Overflow dropdown for 10+ projects with click-outside/Escape dismissal
-  - Add project (+) button for creating new projects
-  - Empty state message when no projects exist
-  - Active tab highlight with visual distinction
-  - Located at `src/renderer/components/project-tabs/`
-
-**Phase 3 - Completed: Terminal Header Bar & Add Cell**
-- **TerminalPane Header Bar**: 24px header with editable title (double-click), Claude badge, Start Claude button, Close button
-  - Title editing: Enter to save, Escape to cancel, blur to commit
-  - Props added: `onClose`, `onStartClaude`, `onTitleChange`
-  - Claude mode indicator badge when `isClaudeMode` is true
-- **TerminalGrid Add Cell**: Placeholder cell for adding new terminals
-  - Shown when terminal count < 9
-  - Positioned in last row (or new row if last row full)
-  - Props added: `onAddTerminal`, `onCloseTerminal`, `onStartClaude`
-  - Empty state with "New Terminal" button when no terminals
-
-**Phase 4 - Completed: Sidebar Refactor**
-- Removed Projects section from sidebar (now in ProjectTabs component)
-- Added Tools section with: New Terminal, Start Claude, Kill All
-- Sidebar layout reorganized: Features (Git/GitHub) → Tools → Settings
-- New Terminal: Creates terminal in active project with correct cwd/projectId
-- Start Claude: Invokes Claude Code in active terminal (disabled if no terminal selected)
-- Kill All: Terminates all terminals in active project with count display
-
-**Phase 5 - Completed: Layout Refactor & Keyboard Shortcuts**
-- **App Layout**: Removed TerminalTabs, ProjectTabs moved to top below header bar
-  - Layout hierarchy: Header → ProjectTabs → [Sidebar | TerminalGrid]
-  - TerminalGrid filters terminals by `activeProjectId` for per-project isolation
-- **useKeyboardShortcuts Hook**: Global keyboard shortcuts via `useKeyboardShortcuts()` in App.tsx
-  - Alt+1~9: Switch to project by index (1st-9th project in projects list)
-  - Ctrl+N / Ctrl+T: Create new terminal in active project
-  - Ctrl+W: Close active terminal
-  - Mac support: Cmd key works as alternative to Ctrl
-  - Terminal intercept: xterm key handler prevents shortcuts from being captured by terminal
-- **Session Management**: Simplified startup - always creates single initial terminal (removed session restoration)
-- **Handlers**: App.tsx now contains handlers for project/terminal operations
-  - `handleAddProject`: Opens folder picker, creates project, sets as active
-  - `handleAddTerminal`: Creates terminal with active project's cwd/projectId
-  - `handleCloseTerminal`: Destroys terminal and removes from state
-  - `handleStartClaude`: Invokes Claude Code in specified terminal
-
-**Phase 6 - Completed: Terminal Layout Persistence**
-- **ProjectStore Terminal Layout Methods**: Full CRUD API for persisting terminal layouts
-  - `saveTerminalLayout(projectId, layout)`: Persist layout snapshot on state changes
-  - `loadTerminalLayout(projectId)`: Restore layout on project switch
-  - `deleteTerminalLayout(projectId)`: Auto-cleanup when project deleted
-  - `getAllTerminalLayouts()`: Bulk retrieval for app initialization
-- **Deleted Components**: Removed terminal-tabs.tsx (consolidated into ProjectTabs)
-- **Feature Complete**: Project tabs redesign fully integrated with persistence layer
-
-## GitHub Panel Redesign Implementation
-
-**Status**: Completed (2026-03-08)
-
-**Architecture Shift**: From tabbed layout to single-column scrollable container with collapsible sections.
-
-**Components & Layout**:
-- **github-view.tsx**: Main container rendering sections in single-column scrollable layout
-  - Compact header (branch selector + sync buttons)
-  - Commit form (stage/commit/push workflow)
-  - Changes list (staged/unstaged files with grouping)
-  - History tab (commit log)
-  - Stash tab (stash operations)
-  - Branch diff section (comparison against base branch)
-  - Issues and PRs tabs (GitHub integration)
-
-**New Components**:
-- **CompactHeader**: Branch dropdown with fetch/pull/push controls (compact 32px design)
-- **BranchDiffFileList**: Single-column scrollable file list showing changes vs base branch
-  - Displays path, status icon (A/M/D/R), and addition/deletion counts
-  - Grouped by directory using `groupByDir()` utility
-  - Click to open diff modal
-
-**New Module - git-file-utils.ts**:
-- `getStatusColor(status)`: Maps file status (A/M/D/R) to CSS color class
-- `getStatusLabel(status)`: Maps file status to human-readable label
-- `groupByDir(files)`: Groups files by parent directory for organized listing
-
-**New IPC Method - git:diff-against-branch**:
-- Handler in git-manager.ts: `getDiffAgainstBranch(cwd, file, baseBranch)`
-- Shows diff of a file compared to base branch (not working tree)
-- Used by `openBranchFileDiff()` callback to populate diff modal
-- Accurate file status detection via `git diff --name-status`
-
-**Hook Enhancement - use-git-panel.ts**:
-- Added `branchDiff` state for holding branch comparison results
-- Added `baseBranch` state with `setBaseBranch()` setter (default: 'main')
-- Added `baseBranchRef` (useRef) to avoid double-fetch on branch changes
-- Integrates with useEffect hook for fetching branch diffs when baseBranch updates
-
-**DiffModal Integration**:
-- Unified modal for both working-tree and branch-comparison diffs
-- `fileStatus`, `additions`, `deletions` display (empty for branch diffs without stats)
-- Diff content rendering via `diff-modal.tsx`
-
-**Collapsible Sections**:
-- **collapsible-section.tsx**: Reusable header with expand/collapse toggle
-- Used for: Commit Form, Staged Changes, Unstaged Changes, History, Stash, Branch Diff, Issues, PRs
-- State managed locally per section (no global collapse state)
-
-## In-App Update Settings Implementation
-
-**Feature Status**: Completed (2026-01-05)
-
-**Phase 1 - Completed: Types + IPC Channels**
-- **UpdateState**: State interface with status, versions, changelog, progress, error
-- **UpdateStatus**: Type union ('idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error')
-- **IPC Channels**: UPDATE_GET_STATE, UPDATE_CHECK, UPDATE_DOWNLOAD, UPDATE_INSTALL, UPDATE_STATE_CHANGED
-- **Preload**: Added `update` namespace to ElectronAPI
-
-**Phase 2 - Completed: Main Process Enhancements**
-- **auto-updater.ts**: Enhanced with state management and IPC broadcasting
-  - State tracking with status, versions, changelog, progress
-  - GitHub Releases API fetch for changelog (24hr cache TTL)
-  - IPC event broadcasting on state changes
-  - Auto-check on startup with 3s delay
-- **handlers.ts**: UPDATE_* IPC handlers for get-state, check, download, install
-
-**Phase 3 - Completed: Renderer Store + UI**
-- **update-store.ts**: Zustand store for update state management
-  - State mirroring from main process via IPC
-  - Actions: checkForUpdates, downloadUpdate, installUpdate
-- **update-settings.tsx**: Settings panel UI component
-  - Current version display
-  - "Check for Updates" button with loading state
-  - Changelog display (plain text)
-  - Download progress bar (0-100%)
-  - "Install and Restart" button when update ready
-- **settings-panel.tsx**: Added Updates tab to tabbed settings UI
-- **sidebar.tsx**: Badge notification dot on Settings button when update available/ready
-- **App.tsx**: setupUpdateListener() called on mount for state sync
+- [System Architecture](./system-architecture.md)
+- [Project Overview & PDR](./project-overview-pdr.md)
+- [Tech Stack](./tech-stack.md)

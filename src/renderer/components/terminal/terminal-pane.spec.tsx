@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@shared/types'
 import { useAppStore } from '../../stores'
+import { resetBufferedTerminalOutputForTests } from '../../stores/terminal-output-buffer'
 
 vi.mock('./terminal-view', () => ({
   TerminalView: ({ initialOutput }: { initialOutput?: string }) => (
@@ -33,6 +34,7 @@ function makeTerminal(id = 'term-1'): Terminal {
 
 describe('TerminalPane', () => {
   beforeEach(() => {
+    resetBufferedTerminalOutputForTests()
     useAppStore.setState(initialState, true)
     useAppStore.getState().addTerminal(makeTerminal())
     useAppStore.getState().appendOutput('term-1', 'restored buffer')

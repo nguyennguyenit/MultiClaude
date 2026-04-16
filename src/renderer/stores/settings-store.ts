@@ -193,7 +193,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const updated = { ...get().savedSettings, defaultShell: shell ?? undefined }
     try {
       await window.electron.settings.set({ defaultShell: shell ?? undefined })
-      set({ savedSettings: updated })
+      set({
+        savedSettings: updated,
+        pendingSettings: updated,
+        settings: updated
+      })
     } catch (err) {
       console.error('[settings] Failed to persist defaultShell:', err)
     }

@@ -39,6 +39,8 @@ export interface ElectronAPI {
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     detectWsl: () => Promise<WslInfo>
     getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
+    loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
+    savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
@@ -136,9 +138,10 @@ export interface ElectronAPI {
   }
   image: {
     open: (filePath: string) => Promise<boolean>
-    delete: (filePath: string) => Promise<boolean>
-    readBase64: (filePath: string) => Promise<string | null>
     listScreenshots: () => Promise<string[]>
+  }
+  media: {
+    open: (filePath: string) => Promise<boolean>
   }
   filePicker: {
     open: () => Promise<string[] | null>
@@ -186,6 +189,8 @@ const api: ElectronAPI = {
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
     detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
     getAvailableShells: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SHELLS),
+    loadPaneTree: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, projectId),
+    savePaneTree: (projectId, tree) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, { projectId, tree }),
     onOutput: (callback) => {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)
@@ -321,9 +326,10 @@ const api: ElectronAPI = {
   },
   image: {
     open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_OPEN, filePath),
-    delete: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_DELETE, filePath),
-    readBase64: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_READ_BASE64, filePath),
     listScreenshots: () => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS)
+  },
+  media: {
+    open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_OPEN, filePath)
   },
   filePicker: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)

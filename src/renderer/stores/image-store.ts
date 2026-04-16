@@ -1,67 +1,47 @@
 import { create } from 'zustand'
 
+export type MediaType = 'image' | 'video'
+
 export interface ImageEntry {
   filePath: string
   timestamp: number
-  index: number // 1-based index for [Image #X] reference
+  type: MediaType
+  index: number // 1-based index per type
 }
 
 interface ImageState {
-  // Images per terminal: terminalId → array of images
   images: Record<string, ImageEntry[]>
-  addImage: (terminalId: string, filePath: string) => void
-  removeImage: (terminalId: string, filePath: string) => void
+  addImage: (terminalId: string, filePath: string, type?: MediaType) => ImageEntry
   getImages: (terminalId: string) => ImageEntry[]
-  getImageByIndex: (terminalId: string, index: number) => ImageEntry | undefined
-  clearTerminal: (terminalId: string) => void
-  isTrackedImage: (filePath: string) => boolean
+  clearImages: (terminalId: string) => void
 }
 
 export const useImageStore = create<ImageState>((set, get) => ({
   images: {},
 
-  addImage: (terminalId, filePath) =>
-    set((state) => {
-      const existing = state.images[terminalId] || []
-      const nextIndex = existing.length + 1
-      return {
-        images: {
-          ...state.images,
-          [terminalId]: [
-            ...existing,
-            { filePath, timestamp: Date.now(), index: nextIndex }
-          ]
-        }
-      }
-    }),
-
-  removeImage: (terminalId, filePath) =>
+  addImage: (terminalId, filePath, type = 'image') => {
+    const existing = get().images[terminalId] || []
+    const sameType = existing.filter((e) => e.type === type)
+    const entry: ImageEntry = {
+      filePath,
+      timestamp: Date.now(),
+      type,
+      index: sameType.length + 1
+    }
     set((state) => ({
       images: {
         ...state.images,
-        [terminalId]: (state.images[terminalId] || []).filter(
-          (img) => img.filePath !== filePath
-        )
+        [terminalId]: [...(state.images[terminalId] || []), entry]
       }
-    })),
+    }))
+    return entry
+  },
 
   getImages: (terminalId) => get().images[terminalId] || [],
 
-  getImageByIndex: (terminalId, index) => {
-    const images = get().images[terminalId] || []
-    return images.find((img) => img.index === index)
-  },
-
-  clearTerminal: (terminalId) =>
+  clearImages: (terminalId) =>
     set((state) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { [terminalId]: _removed, ...rest } = state.images
+      const { [terminalId]: _, ...rest } = state.images
       return { images: rest }
-    }),
-
-  // Check if a file path is tracked by any terminal
-  isTrackedImage: (filePath) => {
-    const allImages = Object.values(get().images).flat()
-    return allImages.some((img) => img.filePath === filePath)
-  }
+    })
 }))
