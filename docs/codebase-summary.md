@@ -83,15 +83,18 @@ This arrangement preserves terminal state across project switching without forci
 
 ### Pane Tree Layout
 
-- Pure model in `src/shared/types/pane-tree.ts` + ops in `src/shared/utils/pane-tree.ts` (`splitLeaf`, `closeLeafAndCollapse`, `updateRatio`, …)
-- Per-project tree persisted in `electron-store` under `terminalLayouts[projectId].paneTree` with `schemaVersion: 2`. Legacy flat layouts migrate on first read via `migrateFlatToTree` (`pane-tree-migration.ts`) preserving the pre-upgrade visual arrangement for N=1–12 terminals in both orientations.
-- Renderer store `pane-tree-store.ts` debounces writes (200ms) via `terminal:load-pane-tree` / `terminal:save-pane-tree` IPC.
-- Split actions (`right` / `left` / `down` / `up`) dispatched from three entry points — right-click menu, hotkeys (⌘⇧→/←/↓/↑), action-bar split-button — all funnel through `useExecuteSplit`. Close routes flow through `closeLeafAndCollapse` so parent splits collapse when a sibling is removed.
+- Pure model in `src/shared/types/pane-tree.ts` + ops in `src/shared/utils/pane-tree.ts` (`splitLeaf`, `closeLeafAndCollapse`, `updateRatio`, …). `updateRatio` returns the tree unchanged on stale paths (defense-in-depth for drag listeners that outlive tree restructuring).
+- Per-project tree persisted in `electron-store` under `terminalLayouts[projectId].paneTree` with `schemaVersion: 2`. Legacy flat layouts migrate on first read via `migrateFlatToTree` (`pane-tree-migration.ts`) preserving the pre-upgrade visual arrangement for N=1–12 terminals in both orientations. Migration is per-process single-flight; `savePaneTree` refuses to downgrade a future `schemaVersion`; validator caps recursion at depth 32.
+- Renderer store `pane-tree-store.ts` debounces writes (200ms) via `terminal:load-pane-tree` / `terminal:save-pane-tree` IPC. Save rejections surface via `console.error` with projectId context rather than silently swallowing.
+- Split actions (`right` / `left` / `down` / `up`) dispatched from three entry points — right-click menu, hotkeys (⌘⇧→/←/↓/↑), action-bar split-button — all funnel through `useExecuteSplit`. Close routes flow through `closeLeafAndCollapse` so parent splits collapse when a sibling is removed. `useExecuteSplit` wraps `terminal:create` in a 10 s `CREATE_TIMEOUT_MS` race and, on timeout, fires a toast + destroys any late-arriving orphan PTY. In-flight counter guards concurrent hotkey presses from exceeding the limit.
+- Resize uses `usePaneResize` + `ResizeHandle`: pointer capture on the handle itself (no global window listeners), cleanup ref tears down on unmount mid-drag, rect is re-read on each move (window resize tolerance), and ratio is clamped both by `PANE_RATIO_MIN/MAX` and an absolute `minPanePx` (default 80) so deeply nested panes can't starve xterm. Handle is `role="separator"` + `tabIndex=0` with arrow-key adjustment (5% / 1% fine with Shift).
 
 ### Themed Context Menu
 
 - React Portal menu in `src/renderer/components/context-menu/` driven by `context-menu-store.ts`. Colors bind to CSS variables (`--bg-primary`, `--hover`, `--border`, …) so theme switches update the open menu live.
 - Replaces the legacy native `Menu.buildFromTemplate` IPC path (removed). Copy/Paste reuses shared `paste-from-clipboard.ts` (image + text); Split actions extend the menu dynamically from `terminal-context-actions.ts`.
+- Menu captures `document.activeElement` on open and restores focus on close (keyboard-a11y). App closes the menu on `activeProjectId` change so stale closures to defunct terminals cannot fire.
+- Paste pipeline: CRLF normalization → (bracketed mode on) strip inner `\x1b[20[01]~` sentinels → wrap → chunk at 64 KB with setTimeout yield. Sentinel stripping prevents attacker-controlled clipboard content from escaping the paste region into typed shell input.
 
 ## File Organization
 
