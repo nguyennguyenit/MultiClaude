@@ -14,6 +14,7 @@ import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore,
 import { useContextMenuStore } from './stores/context-menu-store'
 import { writeToDisplay } from './stores/display-writer-registry'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
+import { getCurrentTerminalTheme } from './hooks/use-terminal-font-theme'
 import { useExecuteSplit } from './hooks/use-execute-split'
 import { usePaneTreeStore, flushPaneTreeSaves } from './stores/pane-tree-store'
 import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
@@ -453,6 +454,20 @@ function App() {
       document.body.style.fontFamily = appFont.family
     }
   }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily, pendingSettings.modernFontFamily])
+
+  // Sync --terminal-bg CSS var whenever the xterm theme could change.
+  // globals.css uses var(--terminal-bg) on .xterm + .xterm-viewport so every
+  // terminal (including ones mounted before the change) picks it up without
+  // needing a per-instance inline-style sync.
+  useEffect(() => {
+    const bg = getCurrentTerminalTheme().background
+    if (bg) document.documentElement.style.setProperty('--terminal-bg', bg)
+  }, [
+    pendingSettings.colorTheme,
+    pendingSettings.themeMode,
+    pendingSettings.uiStyle,
+    pendingSettings.terminalStyleOptions?.colorPreset,
+  ])
 
   // Load saved projects on mount and validate folder existence
   useEffect(() => {

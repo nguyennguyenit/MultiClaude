@@ -118,12 +118,9 @@ export function useTerminalFontTheme(params: UseTerminalFontThemeParams): {
       const newTheme = getCurrentTerminalTheme()
       terminalRef.current.options.theme = newTheme
 
-      // Sync .xterm-viewport and .xterm backgrounds to new theme (xterm v6 no longer
-      // auto-syncs either, and our 8px .xterm padding exposes the .xterm bg as a border).
-      const xtermEl = terminalRef.current.element as HTMLElement | null
-      const viewport = xtermEl?.querySelector('.xterm-viewport') as HTMLElement | null
-      if (viewport && newTheme.background) viewport.style.backgroundColor = newTheme.background
-      if (xtermEl && newTheme.background) xtermEl.style.backgroundColor = newTheme.background
+      // .xterm + .xterm-viewport backgrounds are driven by var(--terminal-bg)
+      // in globals.css; App.tsx syncs that var on theme change, so no per-
+      // instance inline-style write is needed here.
 
       // Delegate WebGL reload to orchestrator — it knows about webglAddonRef
       onWebGLReload()

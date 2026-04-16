@@ -299,12 +299,18 @@ button, input, select, textarea, optgroup, option {
   box-sizing: border-box;
   /* Explicit terminal font - prevents app font from bleeding into xterm content via CSS inheritance or xterm's own injected styles */
   font-family: var(--terminal-font);
+  /* Paint the 8px padding strip + viewport gutter with the terminal theme bg.
+   * --terminal-bg is written to :root from use-terminal-font-theme on every
+   * theme change, so every .xterm (including ones mounted before the change)
+   * picks it up reactively — no per-instance inline-style sync needed. */
+  background-color: var(--terminal-bg, transparent);
 }
 
 .terminal-container .xterm-viewport {
   overflow-y: auto !important;
   scrollbar-width: auto;
   scrollbar-color: var(--text-muted) transparent;
+  background-color: var(--terminal-bg, transparent) !important;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar {

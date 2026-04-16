@@ -164,19 +164,14 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
 
     terminal.open(container)
 
-    // xterm v6 removed the automatic viewport background-color sync that v5 did.
-    // Two surfaces leak the #000 default:
-    //  1. .xterm-viewport — covers the .xterm content box; shows behind rendered rows.
-    //  2. .xterm itself — our globals.css adds `padding: 8px`, and .xterm-viewport is
-    //     absolutely positioned inside the padding box, so an 8px strip of .xterm
-    //     shows through to the terminal-container bg (var(--bg-primary)). If the
-    //     terminal theme bg differs from --bg-primary, that strip reads as a border.
-    // Fix: paint both surfaces with the terminal theme background color.
-    const themeBackground = getCurrentTerminalTheme().background
-    const viewportEl = container.querySelector('.xterm-viewport') as HTMLElement | null
-    if (viewportEl && themeBackground) viewportEl.style.backgroundColor = themeBackground
-    const xtermEl = terminal.element as HTMLElement | null
-    if (xtermEl && themeBackground) xtermEl.style.backgroundColor = themeBackground
+    // xterm v6 removed the v5 auto-sync of .xterm-viewport background-color.
+    // Both .xterm-viewport (covers content box) and .xterm (8px padding strip,
+    // since .xterm-viewport is abs-positioned inside the padding box) could
+    // leak #000 through to the terminal-container bg, showing as a border when
+    // theme bg differs from --bg-primary. Fix: globals.css paints both with
+    // var(--terminal-bg), which App.tsx writes to :root whenever the xterm
+    // theme could change — so all terminals (incl. ones mounted before the
+    // theme flip) pick it up reactively without per-instance inline style.
 
     // ── WebLinks addon ───────────────────────────────────────────────────────
     const webLinksAddon = new WebLinksAddon((event, uri) => {
