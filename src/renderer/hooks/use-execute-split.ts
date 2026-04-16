@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { PaneSplitDirection, ShellInfo, Terminal, WindowsShell } from '@shared/types'
 import { closeLeafAndCollapse, findLeaf, splitLeaf } from '@shared/utils/pane-tree'
 import { usePaneTreeStore } from '../stores/pane-tree-store'
@@ -63,9 +63,15 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
   const reason = splitGateReason(activeTerminalId, terminalCount, terminalLimit)
   const canSplit = reason === null
 
+  // In-flight create counter so rapid concurrent calls (multiple hotkey
+  // presses, split-button spam) don't all pass the React-state gate before
+  // `addTerminal` increments terminalCount. Each caller reserves a slot
+  // synchronously and releases it after the IPC settles.
+  const inFlightRef = useRef(0)
+
   const executeSplit = useCallback(
     async (direction: PaneSplitDirection, targetTerminalId?: string): Promise<void> => {
-      if (terminalCount >= terminalLimit) {
+      if (terminalCount + inFlightRef.current >= terminalLimit) {
         notifyLimit(terminalLimit)
         return
       }
@@ -78,6 +84,7 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       const create = createTerminal ?? window.electron?.terminal?.create
       if (!create) return
 
+      inFlightRef.current += 1
       let terminal: Terminal
       try {
         terminal = await create({
@@ -89,10 +96,12 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
             : windowsShellFallback
         })
       } catch (err) {
+        inFlightRef.current -= 1
         console.error('[useExecuteSplit] create terminal failed:', err)
         notifyError('Failed to create terminal. Please try again.')
         return
       }
+      inFlightRef.current -= 1
 
       addTerminal(terminal)
 

@@ -250,4 +250,37 @@ describe('useExecuteSplit', () => {
     expect(notifyError).toHaveBeenCalled()
     expect(addTerminal).not.toHaveBeenCalled()
   })
+
+  it('rejects concurrent splits past the limit (in-flight counter prevents race)', async () => {
+    // terminalCount=3, terminalLimit=4 → only one split should succeed even if
+    // two callers fire simultaneously before terminalCount catches up.
+    let nextId = 0
+    const createTerminal = vi.fn(async () => {
+      // simulate IPC latency so both calls overlap
+      await new Promise((r) => setTimeout(r, 5))
+      nextId += 1
+      return makeTerminal(`tnew${nextId}`)
+    })
+    const { result } = renderHook(() =>
+      useExecuteSplit({
+        projectId: 'p1',
+        activeTerminalId: 't1',
+        terminalLimit: 4,
+        terminalCount: 3,
+        selectedShell: null,
+        addTerminal,
+        notifyLimit,
+        notifyError,
+        createTerminal
+      })
+    )
+    await act(async () => {
+      await Promise.all([
+        result.current.executeSplit('right'),
+        result.current.executeSplit('right')
+      ])
+    })
+    expect(createTerminal).toHaveBeenCalledTimes(1)
+    expect(notifyLimit).toHaveBeenCalledWith(4)
+  })
 })
