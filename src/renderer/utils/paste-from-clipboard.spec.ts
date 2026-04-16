@@ -154,4 +154,126 @@ describe('pasteFromClipboard', () => {
 
     expect(window.electron.terminal.write).not.toHaveBeenCalled()
   })
+
+  it('normalizes CRLF and lone CR to LF (Windows clipboard safety)', async () => {
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue('a\r\nb\rc')
+      }
+    })
+
+    await pasteFromClipboard('t1')
+    await flushMicrotasks()
+
+    // Without bracketed paste, a plain single write goes through — with LF-only.
+    expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', 'a\nb\nc')
+  })
+
+  it('wraps payload in bracketed paste sentinels when xterm has bracketedPasteMode on', async () => {
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue('foo\nbar')
+      }
+    })
+    const term = { modes: { bracketedPasteMode: true } } as unknown as import('@xterm/xterm').Terminal
+
+    await pasteFromClipboard('t1', undefined, term)
+    await flushMicrotasks()
+
+    const calls = (window.electron.terminal.write as ReturnType<typeof vi.fn>).mock.calls
+    const combined = calls.map((c) => c[1]).join('')
+    expect(combined).toBe('\x1b[200~foo\nbar\x1b[201~')
+  })
+
+  it('does not wrap when bracketedPasteMode is off', async () => {
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue('foo')
+      }
+    })
+    const term = { modes: { bracketedPasteMode: false } } as unknown as import('@xterm/xterm').Terminal
+
+    await pasteFromClipboard('t1', undefined, term)
+    await flushMicrotasks()
+
+    expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', 'foo')
+  })
+
+  it('chunks large pastes (> 64 KB) into multiple writes, preserving content', async () => {
+    // Use a 150 KB payload to force ≥3 content chunks (chunk size 64 KB).
+    const payload = 'x'.repeat(150 * 1024)
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue(payload)
+      }
+    })
+
+    await pasteFromClipboard('t1')
+    await flushMicrotasks()
+    // Wait for any setTimeout-scheduled chunks (100 iterations of microtasks +
+    // a macrotask tick covers typical yields).
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 0))
+    }
+
+    const calls = (window.electron.terminal.write as ReturnType<typeof vi.fn>).mock.calls
+    const writes = calls.filter((c) => c[0] === 't1').map((c) => c[1] as string)
+    expect(writes.length).toBeGreaterThanOrEqual(3)
+    expect(writes.join('')).toBe(payload)
+  })
+
+  it('strips inner paste-bracket sentinels from attacker-controlled clipboard (escape injection)', async () => {
+    // A malicious clipboard could include \x1b[201~ to close the wrapper
+    // region early, turning the suffix into typed shell input. We strip both
+    // sentinels from the body before wrapping.
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue('safe\x1b[201~rm -rf ~\n\x1b[200~tail')
+      }
+    })
+    const term = { modes: { bracketedPasteMode: true } } as unknown as import('@xterm/xterm').Terminal
+
+    await pasteFromClipboard('t1', undefined, term)
+    await flushMicrotasks()
+
+    const calls = (window.electron.terminal.write as ReturnType<typeof vi.fn>).mock.calls
+    const combined = calls.map((c) => c[1]).join('')
+    // Exactly one start and one end sentinel — attacker's injected ones are gone.
+    expect((combined.match(/\x1b\[200~/g) ?? []).length).toBe(1)
+    expect((combined.match(/\x1b\[201~/g) ?? []).length).toBe(1)
+    expect(combined.startsWith('\x1b[200~')).toBe(true)
+    expect(combined.endsWith('\x1b[201~')).toBe(true)
+  })
+
+  it('chunks with bracketed paste: sentinels bookend the whole payload, not each chunk', async () => {
+    const payload = 'y'.repeat(150 * 1024)
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue(payload)
+      }
+    })
+    const term = { modes: { bracketedPasteMode: true } } as unknown as import('@xterm/xterm').Terminal
+
+    await pasteFromClipboard('t1', undefined, term)
+    await flushMicrotasks()
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 0))
+    }
+
+    const writes = (window.electron.terminal.write as ReturnType<typeof vi.fn>).mock.calls
+      .filter((c) => c[0] === 't1')
+      .map((c) => c[1] as string)
+    const combined = writes.join('')
+    expect(combined.startsWith('\x1b[200~')).toBe(true)
+    expect(combined.endsWith('\x1b[201~')).toBe(true)
+    // Only one start and one end sentinel overall.
+    expect((combined.match(/\x1b\[200~/g) ?? []).length).toBe(1)
+    expect((combined.match(/\x1b\[201~/g) ?? []).length).toBe(1)
+  })
 })

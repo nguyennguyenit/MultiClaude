@@ -68,7 +68,7 @@ interface UseTerminalInitParams {
   markUserViewportInteraction: (durationMs: number) => void
   shouldSendEnhancedEnter: () => boolean
   attachClipboardListeners: (terminal: XTerm) => void
-  getCtrlVHandler: () => (e: KeyboardEvent) => boolean | undefined
+  getCtrlVHandler: (terminal: XTerm) => (e: KeyboardEvent) => boolean | undefined
   followLiveOutput: () => void
   reconcileWebGL: () => void
   syncFontAfterLoad: () => void
@@ -298,7 +298,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     }, TERMINAL_INIT_DELAY)
 
     // ── Custom key event handler ─────────────────────────────────────────────
-    const ctrlVHandler = getCtrlVHandler()
+    const ctrlVHandler = getCtrlVHandler(terminal)
 
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (shouldBypassXtermShortcut(e)) return false

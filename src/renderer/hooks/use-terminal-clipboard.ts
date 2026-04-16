@@ -34,10 +34,12 @@ interface UseTerminalClipboardResult {
    */
   attachClipboardListeners: (terminal: XTerm) => void
   /**
-   * Build the Ctrl+V key handler.
-   * Pass the result to terminal.attachCustomKeyEventHandler in initTerminal.
+   * Build the Ctrl+V key handler for the given xterm instance. Pass the
+   * result to terminal.attachCustomKeyEventHandler in initTerminal. The
+   * terminal reference is forwarded to pasteFromClipboard so it can read
+   * bracketedPasteMode and wrap the payload accordingly.
    */
-  getCtrlVHandler: () => (e: KeyboardEvent) => boolean | undefined
+  getCtrlVHandler: (terminal: XTerm) => (e: KeyboardEvent) => boolean | undefined
   /**
    * Ref that orchestrator fills with followLiveOutput() after useTerminalScroll is set up.
    * Clipboard paste operations call this to re-anchor scroll to live output.
@@ -72,7 +74,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
         id: 'paste',
         label: 'Paste',
         onSelect: () => {
-          void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.())
+          void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.(), terminal)
         }
       })
 
@@ -93,7 +95,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
     })
   }, [terminalId])
 
-  const getCtrlVHandler = useCallback(() => {
+  const getCtrlVHandler = useCallback((terminal: XTerm) => {
     return (e: KeyboardEvent): boolean | undefined => {
       // Intercept split hotkeys before shell scroll-by-line handling.
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
@@ -106,7 +108,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
       }
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return undefined
       e.preventDefault()
-      void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.())
+      void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.(), terminal)
       return false
     }
   }, [terminalId])
