@@ -14,6 +14,15 @@ interface PaneTreeState {
 const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>()
 const pendingTrees = new Map<string, PaneTree | null>()
 
+function fireSave(projectId: string, tree: PaneTree | null): void {
+  const result = window.electron?.terminal?.savePaneTree?.(projectId, tree)
+  if (result && typeof (result as Promise<unknown>).catch === 'function') {
+    void (result as Promise<unknown>).catch((err) => {
+      console.error('[pane-tree-store] savePaneTree failed:', err, { projectId })
+    })
+  }
+}
+
 function scheduleSave(projectId: string, tree: PaneTree | null): void {
   const existing = pendingSaves.get(projectId)
   if (existing) clearTimeout(existing)
@@ -21,7 +30,7 @@ function scheduleSave(projectId: string, tree: PaneTree | null): void {
   const handle = setTimeout(() => {
     pendingSaves.delete(projectId)
     pendingTrees.delete(projectId)
-    void window.electron?.terminal?.savePaneTree?.(projectId, tree)
+    fireSave(projectId, tree)
   }, PANE_TREE_SAVE_DEBOUNCE_MS)
   pendingSaves.set(projectId, handle)
 }
@@ -30,7 +39,7 @@ export function flushPaneTreeSaves(): void {
   for (const [projectId, handle] of pendingSaves) {
     clearTimeout(handle)
     const tree = pendingTrees.get(projectId) ?? null
-    void window.electron?.terminal?.savePaneTree?.(projectId, tree)
+    fireSave(projectId, tree)
   }
   pendingSaves.clear()
   pendingTrees.clear()

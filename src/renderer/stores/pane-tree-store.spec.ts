@@ -92,4 +92,37 @@ describe('usePaneTreeStore', () => {
     flushPaneTreeSaves()
     expect(saveMock).not.toHaveBeenCalled()
   })
+
+  it('surfaces IPC save rejections via console.error instead of swallowing', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    saveMock.mockRejectedValueOnce(new Error('ipc-boom'))
+    usePaneTreeStore.getState().setTree('p1', leaf('a'))
+    await vi.advanceTimersByTimeAsync(PANE_TREE_SAVE_DEBOUNCE_MS)
+    // Give the rejection time to surface to its catch handler.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(consoleErrorSpy).toHaveBeenCalled()
+    // Error log must include the projectId so devtools users can triage.
+    const loggedArgs = consoleErrorSpy.mock.calls.flat()
+    const hasProjectId = loggedArgs.some((arg) => {
+      if (typeof arg === 'string') return arg.includes('p1')
+      if (arg && typeof arg === 'object' && 'projectId' in arg) {
+        return (arg as { projectId: string }).projectId === 'p1'
+      }
+      return false
+    })
+    expect(hasProjectId).toBe(true)
+    consoleErrorSpy.mockRestore()
+  })
+
+  it('flushPaneTreeSaves surfaces IPC save rejections', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    saveMock.mockRejectedValueOnce(new Error('ipc-boom-flush'))
+    usePaneTreeStore.getState().setTree('p1', leaf('a'))
+    flushPaneTreeSaves()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(consoleErrorSpy).toHaveBeenCalled()
+    consoleErrorSpy.mockRestore()
+  })
 })

@@ -154,5 +154,42 @@ describe('ProjectStore — paneTree', () => {
         store.savePaneTree('', { kind: 'leaf', terminalId: 'a' })
       ).not.toThrow()
     })
+
+    it('refuses to overwrite a forward-compat higher schemaVersion (avoids silent downgrade)', () => {
+      // Seed a layout whose schemaVersion is newer than this build knows how
+      // to write. A downgraded user opening the file must not clobber it with
+      // a v2 payload that drops v3-only fields.
+      const futureLayout: ProjectTerminalLayout & { schemaVersion: number } = {
+        projectId: 'p1',
+        terminals: [],
+        paneTree: { kind: 'leaf', terminalId: 'future' },
+        schemaVersion: 99
+      }
+      store.saveTerminalLayout('p1', futureLayout)
+
+      store.savePaneTree('p1', { kind: 'leaf', terminalId: 'a' })
+
+      const layout = store.loadTerminalLayout('p1') as typeof futureLayout
+      expect(layout.schemaVersion).toBe(99)
+      expect(layout.paneTree).toEqual({ kind: 'leaf', terminalId: 'future' })
+    })
+
+    it('validator rejects pathologically deep trees without stack overflow (depth cap)', () => {
+      // Build a 200-level right-leaning spine. Without a depth cap, recursive
+      // isValidPaneTree could blow the stack. With the cap, save is refused.
+      let node: PaneTree = { kind: 'leaf', terminalId: 'leaf' }
+      for (let i = 0; i < 200; i++) {
+        node = {
+          kind: 'split',
+          orientation: 'row',
+          ratio: 0.5,
+          children: [{ kind: 'leaf', terminalId: `l${i}` }, node]
+        }
+      }
+      store.saveTerminalLayout('p1', legacyLayout('p1', ['a']))
+
+      expect(() => store.savePaneTree('p1', node)).not.toThrow()
+      expect(store.loadTerminalLayout('p1')?.paneTree).toBeUndefined()
+    })
   })
 })

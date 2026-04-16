@@ -5,7 +5,16 @@ import { PANE_RATIO_MAX, PANE_RATIO_MIN } from '@shared/types'
 
 const PANE_TREE_SCHEMA_VERSION = 2
 
-function isValidPaneTree(node: unknown): node is PaneTree {
+/**
+ * Upper bound on split-tree depth the validator will descend. Real trees are
+ * bounded by the terminal limit (≤ 12), so 32 is a generous guard that still
+ * prevents a malicious/malformed IPC payload from stack-overflowing the
+ * main process via unbounded recursion.
+ */
+const MAX_TREE_DEPTH = 32
+
+function isValidPaneTree(node: unknown, depth = 0): node is PaneTree {
+  if (depth > MAX_TREE_DEPTH) return false
   if (!node || typeof node !== 'object') return false
   const n = node as { kind?: unknown }
   if (n.kind === 'leaf') {
@@ -18,7 +27,7 @@ function isValidPaneTree(node: unknown): node is PaneTree {
     if (typeof split.ratio !== 'number' || !Number.isFinite(split.ratio)) return false
     if (split.ratio < PANE_RATIO_MIN - 1e-9 || split.ratio > PANE_RATIO_MAX + 1e-9) return false
     if (!Array.isArray(split.children) || split.children.length !== 2) return false
-    return isValidPaneTree(split.children[0]) && isValidPaneTree(split.children[1])
+    return isValidPaneTree(split.children[0], depth + 1) && isValidPaneTree(split.children[1], depth + 1)
   }
   return false
 }
@@ -32,6 +41,7 @@ interface StoreSchema {
 
 export class ProjectStore {
   private store: Store<StoreSchema>
+  private migrationDone = new Set<string>()
 
   constructor() {
     // In test mode, use test-specific store path from environment variable
@@ -158,6 +168,14 @@ export class ProjectStore {
 
     if (!layout.terminals || layout.terminals.length === 0) return null
 
+    // Serialize per-project migration within this process. electron-store's
+    // read-modify-write cycle is synchronous so JS's event loop alone already
+    // prevents interleaving, but this Set makes the once-only intent explicit
+    // and protects against any future async migration path from racing two
+    // callers (e.g. two windows both hitting terminal:load-pane-tree).
+    if (this.migrationDone.has(projectId)) return null
+    this.migrationDone.add(projectId)
+
     const ids = layout.terminals.map((t) => t.id)
     const migrated = migrateFlatToTree(ids, false)
     if (!migrated) return null
@@ -179,6 +197,17 @@ export class ProjectStore {
     }
     const layouts = this.store.get('terminalLayouts')
     const existing = layouts[projectId]
+    const existingVersion = existing?.schemaVersion ?? 1
+    // Forward-compat guard: if a future build wrote schemaVersion=N > current,
+    // refuse to downgrade. Overwriting with v2 would silently drop whatever
+    // vN-only fields the future build added.
+    if (existingVersion > PANE_TREE_SCHEMA_VERSION) {
+      console.warn(
+        `[project-store] savePaneTree: refusing to overwrite schemaVersion=${existingVersion} with v${PANE_TREE_SCHEMA_VERSION} for`,
+        projectId
+      )
+      return
+    }
     layouts[projectId] = {
       ...(existing ?? { projectId, terminals: [] }),
       projectId,
