@@ -11,6 +11,7 @@ import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useContextMenuStore } from './stores/context-menu-store'
 import { writeToDisplay } from './stores/display-writer-registry'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { useExecuteSplit } from './hooks/use-execute-split'
@@ -350,7 +351,10 @@ function App() {
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
     onToggleGitHubPanel: () => togglePanel('github'),
-    onSplit: canSplit ? (dir) => void executeSplit(dir) : undefined
+    // Always pass the handler — executeSplit's internal gate emits notifyLimit
+    // uniformly, matching the xterm-focused hotkey path. Previously this was
+    // gated by `canSplit`, which made the global hotkey silently no-op at limit.
+    onSplit: (dir) => void executeSplit(dir)
   })
 
 
@@ -390,6 +394,13 @@ function App() {
       setYoloEnabled(false)
     }
   }, [activeProject])
+
+  // Close any open context menu when the active project changes — otherwise
+  // menu items retain closures to a now-defunct terminal id, e.g. a lingering
+  // Paste would call pasteFromClipboard(oldTerminalId, ...) with no effect.
+  useEffect(() => {
+    useContextMenuStore.getState().closeMenu()
+  }, [activeProjectId])
 
   // Setup notification listener
   useEffect(() => {
