@@ -3,6 +3,31 @@ import type { PaneSplitDirection, ShellInfo, Terminal, WindowsShell } from '@sha
 import { closeLeafAndCollapse, findLeaf, splitLeaf } from '@shared/utils/pane-tree'
 import { usePaneTreeStore } from '../stores/pane-tree-store'
 
+/**
+ * Max time to wait for the main process to answer `terminal:create`. If the
+ * main side hangs or crashes mid-create, the renderer would otherwise await
+ * forever — leaving the in-flight counter pinned and silently refusing future
+ * splits. Exported for test override.
+ */
+export const CREATE_TIMEOUT_MS = 10_000
+
+const CREATE_TIMEOUT_SENTINEL = Symbol('create-timeout')
+
+async function createWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T | typeof CREATE_TIMEOUT_SENTINEL> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<typeof CREATE_TIMEOUT_SENTINEL>((resolve) => {
+    timer = setTimeout(() => resolve(CREATE_TIMEOUT_SENTINEL), timeoutMs)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export interface ExecuteSplitDeps {
   projectId: string | null
   projectPath?: string
@@ -85,16 +110,33 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       if (!create) return
 
       inFlightRef.current += 1
+      const createPromise = create({
+        cwd: projectPath,
+        projectId: projectId ?? undefined,
+        shellPath: isUnix ? selectedShell?.path : undefined,
+        shell: isWin
+          ? toWindowsShell(selectedShell)
+          : windowsShellFallback
+      })
       let terminal: Terminal
       try {
-        terminal = await create({
-          cwd: projectPath,
-          projectId: projectId ?? undefined,
-          shellPath: isUnix ? selectedShell?.path : undefined,
-          shell: isWin
-            ? toWindowsShell(selectedShell)
-            : windowsShellFallback
-        })
+        const result = await createWithTimeout(createPromise, CREATE_TIMEOUT_MS)
+        if (result === CREATE_TIMEOUT_SENTINEL) {
+          inFlightRef.current -= 1
+          notifyError('Terminal creation timed out. Please try again.')
+          // If main eventually answers after we gave up, the PTY is alive on
+          // the main side — destroy it so we don't leak a phantom pane via
+          // reconcile auto-append.
+          void createPromise
+            .then((late) => {
+              if (late?.id) void window.electron?.terminal?.destroy?.(late.id)
+            })
+            .catch(() => {
+              // Original rejection — nothing to clean up.
+            })
+          return
+        }
+        terminal = result
       } catch (err) {
         inFlightRef.current -= 1
         console.error('[useExecuteSplit] create terminal failed:', err)
@@ -116,7 +158,20 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
             usePaneTreeStore
               .getState()
               .setTree(projectId, splitLeaf(cleaned, sourceTerminalId, direction, terminal.id))
+          } else if (
+            activeTerminalId &&
+            activeTerminalId !== sourceTerminalId &&
+            findLeaf(cleaned, activeTerminalId)
+          ) {
+            // Right-click-targeted pane closed between menu open and click —
+            // preserve user's direction intent by splitting the active pane
+            // and tell them the source is gone.
+            notifyError('Source pane was closed — splitting active pane instead')
+            usePaneTreeStore
+              .getState()
+              .setTree(projectId, splitLeaf(cleaned, activeTerminalId, direction, terminal.id))
           }
+          // else: both source AND active are gone — let reconcile auto-append.
         }
       }
     },
