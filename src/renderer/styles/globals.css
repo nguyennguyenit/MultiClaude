@@ -825,11 +825,21 @@ button, input, select, textarea, optgroup, option {
   transition: background 0.15s;
   position: relative;
   z-index: 10;
+  /* Prevents touchscreen scroll/zoom from stealing drags. */
+  touch-action: none;
 }
 
 .terminal-resize-handle:hover,
 .terminal-resize-handle:active {
   background: var(--accent, #58a6ff);
+}
+
+/* Pointer hit-area overlay: visual width stays at 1px, but pointer events
+   target a ~7px band via the pseudo-element. Matches iTerm / VSCode feel. */
+.terminal-resize-handle::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
 }
 
 /* Horizontal handle: sits between rows, drag up/down */
@@ -838,12 +848,18 @@ button, input, select, textarea, optgroup, option {
   height: 1px;
   cursor: row-resize;
 }
+.terminal-resize-handle--horizontal::before {
+  inset: -3px 0;
+}
 
 /* Vertical handle: sits between columns, drag left/right */
 .terminal-resize-handle--vertical {
   width: 1px;
   height: 100%;
   cursor: col-resize;
+}
+.terminal-resize-handle--vertical::before {
+  inset: 0 -3px;
 }
 
 

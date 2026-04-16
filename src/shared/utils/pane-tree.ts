@@ -103,19 +103,23 @@ function removeLeaf(tree: PaneTree, terminalId: string): PaneTree | null {
   return tree
 }
 
+/**
+ * Update the ratio at the split addressed by `splitPath`. If the path is
+ * stale (points into a leaf, has an out-of-range child index, or addresses a
+ * leaf root), returns the tree unchanged rather than throwing. Defense-in-depth
+ * for drag handlers whose captured path may no longer resolve after the tree
+ * restructures mid-drag (sibling close, split-from-other-path, etc.).
+ */
 export function updateRatio(tree: PaneTree, splitPath: number[], ratio: number): PaneTree {
-  if (tree.kind === 'leaf') {
-    throw new Error('updateRatio: cannot update ratio on a leaf')
-  }
+  if (tree.kind === 'leaf') return tree
   if (splitPath.length === 0) {
     return { ...tree, ratio: clampRatio(ratio) }
   }
   const [step, ...rest] = splitPath
-  if (step !== 0 && step !== 1) {
-    throw new Error(`updateRatio: invalid child index ${step}`)
-  }
+  if (step !== 0 && step !== 1) return tree
   const child = tree.children[step]
   const updatedChild = updateRatio(child, rest, ratio)
+  if (updatedChild === child) return tree
   const nextChildren: [PaneTree, PaneTree] = step === 0 ? [updatedChild, tree.children[1]] : [tree.children[0], updatedChild]
   return { ...tree, children: nextChildren }
 }

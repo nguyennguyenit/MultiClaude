@@ -92,6 +92,8 @@ function SplitView({ split, path, onSetRatio, ...rest }: SplitViewProps): ReactE
       <ResizeHandle
         direction={isRow ? 'vertical' : 'horizontal'}
         onResizeStart={beginDrag}
+        currentRatio={split.ratio}
+        onAdjust={handleRatio}
       />
 
       <div

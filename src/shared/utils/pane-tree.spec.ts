@@ -170,13 +170,19 @@ describe('updateRatio', () => {
     expect((updateRatio(tree, [], 10) as PaneSplit).ratio).toBe(0.9)
   })
 
-  it('throws when the path is empty and root is a leaf', () => {
-    expect(() => updateRatio(leaf('a'), [], 0.5)).toThrow(/leaf/i)
+  it('returns tree unchanged when path is empty and root is a leaf (stale path during drag)', () => {
+    const t = leaf('a')
+    expect(updateRatio(t, [], 0.5)).toBe(t)
   })
 
-  it('throws when the path traverses into a leaf', () => {
+  it('returns tree unchanged when path traverses into a leaf (stale path during drag)', () => {
     const tree = splitRow(leaf('a'), leaf('b'))
-    expect(() => updateRatio(tree, [0, 0], 0.5)).toThrow()
+    expect(updateRatio(tree, [0, 0], 0.5)).toBe(tree)
+  })
+
+  it('returns tree unchanged when child index is out of range', () => {
+    const tree = splitRow(leaf('a'), leaf('b'))
+    expect(updateRatio(tree, [5], 0.5)).toBe(tree)
   })
 
   it('does not mutate the input tree', () => {
