@@ -116,5 +116,43 @@ describe('ProjectStore — paneTree', () => {
       expect(layout?.projectId).toBe('p1')
       expect(layout?.paneTree).toEqual({ kind: 'leaf', terminalId: 'a' })
     })
+
+    it('rejects malformed tree shapes (defensive against IPC tampering)', () => {
+      store.saveTerminalLayout('p1', legacyLayout('p1', ['a']))
+      // Missing `kind`
+      store.savePaneTree('p1', { children: [] } as unknown as PaneTree)
+      expect(store.loadTerminalLayout('p1')?.paneTree).toBeUndefined()
+
+      // Leaf without terminalId
+      store.savePaneTree('p1', { kind: 'leaf' } as unknown as PaneTree)
+      expect(store.loadTerminalLayout('p1')?.paneTree).toBeUndefined()
+
+      // Split with only one child
+      store.savePaneTree('p1', {
+        kind: 'split',
+        orientation: 'row',
+        ratio: 0.5,
+        children: [{ kind: 'leaf', terminalId: 'a' }]
+      } as unknown as PaneTree)
+      expect(store.loadTerminalLayout('p1')?.paneTree).toBeUndefined()
+
+      // Split with out-of-range ratio
+      store.savePaneTree('p1', {
+        kind: 'split',
+        orientation: 'row',
+        ratio: 5,
+        children: [
+          { kind: 'leaf', terminalId: 'a' },
+          { kind: 'leaf', terminalId: 'b' }
+        ]
+      })
+      expect(store.loadTerminalLayout('p1')?.paneTree).toBeUndefined()
+    })
+
+    it('rejects empty projectId without throwing', () => {
+      expect(() =>
+        store.savePaneTree('', { kind: 'leaf', terminalId: 'a' })
+      ).not.toThrow()
+    })
   })
 })

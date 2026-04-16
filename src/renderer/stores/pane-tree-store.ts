@@ -12,15 +12,28 @@ interface PaneTreeState {
 }
 
 const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>()
+const pendingTrees = new Map<string, PaneTree | null>()
 
 function scheduleSave(projectId: string, tree: PaneTree | null): void {
   const existing = pendingSaves.get(projectId)
   if (existing) clearTimeout(existing)
+  pendingTrees.set(projectId, tree)
   const handle = setTimeout(() => {
     pendingSaves.delete(projectId)
+    pendingTrees.delete(projectId)
     void window.electron?.terminal?.savePaneTree?.(projectId, tree)
   }, PANE_TREE_SAVE_DEBOUNCE_MS)
   pendingSaves.set(projectId, handle)
+}
+
+export function flushPaneTreeSaves(): void {
+  for (const [projectId, handle] of pendingSaves) {
+    clearTimeout(handle)
+    const tree = pendingTrees.get(projectId) ?? null
+    void window.electron?.terminal?.savePaneTree?.(projectId, tree)
+  }
+  pendingSaves.clear()
+  pendingTrees.clear()
 }
 
 export const usePaneTreeStore = create<PaneTreeState>((set, get) => ({
@@ -48,6 +61,7 @@ export const usePaneTreeStore = create<PaneTreeState>((set, get) => ({
   reset() {
     for (const handle of pendingSaves.values()) clearTimeout(handle)
     pendingSaves.clear()
+    pendingTrees.clear()
     set({ treesByProject: {} })
   }
 }))

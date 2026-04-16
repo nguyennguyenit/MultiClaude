@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { usePaneTreeStore, PANE_TREE_SAVE_DEBOUNCE_MS } from './pane-tree-store'
+import { usePaneTreeStore, PANE_TREE_SAVE_DEBOUNCE_MS, flushPaneTreeSaves } from './pane-tree-store'
 import type { PaneTree } from '@shared/types'
 
 function leaf(id: string): PaneTree {
@@ -76,5 +76,20 @@ describe('usePaneTreeStore', () => {
     usePaneTreeStore.getState().setTree('p1', leaf('a'))
     usePaneTreeStore.getState().setTree('p1', null)
     expect(usePaneTreeStore.getState().getTree('p1')).toBeNull()
+  })
+
+  it('flushPaneTreeSaves commits all pending debounced saves immediately', () => {
+    usePaneTreeStore.getState().setTree('p1', leaf('a'))
+    usePaneTreeStore.getState().setTree('p2', leaf('b'))
+    expect(saveMock).not.toHaveBeenCalled()
+    flushPaneTreeSaves()
+    expect(saveMock).toHaveBeenCalledWith('p1', leaf('a'))
+    expect(saveMock).toHaveBeenCalledWith('p2', leaf('b'))
+    expect(saveMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('flushPaneTreeSaves is a no-op when no saves are pending', () => {
+    flushPaneTreeSaves()
+    expect(saveMock).not.toHaveBeenCalled()
   })
 })

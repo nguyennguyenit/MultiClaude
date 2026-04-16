@@ -14,7 +14,7 @@ import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore,
 import { writeToDisplay } from './stores/display-writer-registry'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { useExecuteSplit } from './hooks/use-execute-split'
-import { usePaneTreeStore } from './stores/pane-tree-store'
+import { usePaneTreeStore, flushPaneTreeSaves } from './stores/pane-tree-store'
 import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
 import { registerSplitHandlers } from './utils/terminal-context-actions'
 import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
@@ -332,10 +332,12 @@ function App() {
     }
   })
 
-  // Expose executeSplit to the terminal right-click menu registry
+  // Expose executeSplit to the terminal right-click menu registry. Keep the
+  // handler wired even when at the limit so menu items render as disabled with
+  // a tooltip (the `disabled` flag in the menu gates the click).
   useEffect(() => {
     registerSplitHandlers({
-      executeSplit: canSplit ? (dir) => void executeSplit(dir) : null,
+      executeSplit: (dir) => void executeSplit(dir),
       canSplit,
       atLimit,
       limit: effectiveLimit
@@ -524,9 +526,10 @@ function App() {
     return unsubscribe
   }, [addTerminal])
 
-  // Save session before close
+  // Save session + flush pending pane-tree saves before close
   useEffect(() => {
     const handleBeforeUnload = async () => {
+      flushPaneTreeSaves()
       await window.electron.session.save()
     }
     window.addEventListener('beforeunload', handleBeforeUnload)

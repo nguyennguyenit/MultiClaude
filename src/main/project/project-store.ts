@@ -1,8 +1,27 @@
 import Store from 'electron-store'
 import type { Project, AppSession, ProjectTerminalLayout, PaneTree } from '@shared/types'
 import { migrateFlatToTree } from '@shared/utils/pane-tree-migration'
+import { PANE_RATIO_MAX, PANE_RATIO_MIN } from '@shared/types'
 
 const PANE_TREE_SCHEMA_VERSION = 2
+
+function isValidPaneTree(node: unknown): node is PaneTree {
+  if (!node || typeof node !== 'object') return false
+  const n = node as { kind?: unknown }
+  if (n.kind === 'leaf') {
+    const leaf = node as { terminalId?: unknown }
+    return typeof leaf.terminalId === 'string' && leaf.terminalId.length > 0
+  }
+  if (n.kind === 'split') {
+    const split = node as { orientation?: unknown; ratio?: unknown; children?: unknown }
+    if (split.orientation !== 'row' && split.orientation !== 'column') return false
+    if (typeof split.ratio !== 'number' || !Number.isFinite(split.ratio)) return false
+    if (split.ratio < PANE_RATIO_MIN - 1e-9 || split.ratio > PANE_RATIO_MAX + 1e-9) return false
+    if (!Array.isArray(split.children) || split.children.length !== 2) return false
+    return isValidPaneTree(split.children[0]) && isValidPaneTree(split.children[1])
+  }
+  return false
+}
 
 interface StoreSchema {
   projects: Project[]
@@ -153,6 +172,11 @@ export class ProjectStore {
   }
 
   savePaneTree(projectId: string, tree: PaneTree | null): void {
+    if (typeof projectId !== 'string' || projectId.length === 0) return
+    if (tree !== null && !isValidPaneTree(tree)) {
+      console.warn('[project-store] savePaneTree: rejected invalid tree shape for', projectId)
+      return
+    }
     const layouts = this.store.get('terminalLayouts')
     const existing = layouts[projectId]
     layouts[projectId] = {
