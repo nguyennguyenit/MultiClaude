@@ -3,6 +3,7 @@ import { Toolbar } from './components/toolbar'
 import { UpdateBanner } from './components/update-banner'
 import { TerminalGrid, TerminalActionBar } from './components/terminal'
 import { YoloWarningDialog } from './components/terminal/yolo-warning-dialog'
+import { ThemedContextMenu } from './components/context-menu/themed-context-menu'
 import { WelcomeScreen } from './components/welcome-screen'
 import { ToastContainer } from './components/toast-container'
 import { SettingsModal } from './components/settings'
@@ -12,6 +13,10 @@ import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
 import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
 import { writeToDisplay } from './stores/display-writer-registry'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
+import { useExecuteSplit } from './hooks/use-execute-split'
+import { usePaneTreeStore } from './stores/pane-tree-store'
+import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
+import { registerSplitHandlers } from './utils/terminal-context-actions'
 import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
 import { buildMediaToken, classifyMediaFile } from './utils/media-classifier'
 import { formatPathForTerminal } from './utils/terminal-path-utils'
@@ -192,7 +197,14 @@ function App() {
     if (!idToClose) return
     await window.electron.terminal.destroy(idToClose)
     removeTerminal(idToClose)
-  }, [activeTerminalId, removeTerminal])
+    // Collapse the pane tree node for this terminal so parents reflow.
+    if (activeProjectId) {
+      const current = usePaneTreeStore.getState().getTree(activeProjectId)
+      if (current) {
+        usePaneTreeStore.getState().setTree(activeProjectId, closeLeafAndCollapse(current, idToClose))
+      }
+    }
+  }, [activeTerminalId, removeTerminal, activeProjectId])
 
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
@@ -295,12 +307,48 @@ function App() {
     }
   }, [pendingSetupProject])
 
+  // Visible (active project) terminal count — drives split gating
+  const visibleCount = visibleTerminals.length
+  const effectiveLimit = getTerminalLimitValue()
+  const atLimit = visibleCount >= effectiveLimit
+
+  const { executeSplit, canSplit } = useExecuteSplit({
+    projectId: activeProjectId,
+    projectPath: activeProject?.path,
+    activeTerminalId,
+    terminalLimit: effectiveLimit,
+    terminalCount: visibleCount,
+    selectedShell,
+    windowsShellFallback: pendingSettings.windowsShell,
+    addTerminal,
+    notifyLimit: (limit) => {
+      useToastStore.getState().addToast(
+        `Terminal limit reached (${limit}). Close a terminal or increase limit in Settings.`,
+        'warning'
+      )
+    },
+    notifyError: (msg) => {
+      useToastStore.getState().addToast(msg, 'error')
+    }
+  })
+
+  // Expose executeSplit to the terminal right-click menu registry
+  useEffect(() => {
+    registerSplitHandlers({
+      executeSplit: canSplit ? (dir) => void executeSplit(dir) : null,
+      canSplit,
+      atLimit,
+      limit: effectiveLimit
+    })
+  }, [executeSplit, canSplit, atLimit, effectiveLimit])
+
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
     onAddTerminal: handleAddTerminal,
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
-    onToggleGitHubPanel: () => togglePanel('github')
+    onToggleGitHubPanel: () => togglePanel('github'),
+    onSplit: canSplit ? (dir) => void executeSplit(dir) : undefined
   })
 
 
@@ -490,6 +538,9 @@ function App() {
       {/* Toast notifications */}
       <ToastContainer />
 
+      {/* Themed context menu (portal) */}
+      <ThemedContextMenu />
+
       {/* Settings modal */}
       <SettingsModal
         isOpen={activePanel === 'settings'}
@@ -590,6 +641,8 @@ function App() {
           onAddTerminal={handleAddTerminal}
           onToggleYolo={handleYoloToggle}
           onKillAll={handleKillAll}
+          onSplit={(dir) => void executeSplit(dir)}
+          canSplit={canSplit}
         />
       )}
     </div>

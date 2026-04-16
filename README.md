@@ -143,9 +143,14 @@ src/
 | New Terminal | Ctrl+N or Ctrl+T |
 | Close Active Terminal | Ctrl+W |
 | GitHub Panel | Ctrl+G |
+| Split Pane Right | Ctrl+Shift+→ |
+| Split Pane Left | Ctrl+Shift+← |
+| Split Pane Down | Ctrl+Shift+↓ |
+| Split Pane Up | Ctrl+Shift+↑ |
+| Context Menu | Right-click terminal (Copy / Paste / Split ×4) |
 | Open URL | Click link |
-| Copy | Select text (auto-copies) |
-| Paste | Right-click or Ctrl+V |
+| Copy | Right-click → Copy |
+| Paste | Right-click → Paste or Ctrl+V |
 | Paste Image | Ctrl+V (clipboard image > temp file > insert path) |
 | Insert File Path | Drag-and-drop file |
 

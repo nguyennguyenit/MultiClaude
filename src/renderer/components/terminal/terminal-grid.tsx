@@ -1,7 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { TerminalPane } from './terminal-pane'
-import { ResizeHandle } from './terminal-resize-handle'
-import { useTerminalResize } from '../../hooks/use-terminal-resize'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { PaneTreeNode } from './pane-tree-node'
+import { usePaneTreeStore } from '../../stores/pane-tree-store'
+import { reconcilePaneTree } from '../../utils/pane-tree-reconcile'
+import { updateRatio } from '@shared/utils/pane-tree'
 import type { Terminal } from '@shared/types'
 
 interface TerminalGridProps {
@@ -16,34 +17,10 @@ interface TerminalGridProps {
   onTitleChange?: (terminalId: string, title: string) => void
 }
 
-/** Default project ID for terminals without explicit projectId */
 const DEFAULT_PROJECT_ID = 'default'
 
-/** Get project ID from terminal, using default fallback */
 function getProjectId(terminal: Pick<Terminal, 'projectId'>): string {
   return terminal.projectId || DEFAULT_PROJECT_ID
-}
-
-/** Calculate grid dimensions based on terminal count and screen orientation */
-function calculateGrid(count: number, isPortrait: boolean): { rows: number; cols: number } {
-  if (count <= 1) return { rows: 1, cols: 1 }
-  if (count <= 2) {
-    // Portrait: stack vertically | Landscape: side-by-side
-    return isPortrait ? { rows: 2, cols: 1 } : { rows: 1, cols: 2 }
-  }
-  if (count <= 4) return { rows: 2, cols: 2 }
-  if (count <= 6) return { rows: 2, cols: 3 }
-  if (count <= 9) return { rows: 3, cols: 3 }
-  return { rows: 3, cols: 4 } // max 12
-}
-
-/** Split terminals into rows based on grid config */
-function splitIntoRows<T>(items: T[], cols: number): T[][] {
-  const rows: T[][] = []
-  for (let i = 0; i < items.length; i += cols) {
-    rows.push(items.slice(i, i + cols))
-  }
-  return rows
 }
 
 export const TerminalGrid = memo(function TerminalGrid({
@@ -57,31 +34,28 @@ export const TerminalGrid = memo(function TerminalGrid({
   onInsertFilePath,
   onTitleChange
 }: TerminalGridProps) {
-  // Detect portrait orientation for responsive grid layout
   const [isPortrait, setIsPortrait] = useState(
     () => typeof window !== 'undefined' && window.innerHeight > window.innerWidth
   )
 
   useEffect(() => {
-    const handleResize = () => setIsPortrait(window.innerHeight > window.innerWidth)
+    const handleResize = (): void => setIsPortrait(window.innerHeight > window.innerWidth)
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   /**
    * Groups terminals by project for stable rendering (single-parent pattern).
-   * All project grids are rendered simultaneously with inactive projects hidden via CSS.
-   * This prevents React from unmounting terminals when switching projects,
-   * preserving cursor position, buffer content, and WebGL state.
-  */
+   * All project grids render simultaneously with inactive projects hidden via CSS
+   * so switching projects preserves cursor, buffer, and WebGL state in xterm.
+   */
   const projectGroups = useMemo(() => {
     const groups = new Map<string, Terminal[]>()
     if (activeProjectId) groups.set(activeProjectId, [])
     for (const t of terminals) {
       const pid = getProjectId(t)
       if (!groups.has(pid)) groups.set(pid, [])
-      const group = groups.get(pid)
-      if (group) group.push(t)
+      groups.get(pid)!.push(t)
     }
     return Array.from(groups.entries()).map(([projectId, terms]) => ({
       projectId,
@@ -90,103 +64,25 @@ export const TerminalGrid = memo(function TerminalGrid({
     }))
   }, [terminals, activeProjectId])
 
-  // Get active project's terminals for grid layout calculation
-  const activeGroup = projectGroups.find(g => g.isActive)
+  const activeGroup = projectGroups.find((g) => g.isActive)
   const visibleTerminalCount = activeGroup?.terminals.length ?? 0
-
-  // Compute resize grid shape based on active project
-  const activeGrid = activeGroup
-    ? calculateGrid(activeGroup.terminals.length, isPortrait)
-    : { rows: 1, cols: 1 }
-
-  const activeRows = activeGroup ? splitIntoRows(activeGroup.terminals, activeGrid.cols) : []
-  const numColsPerRow = activeRows.map(row => row.length)
-
-  // Resize state: flex values for rows and per-row columns
-  const gridContainerRef = useRef<HTMLDivElement>(null)
-  const { getRowFlex, getColFlex, startRowResize, startColResize } = useTerminalResize(
-    activeProjectId,
-    activeRows.length,
-    numColsPerRow,
-    gridContainerRef
-  )
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      {/* All project grids rendered in single parent - inactive hidden with visibility:hidden.
-          visibility:hidden preserves xterm.js scroll/cursor state unlike display:none */}
-      {projectGroups.map(group => {
-        const { cols } = calculateGrid(group.terminals.length, isPortrait)
-        const rows = splitIntoRows(group.terminals, cols)
-
-        return (
-          <div
-            key={group.projectId}
-            ref={group.isActive ? gridContainerRef : undefined}
-            role="region"
-            aria-label={`Terminal grid for project ${group.projectId}`}
-            aria-hidden={!group.isActive}
-            style={{
-              visibility: group.isActive ? 'visible' : 'hidden',
-              position: group.isActive ? 'relative' : 'absolute',
-              pointerEvents: group.isActive ? 'auto' : 'none',
-              width: '100%',
-              height: '100%',
-              top: 0,
-              left: 0
-            }}
-          >
-            <div className="terminal-grid">
-              {rows.map((rowTerminals, rowIndex) => (
-                <div key={`row-${rowIndex}`} style={{ display: 'contents' }}>
-                  {/* Horizontal resize handle between rows */}
-                  {rowIndex > 0 && group.isActive && (
-                    <ResizeHandle
-                      direction="horizontal"
-                      onResizeStart={(y) => startRowResize(rowIndex - 1, y)}
-                    />
-                  )}
-
-                  <div
-                    className="terminal-row"
-                    style={{ flex: group.isActive ? getRowFlex(rowIndex) : 1 }}
-                  >
-                    {rowTerminals.map((terminal, colIndex) => (
-                      <div key={terminal.id} style={{ display: 'contents' }}>
-                        {/* Vertical resize handle between columns */}
-                        {colIndex > 0 && group.isActive && (
-                          <ResizeHandle
-                            direction="vertical"
-                            onResizeStart={(x) => startColResize(rowIndex, colIndex - 1, x)}
-                          />
-                        )}
-
-                        <div
-                          className={`terminal-cell${terminal.id === activeTerminalId ? ' active' : ''}`}
-                          style={{ flex: group.isActive ? getColFlex(rowIndex, colIndex) : 1 }}
-                        >
-                          <TerminalPane
-                            terminalId={terminal.id}
-                            title={terminal.title}
-                            isActive={terminal.id === activeTerminalId}
-                            hidden={!group.isActive}
-                            isClaudeMode={terminal.isClaudeMode}
-                            agentType={terminal.agentType}
-                            onActivate={() => onTerminalClick(terminal.id)}
-                            onClose={() => onCloseTerminal?.(terminal.id)}
-                            onInsertFilePath={(paths) => onInsertFilePath?.(terminal.id, paths)}
-                            onTitleChange={(title) => onTitleChange?.(terminal.id, title)}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
+      {projectGroups.map((group) => (
+        <ProjectPaneView
+          key={group.projectId}
+          projectId={group.projectId}
+          isActive={group.isActive}
+          terminals={group.terminals}
+          activeTerminalId={activeTerminalId}
+          isPortrait={isPortrait}
+          onTerminalClick={onTerminalClick}
+          onCloseTerminal={onCloseTerminal}
+          onInsertFilePath={onInsertFilePath}
+          onTitleChange={onTitleChange}
+        />
+      ))}
 
       {visibleTerminalCount === 0 && (
         <div className="welcome-screen" style={{ position: 'absolute', inset: 0 }}>
@@ -218,3 +114,109 @@ export const TerminalGrid = memo(function TerminalGrid({
     </div>
   )
 })
+
+interface ProjectPaneViewProps {
+  projectId: string
+  isActive: boolean
+  terminals: Terminal[]
+  activeTerminalId: string | null
+  isPortrait: boolean
+  onTerminalClick: (id: string) => void
+  onCloseTerminal?: (id: string) => void
+  onInsertFilePath?: (terminalId: string, paths: string[]) => void
+  onTitleChange?: (terminalId: string, title: string) => void
+}
+
+function ProjectPaneView({
+  projectId,
+  isActive,
+  terminals,
+  activeTerminalId,
+  isPortrait,
+  onTerminalClick,
+  onCloseTerminal,
+  onInsertFilePath,
+  onTitleChange
+}: ProjectPaneViewProps) {
+  const loadTreeForProject = usePaneTreeStore((s) => s.loadTreeForProject)
+  const setTree = usePaneTreeStore((s) => s.setTree)
+  const rawTree = usePaneTreeStore((s) => s.treesByProject[projectId])
+  const treeLoaded = rawTree !== undefined
+
+  useEffect(() => {
+    if (!treeLoaded) void loadTreeForProject(projectId)
+  }, [projectId, treeLoaded, loadTreeForProject])
+
+  const terminalIds = useMemo(() => terminals.map((t) => t.id), [terminals])
+
+  const reconciled = useMemo(
+    () => reconcilePaneTree(rawTree ?? null, terminalIds, isPortrait),
+    [rawTree, terminalIds, isPortrait]
+  )
+
+  // Persist any reshape caused by reconciliation (add/remove) so the tree on
+  // disk stays canonical.
+  useEffect(() => {
+    if (!treeLoaded) return
+    const current = rawTree ?? null
+    if (current !== reconciled && JSON.stringify(current) !== JSON.stringify(reconciled)) {
+      setTree(projectId, reconciled)
+    }
+  }, [projectId, reconciled, rawTree, treeLoaded, setTree])
+
+  const terminalsById = useMemo(() => {
+    const map: Record<string, Terminal> = {}
+    for (const t of terminals) map[t.id] = t
+    return map
+  }, [terminals])
+
+  const handleSetRatio = useCallbackSetRatio(projectId, reconciled, setTree)
+
+  const handleClose = (id: string): void => onCloseTerminal?.(id)
+
+  return (
+    <div
+      role="region"
+      aria-label={`Terminal grid for project ${projectId}`}
+      aria-hidden={!isActive}
+      style={{
+        visibility: isActive ? 'visible' : 'hidden',
+        position: isActive ? 'relative' : 'absolute',
+        pointerEvents: isActive ? 'auto' : 'none',
+        width: '100%',
+        height: '100%',
+        top: 0,
+        left: 0,
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      {reconciled ? (
+        <PaneTreeNode
+          node={reconciled}
+          path={[]}
+          activeTerminalId={activeTerminalId}
+          hidden={!isActive}
+          terminalsById={terminalsById}
+          onTerminalClick={onTerminalClick}
+          onCloseTerminal={handleClose}
+          onInsertFilePath={onInsertFilePath}
+          onTitleChange={onTitleChange}
+          onSetRatio={handleSetRatio}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function useCallbackSetRatio(
+  projectId: string,
+  tree: ReturnType<typeof reconcilePaneTree>,
+  setTree: (projectId: string, tree: ReturnType<typeof reconcilePaneTree>) => void
+): (path: number[], ratio: number) => void {
+  return (path, ratio) => {
+    if (!tree) return
+    const next = updateRatio(tree, path, ratio)
+    setTree(projectId, next)
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "projects": [
+    {
+      "id": "legacy-project-1",
+      "name": "LegacyProject",
+      "path": "/tmp/legacy-project",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "activeProjectId": "legacy-project-1",
+  "session": null,
+  "terminalLayouts": {
+    "legacy-project-1": {
+      "projectId": "legacy-project-1",
+      "terminals": [
+        { "id": "legacy-t-a", "title": "a", "cwd": "/tmp/legacy-project", "isClaudeMode": false, "projectId": "legacy-project-1", "createdAt": "2024-01-01T00:00:00.000Z" },
+        { "id": "legacy-t-b", "title": "b", "cwd": "/tmp/legacy-project", "isClaudeMode": false, "projectId": "legacy-project-1", "createdAt": "2024-01-01T00:00:00.000Z" },
+        { "id": "legacy-t-c", "title": "c", "cwd": "/tmp/legacy-project", "isClaudeMode": false, "projectId": "legacy-project-1", "createdAt": "2024-01-01T00:00:00.000Z" }
+      ]
+    }
+  }
+}

@@ -1,5 +1,8 @@
 import Store from 'electron-store'
-import type { Project, AppSession, ProjectTerminalLayout } from '@shared/types'
+import type { Project, AppSession, ProjectTerminalLayout, PaneTree } from '@shared/types'
+import { migrateFlatToTree } from '@shared/utils/pane-tree-migration'
+
+const PANE_TREE_SCHEMA_VERSION = 2
 
 interface StoreSchema {
   projects: Project[]
@@ -124,5 +127,40 @@ export class ProjectStore {
 
   getAllTerminalLayouts(): Record<string, ProjectTerminalLayout> {
     return this.store.get('terminalLayouts')
+  }
+
+  loadPaneTree(projectId: string): PaneTree | null {
+    const layouts = this.store.get('terminalLayouts')
+    const layout = layouts[projectId]
+    if (!layout) return null
+
+    if (layout.paneTree) return layout.paneTree
+    if ((layout.schemaVersion ?? 1) >= PANE_TREE_SCHEMA_VERSION) return null
+
+    if (!layout.terminals || layout.terminals.length === 0) return null
+
+    const ids = layout.terminals.map((t) => t.id)
+    const migrated = migrateFlatToTree(ids, false)
+    if (!migrated) return null
+
+    layouts[projectId] = {
+      ...layout,
+      paneTree: migrated,
+      schemaVersion: PANE_TREE_SCHEMA_VERSION
+    }
+    this.store.set('terminalLayouts', layouts)
+    return migrated
+  }
+
+  savePaneTree(projectId: string, tree: PaneTree | null): void {
+    const layouts = this.store.get('terminalLayouts')
+    const existing = layouts[projectId]
+    layouts[projectId] = {
+      ...(existing ?? { projectId, terminals: [] }),
+      projectId,
+      paneTree: tree,
+      schemaVersion: PANE_TREE_SCHEMA_VERSION
+    }
+    this.store.set('terminalLayouts', layouts)
   }
 }

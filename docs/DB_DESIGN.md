@@ -91,7 +91,11 @@ interface ProjectStoreSchema {
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `projectId` | string | ✅ | Reference to Project.id |
-| `terminals` | ProjectTerminal[] | ✅ | Terminal configurations |
+| `terminals` | ProjectTerminal[] | ✅ | Legacy flat list (kept for backward compat / downgrade safety) |
+| `paneTree` | PaneTree \| null | ❌ | Binary split tree layout (schemaVersion 2+) |
+| `schemaVersion` | number | ❌ | Layout schema version; absent/1 = legacy flat, 2 = pane tree |
+
+Migration: on first `loadPaneTree(projectId)` call after upgrade, legacy layouts (no `paneTree`, `schemaVersion < 2`) are converted via `migrateFlatToTree(ids, isPortrait)` preserving the pre-upgrade visual arrangement for N=1–12 terminals. Migration is idempotent and does not delete `terminals[]`.
 
 #### E-03: ProjectTerminal
 
@@ -99,7 +103,33 @@ interface ProjectStoreSchema {
 |-------|------|----------|-------------|
 | `id` | string | ✅ | Terminal instance ID |
 | `title` | string | ✅ | Tab title |
-| `position` | number | ✅ | Grid position (0-11) |
+| `position` | number | ✅ | Legacy grid position (pre-paneTree); ignored when `paneTree` present |
+
+#### E-02a: PaneTree
+
+Binary split tree (tmux/iTerm-style). Discriminated union:
+
+```ts
+type PaneTree = PaneLeaf | PaneSplit
+
+interface PaneLeaf {
+  kind: 'leaf'
+  terminalId: string  // references ProjectTerminal.id
+}
+
+interface PaneSplit {
+  kind: 'split'
+  orientation: 'row' | 'column'  // row = side-by-side, column = stacked
+  ratio: number                   // children[0] size fraction, clamped [0.1, 0.9]
+  children: [PaneTree, PaneTree]
+}
+```
+
+Invariants enforced at the store boundary (`savePaneTree` validation):
+- Split always has exactly 2 children
+- `ratio ∈ [0.1, 0.9]`
+- Leaf `terminalId` non-empty string
+- All terminalIds across leaves are unique within a tree
 
 #### E-04: AppSession
 
@@ -188,6 +218,8 @@ interface SettingsStoreSchema {
 | `saveTerminalLayout(...)` | `projectId, layout` | void | Save terminal layout |
 | `loadTerminalLayout(...)` | `projectId` | `ProjectTerminalLayout \| null` | Load terminal layout |
 | `deleteTerminalLayout(...)` | `projectId` | void | Delete terminal layout |
+| `savePaneTree(...)` | `projectId, tree` | void | Persist pane tree (validates shape) |
+| `loadPaneTree(...)` | `projectId` | `PaneTree \| null` | Load pane tree with on-read legacy migration |
 
 ### SettingsStore Methods
 

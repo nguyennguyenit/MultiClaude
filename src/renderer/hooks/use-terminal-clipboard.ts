@@ -2,22 +2,25 @@
  * useTerminalClipboard — manages image paste and context menu.
  *
  * Responsibilities:
- *   - Handle Ctrl+V / Cmd+V: detect images in clipboard and save to temp file;
- *     fall back to plain text paste via PTY write
- *   - Register right-click context menu handler via electron IPC (Copy when selection
- *     exists, always Paste)
+ *   - Handle Ctrl+V / Cmd+V: delegate to shared pasteFromClipboard util
+ *   - Open themed React context menu on right-click (Copy when selection exists, Paste)
  *   - Expose attachClipboardListeners(terminal) — called by initTerminal after terminal.open()
  *   - Expose getCtrlVHandler(terminal) — used in attachCustomKeyEventHandler
- *
- * Sub-hooks must NOT import from each other; all orchestration lives in use-terminal.ts.
  */
 import { useRef, useCallback } from 'react'
 import type { RefObject } from 'react'
 import type { Terminal as XTerm } from '@xterm/xterm'
-import { useAppStore, useImageStore, usePendingMediaStore } from '../stores'
-import { writeToDisplay } from '../stores/display-writer-registry'
-import { buildMediaToken } from '../utils/media-classifier'
-import { formatPathForTerminal } from '../utils/terminal-path-utils'
+import { useContextMenuStore, type ContextMenuItem } from '../stores/context-menu-store'
+import { pasteFromClipboard } from '../utils/paste-from-clipboard'
+import { getSplitHandlers } from '../utils/terminal-context-actions'
+import type { PaneSplitDirection } from '@shared/types'
+
+const ARROW_TO_SPLIT: Record<string, PaneSplitDirection> = {
+  ArrowRight: 'right',
+  ArrowLeft: 'left',
+  ArrowDown: 'down',
+  ArrowUp: 'up'
+}
 
 interface UseTerminalClipboardParams {
   terminalId: string
@@ -50,86 +53,58 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
   const followLiveOutputRef = useRef<(() => void) | null>(null)
 
   const attachClipboardListeners = useCallback((terminal: XTerm) => {
-    // ── Right-click context menu ─────────────────────────────────────────────
     terminal.element?.addEventListener('contextmenu', (e) => {
       if (!(e instanceof MouseEvent)) return
       e.preventDefault()
       const selection = terminal.getSelection() || undefined
-      void window.electron.terminal.showContextMenu({ terminalId, x: e.clientX, y: e.clientY, selection })
-    })
-
-  }, [terminalId])
-
-  /**
-   * Returns the Ctrl+V / Cmd+V key handler for use in attachCustomKeyEventHandler.
-   * Called from initTerminal after clipboard listeners are attached.
-   */
-  const getCtrlVHandler = useCallback(() => {
-    return (e: KeyboardEvent): boolean | undefined => {
-      if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return undefined
-
-      e.preventDefault()
-
-      navigator.clipboard.read().then(async (clipboardItems) => {
-        let hasImage = false
-
-        for (const item of clipboardItems) {
-          const imageType = item.types.find(t => t.startsWith('image/'))
-          if (imageType) {
-            hasImage = true
-            try {
-              const blob = await item.getType(imageType)
-              const reader = new FileReader()
-              const base64Promise = new Promise<string>((resolve, reject) => {
-                reader.onload = () => { resolve((reader.result as string).split(',')[1]) }
-                reader.onerror = reject
-              })
-              reader.readAsDataURL(blob)
-              const base64Data = await base64Promise
-
-              const filePath = await window.electron.clipboard.saveImage(base64Data)
-              if (filePath) {
-                followLiveOutputRef.current?.()
-                const isClaudeMode = useAppStore.getState().terminals.find(t => t.id === terminalId)?.isClaudeMode
-                const entry = useImageStore.getState().addImage(terminalId, filePath, 'image')
-                if (isClaudeMode) {
-                  window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
-                } else {
-                  const token = buildMediaToken('image', entry.index)
-                  usePendingMediaStore.getState().push(terminalId, {
-                    path: filePath,
-                    displayLength: token.length
-                  })
-                  writeToDisplay(terminalId, token + ' ')
-                }
-              }
-            } catch (err) {
-              console.error('Failed to process clipboard image:', err)
-            }
-            break
+      const items: ContextMenuItem[] = []
+      if (selection) {
+        items.push({
+          id: 'copy',
+          label: 'Copy',
+          onSelect: () => {
+            void navigator.clipboard.writeText(selection)
           }
+        })
+        items.push({ id: 'sep-copy', label: '', separator: true })
+      }
+      items.push({
+        id: 'paste',
+        label: 'Paste',
+        onSelect: () => {
+          void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.())
         }
-
-        if (!hasImage) {
-          try {
-            const text = await navigator.clipboard.readText()
-            if (text) {
-              followLiveOutputRef.current?.()
-              window.electron.terminal.write(terminalId, text)
-            }
-          } catch {
-            // Clipboard permission denied
-          }
-        }
-      }).catch(() => {
-        navigator.clipboard.readText().then(text => {
-          if (text) {
-            followLiveOutputRef.current?.()
-            window.electron.terminal.write(terminalId, text)
-          }
-        }).catch(() => { })
       })
 
+      const split = getSplitHandlers()
+      if (split.executeSplit) {
+        const disabled = split.atLimit || !split.canSplit
+        const limitTitle = split.atLimit ? `Terminal limit (${split.limit}) reached` : undefined
+        items.push({ id: 'sep-split', label: '', separator: true })
+        items.push({ id: 'split-right', label: 'Split right', shortcut: '⌘⇧→', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('right') })
+        items.push({ id: 'split-left', label: 'Split left', shortcut: '⌘⇧←', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('left') })
+        items.push({ id: 'split-down', label: 'Split down', shortcut: '⌘⇧↓', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('down') })
+        items.push({ id: 'split-up', label: 'Split up', shortcut: '⌘⇧↑', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('up') })
+      }
+
+      useContextMenuStore.getState().openMenu({ x: e.clientX, y: e.clientY, items })
+    })
+  }, [terminalId])
+
+  const getCtrlVHandler = useCallback(() => {
+    return (e: KeyboardEvent): boolean | undefined => {
+      // Intercept split hotkeys before shell scroll-by-line handling.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
+        const dir = ARROW_TO_SPLIT[e.key] ?? ARROW_TO_SPLIT[e.code]
+        if (dir) {
+          e.preventDefault()
+          getSplitHandlers().executeSplit?.(dir)
+          return false
+        }
+      }
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return undefined
+      e.preventDefault()
+      void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.())
       return false
     }
   }, [terminalId])

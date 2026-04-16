@@ -51,20 +51,27 @@ src/main/
 src/renderer/
 ├── App.tsx                               # Root component and shared terminal-output listener
 ├── components/
+│   ├── context-menu/                     # Themed Portal context menu (theme-aware via CSS vars)
 │   └── terminal/
-│       ├── terminal-grid.tsx             # Multi-project terminal grid
+│       ├── terminal-grid.tsx             # Multi-project host; renders pane trees
+│       ├── pane-tree-node.tsx            # Recursive flex renderer + resize handles
+│       ├── split-button.tsx              # + / ▾ split action-bar control
 │       ├── terminal-pane.tsx             # Pane chrome and restore wiring
 │       ├── terminal-view.tsx             # xterm.js host and handler registration
 │       ├── terminal-output-handler.ts    # Chunk processing for visible output
 │       └── terminal-output-buffer.ts     # Non-reactive scrollback buffer module
 ├── stores/
 │   ├── app-store.ts                      # Projects, terminals, UI state, buffer facade
+│   ├── context-menu-store.ts             # Open/close state for themed context menu
+│   ├── pane-tree-store.ts                # Per-project pane trees, debounced IPC persist
 │   ├── settings-store.ts                 # Pending/saved settings flow
 │   ├── notification-store.ts             # Notification settings state
 │   ├── update-store.ts                   # Update state
 │   └── toast-store.ts                    # Toast queue
 └── utils/
-    └── terminal-output-dispatcher.ts     # Shared output routing registry
+    ├── terminal-output-dispatcher.ts     # Shared output routing registry
+    ├── paste-from-clipboard.ts           # Shared image + text paste pipeline
+    └── pane-tree-reconcile.ts            # Tree <-> terminal list reconciliation
 ```
 
 ### Shared Code
@@ -141,8 +148,11 @@ Important current behavior:
 - `terminal:output`
 - `terminal:exit`
 - `terminal:title-change`
+- `terminal:load-pane-tree` / `terminal:save-pane-tree` — per-project split-tree persistence (schemaVersion 2 with on-read migration from the legacy flat layout)
 
 The renderer now uses `terminal:output` through the shared App-level subscription only. Individual terminal views no longer subscribe directly to IPC.
+
+The legacy `terminal:show-context-menu` channel has been removed; right-click is handled by a themed React Portal menu reading CSS variables from the active theme.
 
 ### Other Channel Families
 

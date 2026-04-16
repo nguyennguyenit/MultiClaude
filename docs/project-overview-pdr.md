@@ -13,7 +13,7 @@
 
 ## Core Value Proposition
 
-- **Multi-Agent Workflow**: Run up to 12 Claude Code instances in parallel across a resizable grid
+- **Multi-Agent Workflow**: Run up to 12 Claude Code instances in parallel with flexible pane tree splits
 - **Project Isolation**: Per-project terminal layouts with session persistence
 - **Git Integration**: Visual git panel with commit, branch, stash, and history management
 - **Notifications**: Task completion alerts via native OS, Telegram, and Discord
@@ -168,7 +168,7 @@
 | simple-git | ^3.27.0 | Git operations |
 | zustand | ^5.0.2 | State management |
 | react | ^19.0.0 | UI framework |
-| react-resizable-panels | ^4.1.1 | Grid layout |
+| (removed) | (removed) | Replaced by pane-tree layout |
 
 ### Development Dependencies
 | Package | Version | Purpose |

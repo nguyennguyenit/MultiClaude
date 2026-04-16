@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, dialog, shell, app, screen, Menu, clipboard } from 'electron'
+import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -197,44 +197,17 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   // Shell list handler — cached at startup, returns same promise on subsequent calls
   safeHandle(IPC_CHANNELS.TERMINAL_GET_SHELLS, () => terminalManager.getAvailableShells())
 
-  safeHandle(IPC_CHANNELS.TERMINAL_SHOW_CONTEXT_MENU, async (_, {
-    terminalId,
-    x,
-    y,
-    selection
-  }: {
-    terminalId: string
-    x: number
-    y: number
-    selection?: string
+  safeHandle(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, async (_, projectId: string) => {
+    if (typeof projectId !== 'string' || !projectId) return null
+    return projectStore.loadPaneTree(projectId)
+  })
+
+  safeHandle(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, async (_, payload: {
+    projectId: string
+    tree: import('@shared/types').PaneTree | null
   }) => {
-    const template: Electron.MenuItemConstructorOptions[] = []
-
-    if (selection) {
-      template.push({
-        label: 'Copy',
-        click: () => { clipboard.writeText(selection) }
-      })
-      template.push({ type: 'separator' })
-    }
-
-    template.push({
-      label: 'Paste',
-      click: () => {
-        const text = clipboard.readText()
-        if (text) {
-          terminalManager.write(terminalId, text)
-        }
-      }
-    })
-
-    const menu = Menu.buildFromTemplate(template)
-
-    menu.popup({
-      window,
-      x: Math.max(0, Math.round(x)),
-      y: Math.max(0, Math.round(y))
-    })
+    if (!payload || typeof payload.projectId !== 'string' || !payload.projectId) return
+    projectStore.savePaneTree(payload.projectId, payload.tree ?? null)
   })
 
   // Project handlers

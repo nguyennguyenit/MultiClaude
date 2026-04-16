@@ -75,10 +75,23 @@ Important behavior:
 ### Terminal UI Flow
 
 - `TerminalGrid` keeps all project grids mounted and hides inactive ones
+- Each active group renders a `PaneTree` via `PaneTreeNode` — a recursive flex layout (tmux/iTerm-style binary split tree) replacing the legacy auto-grid
 - `TerminalPane` provides tab chrome, restore wiring, and action buttons
 - `TerminalView` owns xterm lifecycle, focus, refresh, scroll tracking, and output processing
 
 This arrangement preserves terminal state across project switching without forcing unmount/remount churn.
+
+### Pane Tree Layout
+
+- Pure model in `src/shared/types/pane-tree.ts` + ops in `src/shared/utils/pane-tree.ts` (`splitLeaf`, `closeLeafAndCollapse`, `updateRatio`, …)
+- Per-project tree persisted in `electron-store` under `terminalLayouts[projectId].paneTree` with `schemaVersion: 2`. Legacy flat layouts migrate on first read via `migrateFlatToTree` (`pane-tree-migration.ts`) preserving the pre-upgrade visual arrangement for N=1–12 terminals in both orientations.
+- Renderer store `pane-tree-store.ts` debounces writes (200ms) via `terminal:load-pane-tree` / `terminal:save-pane-tree` IPC.
+- Split actions (`right` / `left` / `down` / `up`) dispatched from three entry points — right-click menu, hotkeys (⌘⇧→/←/↓/↑), action-bar split-button — all funnel through `useExecuteSplit`. Close routes flow through `closeLeafAndCollapse` so parent splits collapse when a sibling is removed.
+
+### Themed Context Menu
+
+- React Portal menu in `src/renderer/components/context-menu/` driven by `context-menu-store.ts`. Colors bind to CSS variables (`--bg-primary`, `--hover`, `--border`, …) so theme switches update the open menu live.
+- Replaces the legacy native `Menu.buildFromTemplate` IPC path (removed). Copy/Paste reuses shared `paste-from-clipboard.ts` (image + text); Split actions extend the menu dynamically from `terminal-context-actions.ts`.
 
 ## File Organization
 

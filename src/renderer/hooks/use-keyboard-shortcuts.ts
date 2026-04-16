@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../stores'
 import { getGlobalShortcut } from '../utils'
+import type { PaneSplitDirection } from '@shared/types'
 
 interface KeyboardShortcutsOptions {
   onAddTerminal: () => void
   onCloseTerminal: () => void
   onSelectProject?: (id: string) => void
   onToggleGitHubPanel?: () => void
+  onSplit?: (direction: PaneSplitDirection) => void
 }
 
 /**
@@ -20,7 +22,8 @@ export function useKeyboardShortcuts({
   onAddTerminal,
   onCloseTerminal,
   onSelectProject,
-  onToggleGitHubPanel
+  onToggleGitHubPanel,
+  onSplit
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -51,10 +54,13 @@ export function useKeyboardShortcuts({
         case 'toggle-github-panel':
           onToggleGitHubPanel?.()
           return
+        case 'split-pane':
+          onSplit?.(shortcut.direction)
+          return
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitHubPanel])
+  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitHubPanel, onSplit])
 }

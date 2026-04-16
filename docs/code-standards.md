@@ -376,6 +376,52 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 - `cancel()`: Reverts pendingSettings to savedSettings
 - Main process validates all settings before persistence (validation firewall)
 
+### Pane Tree Store Pattern (v3.3.0)
+
+**Binary Split Tree Layout**: Terminals are organized in a recursive binary tree where each node is either a leaf (terminal) or a split container (vertical/horizontal).
+
+```typescript
+// stores/pane-tree-store.ts
+interface PaneNode {
+  id: string
+  type: 'pane' | 'split'
+  // If pane:
+  terminalId?: string
+  // If split:
+  splitDirection?: 'vertical' | 'horizontal'
+  children?: [PaneNode, PaneNode]
+}
+
+interface PaneTreeState {
+  paneTree: PaneNode
+  activePaneId: string
+
+  // Actions
+  splitPane: (paneId: string, direction: 'vertical' | 'horizontal') => void
+  closePane: (paneId: string) => void
+  setActivePaneId: (paneId: string) => void
+}
+
+export const usePaneTreeStore = create<PaneTreeState>((set) => ({
+  // ...
+  splitPane: (paneId, direction) => set((state) => {
+    // Create new pane, replace target with split node
+    return { paneTree: reconcileSplitTree(state.paneTree, paneId, direction) }
+  }),
+  closePane: (paneId) => set((state) => {
+    // Remove pane, collapse parent split if orphaned
+    return { paneTree: reconcileClosePaneTree(state.paneTree, paneId) }
+  })
+}))
+```
+
+**Key Patterns:**
+- `PaneTreeNode` renders recursively: split → two children, pane → terminal
+- `splitPane()` creates new empty pane, inserts split node parent
+- `closePane()` removes pane, collapses parent split if only one child remains
+- Tree persisted per-project via `terminal:load-pane-tree` / `terminal:save-pane-tree`
+- Context menu (themed Portal) triggers split/close from right-click or split-button
+
 ## IPC Standards
 
 ### Channel Definition

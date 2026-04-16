@@ -1,0 +1,61 @@
+.themed-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  padding: 4px 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  font-size: 13px;
+  user-select: none;
+  animation: themed-context-menu-in 80ms ease-out;
+}
+
+@keyframes themed-context-menu-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.themed-context-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.themed-context-menu-item:hover,
+.themed-context-menu-item[data-focused="true"] {
+  background: var(--hover);
+}
+
+.themed-context-menu-item[data-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.themed-context-menu-item[data-disabled="true"]:hover {
+  background: transparent;
+}
+
+.themed-context-menu-shortcut {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.themed-context-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: var(--border);
+}

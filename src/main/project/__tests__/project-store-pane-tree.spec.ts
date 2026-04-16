@@ -1,0 +1,120 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { ProjectStore } from '../project-store'
+import type { PaneTree, ProjectTerminalLayout } from '@shared/types'
+
+function legacyLayout(projectId: string, ids: string[]): ProjectTerminalLayout {
+  return {
+    projectId,
+    terminals: ids.map((id, index) => ({ id, title: id, position: index }))
+  }
+}
+
+describe('ProjectStore — paneTree', () => {
+  let store: ProjectStore
+
+  beforeEach(() => {
+    store = new ProjectStore()
+  })
+
+  describe('loadPaneTree', () => {
+    it('returns null when no layout exists for projectId', () => {
+      expect(store.loadPaneTree('missing')).toBeNull()
+    })
+
+    it('returns the stored paneTree when schemaVersion is 2', () => {
+      const tree: PaneTree = { kind: 'leaf', terminalId: 'a' }
+      store.saveTerminalLayout('p1', {
+        projectId: 'p1',
+        terminals: [{ id: 'a', title: 'a', position: 0 }],
+        paneTree: tree,
+        schemaVersion: 2
+      })
+      expect(store.loadPaneTree('p1')).toEqual(tree)
+    })
+
+    it('migrates a legacy layout (no schemaVersion, no paneTree) into a tree', () => {
+      store.saveTerminalLayout('p1', legacyLayout('p1', ['a', 'b', 'c']))
+      const tree = store.loadPaneTree('p1')
+      expect(tree).not.toBeNull()
+      if (tree && tree.kind !== 'leaf') {
+        expect(tree.children.length).toBe(2)
+      }
+    })
+
+    it('migration persists the new tree + schemaVersion back to store', () => {
+      store.saveTerminalLayout('p1', legacyLayout('p1', ['a', 'b']))
+      store.loadPaneTree('p1')
+      const stored = store.loadTerminalLayout('p1')
+      expect(stored?.schemaVersion).toBe(2)
+      expect(stored?.paneTree).toBeDefined()
+    })
+
+    it('migration is idempotent (second call reuses existing tree)', () => {
+      store.saveTerminalLayout('p1', legacyLayout('p1', ['a', 'b', 'c']))
+      const first = store.loadPaneTree('p1')
+      const second = store.loadPaneTree('p1')
+      expect(second).toEqual(first)
+    })
+
+    it('returns null when legacy layout has no terminals', () => {
+      store.saveTerminalLayout('p1', { projectId: 'p1', terminals: [] })
+      expect(store.loadPaneTree('p1')).toBeNull()
+    })
+  })
+
+  describe('savePaneTree', () => {
+    it('persists a tree so it is returned on next load', () => {
+      store.saveTerminalLayout('p1', {
+        projectId: 'p1',
+        terminals: [{ id: 'a', title: 'a', position: 0 }]
+      })
+      const tree: PaneTree = {
+        kind: 'split',
+        orientation: 'row',
+        ratio: 0.5,
+        children: [
+          { kind: 'leaf', terminalId: 'a' },
+          { kind: 'leaf', terminalId: 'b' }
+        ]
+      }
+      store.savePaneTree('p1', tree)
+      expect(store.loadPaneTree('p1')).toEqual(tree)
+    })
+
+    it('saves null when clearing the tree', () => {
+      store.saveTerminalLayout('p1', { projectId: 'p1', terminals: [] })
+      store.savePaneTree('p1', null)
+      expect(store.loadPaneTree('p1')).toBeNull()
+    })
+
+    it('sets schemaVersion to 2', () => {
+      store.saveTerminalLayout('p1', legacyLayout('p1', ['a']))
+      store.savePaneTree('p1', { kind: 'leaf', terminalId: 'a' })
+      const layout = store.loadTerminalLayout('p1')
+      expect(layout?.schemaVersion).toBe(2)
+    })
+
+    it('preserves existing terminals[] field', () => {
+      const legacy = legacyLayout('p1', ['a', 'b'])
+      store.saveTerminalLayout('p1', legacy)
+      store.savePaneTree('p1', {
+        kind: 'split',
+        orientation: 'row',
+        ratio: 0.5,
+        children: [
+          { kind: 'leaf', terminalId: 'a' },
+          { kind: 'leaf', terminalId: 'b' }
+        ]
+      })
+      const layout = store.loadTerminalLayout('p1')
+      expect(layout?.terminals).toEqual(legacy.terminals)
+    })
+
+    it('creates layout shell when project has none yet', () => {
+      store.savePaneTree('p1', { kind: 'leaf', terminalId: 'a' })
+      const layout = store.loadTerminalLayout('p1')
+      expect(layout?.projectId).toBe('p1')
+      expect(layout?.paneTree).toEqual({ kind: 'leaf', terminalId: 'a' })
+    })
+  })
+})

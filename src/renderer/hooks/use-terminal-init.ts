@@ -142,7 +142,21 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       allowProposedApi: true,
       convertEol: false,
       scrollback: 5000,
-      reflowCursorLine: true   // v6: include cursor line in reflow on resize
+      reflowCursorLine: true,   // v6: include cursor line in reflow on resize
+      // OSC 8 hyperlinks: CLIs (e.g. Claude Code) emit explicit hyperlink metadata
+      // that survives line-wrapping. Without this handler, clicks fall back to
+      // WebLinksAddon regex scanning wrapped buffer text — which can miss the tail
+      // of very long URLs. Using the OSC 8 payload guarantees the full URL.
+      linkHandler: {
+        activate: (event, text) => {
+          if (event.button !== 0) return
+          if (isAllowedExternalUrl(text)) {
+            window.electron.app.openExternal(text)
+          } else {
+            useToastStore.getState().addToast('Only http/https URLs can be opened', 'info')
+          }
+        }
+      }
     })
 
     const fitAddon = new FitAddon()
