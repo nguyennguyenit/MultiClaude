@@ -92,4 +92,26 @@ describe('migrateFlatToTree', () => {
       expect(r).toBeLessThanOrEqual(0.9)
     }
   })
+
+  it('dedups duplicate terminal ids — keeps each leaf id unique', () => {
+    const tree = migrateFlatToTree(['t1', 't2', 't1', 't3', 't2'], false) as PaneTree
+    const leaves = listLeafIds(tree)
+    expect(leaves).toEqual(['t1', 't2', 't3'])
+    expect(new Set(leaves).size).toBe(leaves.length)
+  })
+
+  it('drops empty / falsy terminal ids', () => {
+    const tree = migrateFlatToTree(['t1', '', 't2'], false) as PaneTree
+    expect(listLeafIds(tree)).toEqual(['t1', 't2'])
+  })
+
+  it('returns null when only duplicates / empties collapse to zero leaves', () => {
+    expect(migrateFlatToTree(['', '', ''], false)).toBeNull()
+  })
+
+  it('returns single leaf when dedup leaves only one id', () => {
+    const tree = migrateFlatToTree(['t1', 't1', 't1'], false) as PaneTree
+    expect(tree.kind).toBe('leaf')
+    expect((tree as PaneLeaf).terminalId).toBe('t1')
+  })
 })

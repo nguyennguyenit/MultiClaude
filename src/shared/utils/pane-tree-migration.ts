@@ -89,9 +89,13 @@ function buildRowMajor(terminalIds: string[], cols: number): PaneTree {
  * - N≥3 → column of row-chains, last row may be partial
  */
 export function migrateFlatToTree(terminalIds: string[], isPortrait: boolean): PaneTree | null {
-  const n = terminalIds.length
+  // Defensive normalization at the migration boundary: drop empty strings and
+  // dedup. Duplicate ids would corrupt findLeaf's first-match semantics used by
+  // splitLeaf / closeLeafAndCollapse, silently mis-targeting tree operations.
+  const ids = Array.from(new Set(terminalIds.filter((id): id is string => Boolean(id))))
+  const n = ids.length
   if (n === 0) return null
-  if (n === 1) return { kind: 'leaf', terminalId: terminalIds[0] }
+  if (n === 1) return { kind: 'leaf', terminalId: ids[0] }
 
   const { cols } = calculateGrid(n, isPortrait)
 
@@ -101,8 +105,8 @@ export function migrateFlatToTree(terminalIds: string[], isPortrait: boolean): P
       orientation: isPortrait ? 'column' : 'row',
       ratio: 0.5,
       children: [
-        { kind: 'leaf', terminalId: terminalIds[0] },
-        { kind: 'leaf', terminalId: terminalIds[1] }
+        { kind: 'leaf', terminalId: ids[0] },
+        { kind: 'leaf', terminalId: ids[1] }
       ]
     }
   }
@@ -112,8 +116,8 @@ export function migrateFlatToTree(terminalIds: string[], isPortrait: boolean): P
     // Grid row-major → column-major mirror: build columns of column-chains.
     const { rows } = calculateGrid(n, isPortrait)
     const colGroups: string[][] = []
-    for (let i = 0; i < terminalIds.length; i += rows) {
-      colGroups.push(terminalIds.slice(i, i + rows))
+    for (let i = 0; i < ids.length; i += rows) {
+      colGroups.push(ids.slice(i, i + rows))
     }
     if (colGroups.length === 1) return buildColChain(colGroups[0])
     const colTrees = colGroups.map(buildColChain)
@@ -130,5 +134,5 @@ export function migrateFlatToTree(terminalIds: string[], isPortrait: boolean): P
     return combineRow(colTrees)
   }
 
-  return buildRowMajor(terminalIds, cols)
+  return buildRowMajor(ids, cols)
 }
