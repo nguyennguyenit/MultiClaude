@@ -9,7 +9,7 @@ import type { PaneSplitDirection } from '@shared/types'
  * App → TerminalGrid → TerminalPane → useTerminal → useTerminalClipboard.
  */
 interface ContextActionHandlers {
-  executeSplit: ((direction: PaneSplitDirection) => void) | null
+  executeSplit: ((direction: PaneSplitDirection, targetTerminalId?: string) => void) | null
   canSplit: boolean
   atLimit: boolean
   limit: number

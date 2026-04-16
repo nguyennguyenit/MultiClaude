@@ -78,13 +78,15 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
 
       const split = getSplitHandlers()
       if (split.executeSplit) {
-        const disabled = split.atLimit || !split.canSplit
+        // Right-click splits the clicked terminal, not the focused one — pass
+        // terminalId so executeSplit targets this pane regardless of focus.
+        const disabled = split.atLimit
         const limitTitle = split.atLimit ? `Terminal limit (${split.limit}) reached` : undefined
         items.push({ id: 'sep-split', label: '', separator: true })
-        items.push({ id: 'split-right', label: 'Split right', shortcut: '⌘⇧→', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('right') })
-        items.push({ id: 'split-left', label: 'Split left', shortcut: '⌘⇧←', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('left') })
-        items.push({ id: 'split-down', label: 'Split down', shortcut: '⌘⇧↓', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('down') })
-        items.push({ id: 'split-up', label: 'Split up', shortcut: '⌘⇧↑', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('up') })
+        items.push({ id: 'split-right', label: 'Split right', shortcut: '⌘⇧→', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('right', terminalId) })
+        items.push({ id: 'split-left', label: 'Split left', shortcut: '⌘⇧←', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('left', terminalId) })
+        items.push({ id: 'split-down', label: 'Split down', shortcut: '⌘⇧↓', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('down', terminalId) })
+        items.push({ id: 'split-up', label: 'Split up', shortcut: '⌘⇧↑', disabled, title: limitTitle, onSelect: () => split.executeSplit?.('up', terminalId) })
       }
 
       useContextMenuStore.getState().openMenu({ x: e.clientX, y: e.clientY, items })

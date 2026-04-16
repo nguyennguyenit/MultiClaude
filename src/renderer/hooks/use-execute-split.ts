@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { PaneSplitDirection, ShellInfo, Terminal, WindowsShell } from '@shared/types'
-import { splitLeaf } from '@shared/utils/pane-tree'
+import { closeLeafAndCollapse, findLeaf, splitLeaf } from '@shared/utils/pane-tree'
 import { usePaneTreeStore } from '../stores/pane-tree-store'
 
 export interface ExecuteSplitDeps {
@@ -35,11 +35,14 @@ export function splitGateReason(
 }
 
 /**
- * Hook factory: returns an `executeSplit(direction)` callback that creates a
- * new terminal in the active project and splits the active pane.
+ * Hook factory: returns an `executeSplit(direction, targetTerminalId?)`
+ * callback that creates a new terminal in the active project and splits the
+ * given pane (or the active pane if `targetTerminalId` is omitted). Right-click
+ * menus pass the right-clicked terminal id so the split source matches the
+ * pointer, not the focused terminal.
  */
 export function useExecuteSplit(deps: ExecuteSplitDeps): {
-  executeSplit: (direction: PaneSplitDirection) => Promise<void>
+  executeSplit: (direction: PaneSplitDirection, targetTerminalId?: string) => Promise<void>
   canSplit: boolean
   reason: 'no-active' | 'limit' | null
 } {
@@ -61,13 +64,13 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
   const canSplit = reason === null
 
   const executeSplit = useCallback(
-    async (direction: PaneSplitDirection): Promise<void> => {
-      if (reason === 'limit') {
+    async (direction: PaneSplitDirection, targetTerminalId?: string): Promise<void> => {
+      if (terminalCount >= terminalLimit) {
         notifyLimit(terminalLimit)
         return
       }
-      if (reason !== null) return
-      if (!activeTerminalId) return
+      const sourceTerminalId = targetTerminalId ?? activeTerminalId
+      if (!sourceTerminalId) return
 
       const isUnix = selectedShell?.kind === 'unix'
       const isWin = selectedShell && !isUnix
@@ -96,15 +99,21 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       if (projectId) {
         const currentTree = usePaneTreeStore.getState().getTree(projectId)
         if (currentTree) {
-          usePaneTreeStore
-            .getState()
-            .setTree(projectId, splitLeaf(currentTree, activeTerminalId, direction, terminal.id))
+          // The TERMINAL_CREATED broadcast can race ahead of the IPC return,
+          // letting reconcile auto-append this leaf before we get here. Strip
+          // any pre-existing instance so we don't duplicate it via splitLeaf.
+          const cleaned = closeLeafAndCollapse(currentTree, terminal.id) ?? currentTree
+          if (findLeaf(cleaned, sourceTerminalId)) {
+            usePaneTreeStore
+              .getState()
+              .setTree(projectId, splitLeaf(cleaned, sourceTerminalId, direction, terminal.id))
+          }
         }
       }
     },
     [
-      reason,
       activeTerminalId,
+      terminalCount,
       terminalLimit,
       selectedShell,
       windowsShellFallback,

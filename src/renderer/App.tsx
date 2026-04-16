@@ -337,7 +337,7 @@ function App() {
   // a tooltip (the `disabled` flag in the menu gates the click).
   useEffect(() => {
     registerSplitHandlers({
-      executeSplit: (dir) => void executeSplit(dir),
+      executeSplit: (dir, targetId) => void executeSplit(dir, targetId),
       canSplit,
       atLimit,
       limit: effectiveLimit
