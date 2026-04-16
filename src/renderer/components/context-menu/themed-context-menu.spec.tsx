@@ -126,6 +126,28 @@ describe('ThemedContextMenu', () => {
     expect(screen.getByText('⌘⇧→')).toBeTruthy()
   })
 
+  it('restores focus to the element focused before menu opened', () => {
+    const trigger = document.createElement('button')
+    trigger.textContent = 'trigger'
+    document.body.appendChild(trigger)
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+
+    render(<ThemedContextMenu />)
+    openMenu([{ id: 'a', label: 'A' }])
+    // Simulate focus shifting into the menu (e.g. keyboard nav landed on an item).
+    const menuItem = document.querySelector('.themed-context-menu-item') as HTMLButtonElement
+    menuItem.focus()
+    expect(document.activeElement).not.toBe(trigger)
+
+    act(() => {
+      useContextMenuStore.getState().closeMenu()
+    })
+
+    expect(document.activeElement).toBe(trigger)
+    trigger.remove()
+  })
+
   it('position clamped to viewport right edge', () => {
     Object.defineProperty(window, 'innerWidth', { value: 800, writable: true, configurable: true })
     Object.defineProperty(window, 'innerHeight', { value: 600, writable: true, configurable: true })

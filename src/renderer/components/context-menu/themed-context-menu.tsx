@@ -39,6 +39,10 @@ export function ThemedContextMenu(): ReactElement | null {
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement | null>(null)
   const focusIndexRef = useRef<number>(-1)
+  // Remembers the element that had focus when the menu opened so we can
+  // restore it on close — critical for keyboard-only users who triggered
+  // the menu via the Context-Menu key.
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     focusIndexRef.current = focusIndex
@@ -49,6 +53,19 @@ export function ThemedContextMenu(): ReactElement | null {
       const idx = firstSelectableIndex(items)
       setFocusIndex(idx)
       focusIndexRef.current = idx
+      previousFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    } else if (previousFocusRef.current) {
+      const prev = previousFocusRef.current
+      previousFocusRef.current = null
+      // Skip if the previously focused node is no longer in the document, or
+      // (defensive) happens to live inside the menu portal — re-focusing a
+      // menu item during close would trigger the outside-click handler and
+      // could loop.
+      if (document.contains(prev) && !menuRef.current?.contains(prev)) {
+        prev.focus?.()
+      }
     }
   }, [open, items])
 
