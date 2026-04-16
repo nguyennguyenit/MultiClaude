@@ -1,7 +1,9 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PaneTreeNode } from './pane-tree-node'
+import { TerminalPane } from './terminal-pane'
 import { usePaneTreeStore } from '../../stores/pane-tree-store'
 import { reconcilePaneTree } from '../../utils/pane-tree-reconcile'
+import { computeTerminalRects } from '../../utils/pane-tree-rects'
 import { updateRatio } from '@shared/utils/pane-tree'
 import type { Terminal } from '@shared/types'
 
@@ -18,6 +20,7 @@ interface TerminalGridProps {
 }
 
 const DEFAULT_PROJECT_ID = 'default'
+const ROOT_PATH: number[] = []
 
 function getProjectId(terminal: Pick<Terminal, 'projectId'>): string {
   return terminal.projectId || DEFAULT_PROJECT_ID
@@ -164,15 +167,24 @@ function ProjectPaneView({
     }
   }, [projectId, reconciled, rawTree, treeLoaded, setTree])
 
-  const terminalsById = useMemo(() => {
-    const map: Record<string, Terminal> = {}
-    for (const t of terminals) map[t.id] = t
-    return map
-  }, [terminals])
+  // Hold latest tree in a ref so handleSetRatio identity stays stable across
+  // renders — otherwise PaneTreeNode's memo() bails on every parent re-render.
+  const treeRef = useRef(reconciled)
+  treeRef.current = reconciled
 
-  const handleSetRatio = useCallbackSetRatio(projectId, reconciled, setTree)
+  const handleSetRatio = useCallback(
+    (path: number[], ratio: number): void => {
+      const current = treeRef.current
+      if (!current) return
+      setTree(projectId, updateRatio(current, path, ratio))
+    },
+    [projectId, setTree]
+  )
 
-  const handleClose = (id: string): void => onCloseTerminal?.(id)
+  // Rect (in % of project pane) for each terminal, walked from the tree.
+  // Used to position TerminalPanes absolutely so they share a stable React
+  // parent and never unmount when the surrounding tree restructures.
+  const rects = useMemo(() => computeTerminalRects(reconciled), [reconciled])
 
   return (
     <div
@@ -186,37 +198,56 @@ function ProjectPaneView({
         width: '100%',
         height: '100%',
         top: 0,
-        left: 0,
-        display: 'flex',
-        flexDirection: 'column'
+        left: 0
       }}
     >
+      {/* Layout skeleton: flex containers + resize handles only. Empty leaves. */}
       {reconciled ? (
-        <PaneTreeNode
-          node={reconciled}
-          path={[]}
-          activeTerminalId={activeTerminalId}
-          hidden={!isActive}
-          terminalsById={terminalsById}
-          onTerminalClick={onTerminalClick}
-          onCloseTerminal={handleClose}
-          onInsertFilePath={onInsertFilePath}
-          onTitleChange={onTitleChange}
-          onSetRatio={handleSetRatio}
-        />
+        <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+          <PaneTreeNode
+            node={reconciled}
+            path={ROOT_PATH}
+            activeTerminalId={activeTerminalId}
+            onSetRatio={handleSetRatio}
+          />
+        </div>
       ) : null}
+
+      {/* Terminal panes — stable React parent; positioned over the slot rects. */}
+      {terminals.map((t) => {
+        const r = rects.get(t.id)
+        if (!r) return null
+        return (
+          <div
+            key={t.id}
+            className={`terminal-cell-overlay${t.id === activeTerminalId ? ' active' : ''}`}
+            style={{
+              position: 'absolute',
+              left: `${r.x}%`,
+              top: `${r.y}%`,
+              width: `${r.w}%`,
+              height: `${r.h}%`,
+              display: 'flex',
+              pointerEvents: 'auto',
+              zIndex: t.id === activeTerminalId ? 1 : 0
+            }}
+          >
+            <TerminalPane
+              terminalId={t.id}
+              title={t.title ?? t.id}
+              isActive={t.id === activeTerminalId}
+              hidden={!isActive}
+              isClaudeMode={t.isClaudeMode ?? false}
+              agentType={t.agentType}
+              onActivate={() => onTerminalClick(t.id)}
+              onClose={() => onCloseTerminal?.(t.id)}
+              onInsertFilePath={(paths) => onInsertFilePath?.(t.id, paths)}
+              onTitleChange={(title) => onTitleChange?.(t.id, title)}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-function useCallbackSetRatio(
-  projectId: string,
-  tree: ReturnType<typeof reconcilePaneTree>,
-  setTree: (projectId: string, tree: ReturnType<typeof reconcilePaneTree>) => void
-): (path: number[], ratio: number) => void {
-  return (path, ratio) => {
-    if (!tree) return
-    const next = updateRatio(tree, path, ratio)
-    setTree(projectId, next)
-  }
-}

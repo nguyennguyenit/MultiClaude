@@ -10,7 +10,10 @@ import type { PaneTree } from '@shared/types'
  * Reconcile a persisted pane tree against the live list of terminal IDs for a
  * project. Terminals added outside tree control (e.g. via the + button) are
  * appended by splitting the rightmost leaf. Terminals that are no longer alive
- * are closed from the tree (with upward collapse).
+ * are closed from the tree (with upward collapse). Duplicate leaves for the
+ * same terminal id are also collapsed to one — they can persist on disk from
+ * older builds and would otherwise mount the same TerminalView twice, causing
+ * doubled output and ghost rendering.
  *
  * Pure — does not mutate `tree`.
  */
@@ -24,9 +27,25 @@ export function reconcilePaneTree(
   if (!tree) return migrateFlatToTree(liveTerminalIds, isPortrait)
 
   const liveSet = new Set(liveTerminalIds)
-  const present = new Set(listLeafIds(tree))
+  const allLeafIds = listLeafIds(tree)
+  const present = new Set(allLeafIds)
 
   let next: PaneTree | null = tree
+
+  // Collapse duplicate leaves: keep the first occurrence (DFS-left order),
+  // remove the rest. Each closeLeafAndCollapse strips the first match found,
+  // so calling (count - 1) times leaves exactly one leaf for each id.
+  const counts = new Map<string, number>()
+  for (const id of allLeafIds) counts.set(id, (counts.get(id) ?? 0) + 1)
+  for (const [id, count] of counts) {
+    for (let i = 0; i < count - 1; i++) {
+      if (!next) break
+      next = closeLeafAndCollapse(next, id)
+    }
+    if (!next) break
+  }
+
+  if (!next) return migrateFlatToTree(liveTerminalIds, isPortrait)
 
   // Remove dead leaves (present in tree but not alive)
   for (const id of present) {

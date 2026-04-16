@@ -58,6 +58,29 @@ describe('reconcilePaneTree', () => {
     expect(listLeafIds(result!)).toEqual(['a', 'c'])
   })
 
+  it('collapses duplicate leaves for the same terminal id (corrupted save)', () => {
+    // Persisted shape from the pre-fix race: t2 appears twice. Reconcile must
+    // strip the duplicate so we never mount two TerminalView instances for
+    // the same terminal (which would double-write all output).
+    const tree: PaneTree = {
+      kind: 'split',
+      orientation: 'row',
+      ratio: 0.5,
+      children: [
+        {
+          kind: 'split',
+          orientation: 'row',
+          ratio: 0.5,
+          children: [leaf('t1'), leaf('t2')]
+        },
+        leaf('t2')
+      ]
+    }
+    const result = reconcilePaneTree(tree, ['t1', 't2'], false)
+    expect(result).not.toBeNull()
+    expect(listLeafIds(result!)).toEqual(['t1', 't2'])
+  })
+
   it('rebuilds tree when all leaves become dead but terminals still exist', () => {
     const tree: PaneTree = {
       kind: 'split',

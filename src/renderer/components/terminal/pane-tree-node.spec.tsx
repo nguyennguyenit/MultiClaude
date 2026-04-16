@@ -4,12 +4,6 @@ import { render } from '@testing-library/react'
 import { createRef } from 'react'
 import type { PaneTree } from '@shared/types'
 
-vi.mock('./terminal-pane', () => ({
-  TerminalPane: ({ terminalId }: { terminalId: string }) => (
-    <div data-terminal-id={terminalId}>terminal-{terminalId}</div>
-  )
-}))
-
 vi.mock('./terminal-resize-handle', () => ({
   ResizeHandle: ({ direction }: { direction: string }) => (
     <div data-resize-handle="true" data-direction={direction} />
@@ -32,22 +26,20 @@ function defaultProps() {
   return {
     path: [] as number[],
     activeTerminalId: null as string | null,
-    onTerminalClick: () => {},
-    onCloseTerminal: () => {},
     onSetRatio: () => {}
   }
 }
 
 describe('<PaneTreeNode>', () => {
-  it('renders a single TerminalPane for a leaf', () => {
+  it('renders an empty leaf slot div with data-pane-leaf', () => {
     render(<PaneTreeNode node={leaf('t1')} {...defaultProps()} />)
-    const el = document.querySelector('[data-terminal-id="t1"]')
+    const el = document.querySelector('[data-pane-leaf="t1"]')
     expect(el).toBeTruthy()
   })
 
-  it('renders two leaves + one vertical handle for a row split', () => {
+  it('renders two leaf slots + one vertical handle for a row split', () => {
     render(<PaneTreeNode node={row(leaf('a'), leaf('b'))} {...defaultProps()} />)
-    expect(document.querySelectorAll('[data-terminal-id]').length).toBe(2)
+    expect(document.querySelectorAll('[data-pane-leaf]').length).toBe(2)
     const handles = document.querySelectorAll('[data-resize-handle="true"]')
     expect(handles.length).toBe(1)
     expect(handles[0].getAttribute('data-direction')).toBe('vertical')
@@ -59,10 +51,10 @@ describe('<PaneTreeNode>', () => {
     expect(handles[0].getAttribute('data-direction')).toBe('horizontal')
   })
 
-  it('renders all leaves and 2 handles for nested split', () => {
+  it('renders all leaf slots and 2 handles for nested split', () => {
     const tree = row(leaf('a'), col(leaf('b'), leaf('c')))
     render(<PaneTreeNode node={tree} {...defaultProps()} />)
-    expect(document.querySelectorAll('[data-terminal-id]').length).toBe(3)
+    expect(document.querySelectorAll('[data-pane-leaf]').length).toBe(3)
     expect(document.querySelectorAll('[data-resize-handle="true"]').length).toBe(2)
   })
 

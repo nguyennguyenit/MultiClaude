@@ -371,9 +371,28 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     })
 
     // ── Resize handler ───────────────────────────────────────────────────────
-    terminal.onResize(({ cols, rows }) => {
+    // fitAddon may fire onResize many times in quick succession (rAF + settle
+    // pass, plus continuous drag of the split divider). Each one sends
+    // SIGWINCH to the shell, and rapid SIGWINCHes make fish redraw the prompt
+    // before clearing the previous one — so duplicate prompts pile up. Coalesce
+    // into a single IPC call once cols/rows settle.
+    let pendingResize: { cols: number; rows: number } | null = null
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    let lastSent: { cols: number; rows: number } | null = null
+    const flushResize = (): void => {
+      resizeTimer = null
+      if (!pendingResize) return
+      const { cols, rows } = pendingResize
+      pendingResize = null
+      if (lastSent && lastSent.cols === cols && lastSent.rows === rows) return
+      lastSent = { cols, rows }
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
+    }
+    terminal.onResize(({ cols, rows }) => {
+      pendingResize = { cols, rows }
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(flushResize, 80)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- RefObject values are stable; listed for clarity
   }, [

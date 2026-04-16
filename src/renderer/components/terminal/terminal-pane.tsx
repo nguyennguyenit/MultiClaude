@@ -6,10 +6,6 @@ import { useAppStore } from '../../stores'
 import { AGENT_BADGE_COLORS, AGENT_BADGE_TEXT, AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
 import type { AgentType } from '@shared/types'
 
-// Streaming detection constants
-const STREAMING_IDLE_THRESHOLD = 300  // ms - consider idle after no output for this duration
-const STREAMING_FIT_DELAY = 500       // ms - delay fit during streaming to avoid reflow duplicates
-
 interface TerminalPaneProps {
   terminalId: string
   title: string
@@ -39,10 +35,7 @@ export const TerminalPane = memo(function TerminalPane({
   onInsertFilePath
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const resizeTimeoutRef = useRef<number | undefined>(undefined)
-  const terminalFitRef = useRef<(() => void) | null>(null)
   const terminalRefreshRef = useRef<TerminalRefreshHandle | null>(null)
-  const lastOutputTimeRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(title)
   const restoredInitialOutput = useMemo(
@@ -56,11 +49,6 @@ export const TerminalPane = memo(function TerminalPane({
       setEditTitle(title)
     }
   }, [title, isEditing])
-
-  // Store fit callback from TerminalView
-  const handleTerminalFit = useCallback((fitFn: () => void) => {
-    terminalFitRef.current = fitFn
-  }, [])
 
   // Store refresh callback from TerminalView
   const handleTerminalRefresh = useCallback((refreshHandle: TerminalRefreshHandle) => {
@@ -86,11 +74,6 @@ export const TerminalPane = memo(function TerminalPane({
     onDragStateChange: handleFileDropStateChange
   })
 
-  // Track output for streaming detection
-  const handleTerminalOutput = useCallback(() => {
-    lastOutputTimeRef.current = Date.now()
-  }, [])
-
   // File picker handler
   const handleInsertFilePath = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -114,37 +97,6 @@ export const TerminalPane = memo(function TerminalPane({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isActive, onInsertFilePath])
-
-  // Debounced fit on container resize - defers during streaming to avoid reflow duplicates
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
-
-      const timeSinceLastOutput = Date.now() - lastOutputTimeRef.current
-      const isStreaming = timeSinceLastOutput < STREAMING_IDLE_THRESHOLD
-      const delay = isStreaming ? STREAMING_FIT_DELAY : 100
-
-      resizeTimeoutRef.current = window.setTimeout(() => {
-        const currentTimeSinceOutput = Date.now() - lastOutputTimeRef.current
-        if (currentTimeSinceOutput < STREAMING_IDLE_THRESHOLD) {
-          resizeTimeoutRef.current = window.setTimeout(() => {
-            terminalFitRef.current?.()
-          }, STREAMING_FIT_DELAY)
-          return
-        }
-        terminalFitRef.current?.()
-      }, delay)
-    })
-
-    resizeObserver.observe(container)
-    return () => {
-      resizeObserver.disconnect()
-      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
-    }
-  }, [])
 
   const handleRefreshClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -317,9 +269,7 @@ export const TerminalPane = memo(function TerminalPane({
           hidden={hidden}
           onInputActivity={onActivate}
           initialOutput={restoredInitialOutput}
-          onFitReady={handleTerminalFit}
           onRefreshReady={handleTerminalRefresh}
-          onOutput={handleTerminalOutput}
         />
       </div>
     </div>

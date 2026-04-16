@@ -276,6 +276,9 @@ button, input, select, textarea, optgroup, option {
   width: 100%;
   height: 100%;
   font-family: var(--terminal-font);
+  /* Opaque so a freshly-mounted pane never reveals the previous terminal's
+   * canvas during xterm's init or the 100ms dispose-delay window. */
+  background: var(--bg-primary);
 }
 
 .terminal-container.terminal-drop-active {
