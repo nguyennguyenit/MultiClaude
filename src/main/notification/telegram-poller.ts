@@ -1,8 +1,10 @@
 import type { RemoteControlStatus } from '@shared/types'
+import type { TelegramAuthFlow } from './telegram-auth-flow'
 
 const POLL_TIMEOUT = 30
 const MAX_BACKOFF_MS = 30_000
 const INITIAL_BACKOFF_MS = 1000
+const PAIR_PREFIX = '/start mc-pair-'
 
 type MessageHandler = (text: string) => void
 type CallbackHandler = (callbackId: string, data: string) => void
@@ -24,6 +26,7 @@ export class TelegramPoller {
   private messageHandler: MessageHandler | null = null
   private callbackHandler: CallbackHandler | null = null
   private statusHandler: StatusHandler | null = null
+  private authFlow: TelegramAuthFlow | null = null
   private currentStatus: RemoteControlStatus = 'disconnected'
 
   constructor(botToken: string, chatId: string) {
@@ -41,6 +44,10 @@ export class TelegramPoller {
 
   onStatusChange(handler: StatusHandler): void {
     this.statusHandler = handler
+  }
+
+  attachAuthFlow(flow: TelegramAuthFlow): void {
+    this.authFlow = flow
   }
 
   getStatus(): RemoteControlStatus {
@@ -147,8 +154,21 @@ export class TelegramPoller {
         }
 
         const msgChatId = update.message?.chat?.id
-        if (!msgChatId || String(msgChatId) !== String(this.chatId)) continue
         const text = update.message?.text
+
+        // Pairing hook: during waiting state, accept /start mc-pair-<nonce>
+        // from ANY chatId if the nonce matches exactly.
+        if (text && msgChatId && this.authFlow?.getState() === 'waiting') {
+          if (text.startsWith(PAIR_PREFIX)) {
+            const candidate = text.slice(PAIR_PREFIX.length).trim()
+            if (candidate.length > 0) {
+              this.authFlow.completePairing(candidate, Number(msgChatId))
+            }
+            continue
+          }
+        }
+
+        if (!msgChatId || String(msgChatId) !== String(this.chatId)) continue
         if (text && this.messageHandler) {
           this.messageHandler(text)
         }
