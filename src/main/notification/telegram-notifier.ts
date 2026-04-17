@@ -48,6 +48,34 @@ export class TelegramNotifier {
     return true
   }
 
+  /**
+   * If `text` > 4000 chars, upload as a .txt document via sendDocument;
+   * otherwise send paginated messages. Replaces the Phase 03 web view for
+   * the common "very long response" case.
+   */
+  async sendLongResponse(args: { caption: string; text: string; fileName: string }): Promise<boolean> {
+    const LONG_THRESHOLD = 4000
+    if (args.text.length <= LONG_THRESHOLD) {
+      return this.send(`${args.caption}\n\n${args.text}`)
+    }
+    try {
+      const form = new FormData()
+      form.set('chat_id', this.chatId)
+      form.set('caption', args.caption)
+      const blob = new Blob([args.text], { type: 'text/plain; charset=utf-8' })
+      form.set('document', blob, args.fileName)
+      const response = await fetch(`https://api.telegram.org/bot${this.botToken}/sendDocument`, {
+        method: 'POST',
+        body: form
+      })
+      const data = (await response.json().catch(() => ({ ok: false }))) as { ok?: boolean }
+      return data.ok === true
+    } catch (err) {
+      console.error('[TelegramNotifier] sendDocument failed:', err)
+      return false
+    }
+  }
+
   /** Send text using MarkdownV2 parse mode (for command replies with backticks, bold, etc.) */
   async sendMarkdown(text: string): Promise<boolean> {
     const chunks = this.paginateMessage(text)
@@ -69,8 +97,27 @@ export class TelegramNotifier {
 
     const text = this.formatTaskEvent(event, terminalTitle)
     const keyboard = this.buildEventKeyboard(event, questionId)
-    const chunks = this.paginateMessage(text)
 
+    // F11: responses > 4000 chars — send a short caption + full text as .txt document.
+    // Paginated messages lose inline keyboards on non-last pages and explode the chat.
+    if (event.responseId && text.length > TELEGRAM_MAX_LENGTH - 96) {
+      const shortCaption = `${event.taskName.slice(0, 240)} — full response attached as .txt`
+      const docOk = await this.sendLongResponse({
+        caption: shortCaption,
+        text,
+        fileName: `task-${event.responseId}.txt`
+      })
+      if (!docOk) return false
+      // Follow-up message just for the inline keyboard.
+      const kbResult = await this.sendMessageRaw('🔘 Actions', { inline_keyboard: keyboard })
+      if (!kbResult.ok) return false
+      if (questionId && kbResult.messageId !== undefined) {
+        pendingQuestionStore.attachMessage(event.terminalId, this.chatId, kbResult.messageId)
+      }
+      return true
+    }
+
+    const chunks = this.paginateMessage(text)
     for (let i = 0; i < chunks.length; i++) {
       const isLast = i === chunks.length - 1
       const replyMarkup = isLast ? { inline_keyboard: keyboard } : undefined
@@ -239,6 +286,16 @@ export class TelegramNotifier {
   private buildEventKeyboard(event: TaskEvent, questionId?: string): InlineKeyboardButton[][] {
     if (event.question && event.question.options.length > 0) {
       return this.buildQuestionKeyboard(event.terminalId, event.question, event.type, questionId)
+    }
+    // Permission request (phase-02): `context` embeds `permissionId=<id>`
+    if (event.type === 'reviewNeeded' && event.context && event.context.startsWith('permissionId=')) {
+      const pid = event.context.slice('permissionId='.length).trim()
+      if (pid.length > 0) {
+        return [[
+          { text: '✅ Allow', callback_data: `permit:${pid}:allow` },
+          { text: '🛑 Deny', callback_data: `permit:${pid}:deny` }
+        ]]
+      }
     }
     const chatText = event.type === 'reviewNeeded' ? 'Reply 💬' : 'Chat 💬'
     return [[

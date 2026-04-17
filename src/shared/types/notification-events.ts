@@ -42,6 +42,8 @@ export interface TaskEvent {
   agentType?: AgentType
   /** Full AskUserQuestion payload (only present on reviewNeeded from Claude tool_use) */
   question?: AskUserQuestionPayload
+  /** UUID of the stored response (phase-02 hook-backed taskComplete events only) */
+  responseId?: string
   /** Unix timestamp in milliseconds */
   timestamp: number
 }

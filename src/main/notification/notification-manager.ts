@@ -15,7 +15,9 @@ import { TelegramPoller } from './telegram-poller'
 import { TelegramCommandRouter } from './telegram-command-router'
 import { TelegramAuthFlow } from './telegram-auth-flow'
 import { pendingQuestionStore } from './pending-question-store'
+import { pendingPermissionStore } from './pending-permission-store'
 import { ClaudeLogWatcher } from './claude-log-watcher'
+import { MobileControlManager, type MobileControlStatus } from './mobile-control-manager'
 import { generateTaskEventId } from './parser-utils'
 import type { RemoteControlStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
@@ -64,6 +66,10 @@ export class NotificationManager extends EventEmitter {
   private pairingAuthFlow: TelegramAuthFlow | null = null
   private pairingBotToken: string | null = null
 
+  // Mobile control (phase-02 hook receiver)
+  private mobileControl: MobileControlManager | null = null
+  private mobileControlEnabled = false
+
   constructor() {
     super()
     this.storage = new SecureStorage()
@@ -87,6 +93,8 @@ export class NotificationManager extends EventEmitter {
 
     // Listen for task events from terminal output parser (reviewNeeded only)
     this.parser.on('taskEvent', (event: TaskEvent) => {
+      // Hard gate: when mobile control is ON, hook path owns reviewNeeded
+      if (this.mobileControlEnabled && event.type === 'reviewNeeded') return
       // Enrich with agent type if known
       const agentType = this.terminalAgentTypes.get(event.terminalId)
       if (agentType) {
@@ -98,6 +106,8 @@ export class NotificationManager extends EventEmitter {
     // Listen for task completion events from JSONL transcript watcher
     // JSONL events use Claude session ID as terminalId — translate to real terminal ID
     this.logWatcher.on('taskEvent', (event: TaskEvent) => {
+      // Hard gate: when mobile control is ON, hook path owns taskComplete/reviewNeeded
+      if (this.mobileControlEnabled && (event.type === 'taskComplete' || event.type === 'reviewNeeded')) return
       const match = this.terminalManagerRef?.findByClaudeSessionId(event.terminalId)
         ?? (event.cwd
           ? this.terminalManagerRef?.attachClaudeSession(event.terminalId, event.cwd)
@@ -318,6 +328,147 @@ export class NotificationManager extends EventEmitter {
 
   getRemoteControlStatus(): RemoteControlStatus {
     return this.poller ? this.poller.getStatus() : 'disconnected'
+  }
+
+  // ─── Mobile control (Phase-02 hook receiver) ───────────────────────────
+
+  async enableMobileControl(): Promise<MobileControlStatus> {
+    if (!this.terminalManagerRef) {
+      throw new Error('TerminalManager not attached — call setManagers() first')
+    }
+    if (!this.mobileControl) {
+      const terminalManager = this.terminalManagerRef
+      this.mobileControl = new MobileControlManager({
+        resolveTerminalBySession: (sessionId) => terminalManager.findByClaudeSessionId(sessionId)?.id
+      })
+    }
+    // Defensive: drop any prior listeners before (re)binding to prevent pile-up on repeated toggles.
+    this.mobileControl.removeAllListeners('hook:event')
+    this.mobileControl.removeAllListeners('status-changed')
+    this.mobileControl.on('hook:event', (ev: { type: string; payload: Record<string, unknown> }) =>
+      this.handleHookEvent(ev.type, ev.payload)
+    )
+    this.mobileControl.on('status-changed', (status: MobileControlStatus) =>
+      this.emitMobileControlStatus(status)
+    )
+    const status = await this.mobileControl.enable()
+    this.mobileControlEnabled = status.running
+    return status
+  }
+
+  async disableMobileControl(): Promise<MobileControlStatus> {
+    if (!this.mobileControl) {
+      return {
+        enabled: false,
+        running: false,
+        port: null,
+        secretFingerprint: null,
+        installStatus: { installed: false, eventCount: 0 },
+        ccpokeDetected: false,
+        ccpokeReasons: []
+      }
+    }
+    const status = await this.mobileControl.disable()
+    this.mobileControlEnabled = false
+    return status
+  }
+
+  async getMobileControlStatus(): Promise<MobileControlStatus> {
+    if (!this.mobileControl) {
+      if (!this.terminalManagerRef) {
+        return {
+          enabled: false,
+          running: false,
+          port: null,
+          secretFingerprint: null,
+          installStatus: { installed: false, eventCount: 0 },
+          ccpokeDetected: false,
+          ccpokeReasons: []
+        }
+      }
+      const terminalManager = this.terminalManagerRef
+      this.mobileControl = new MobileControlManager({
+        resolveTerminalBySession: (sessionId) => terminalManager.findByClaudeSessionId(sessionId)?.id
+      })
+    }
+    return this.mobileControl.getStatus()
+  }
+
+  async regenerateMobileControlSecret(): Promise<MobileControlStatus> {
+    if (!this.mobileControl) return this.getMobileControlStatus()
+    const status = await this.mobileControl.regenerateSecret()
+    this.mobileControlEnabled = status.running
+    return status
+  }
+
+  private emitMobileControlStatus(status: MobileControlStatus): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send(IPC_CHANNELS.MOBILE_CONTROL_STATUS_CHANGED, status)
+    }
+  }
+
+  private handleHookEvent(type: string, payload: Record<string, unknown>): void {
+    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
+    const terminalId = typeof payload.terminalId === 'string' ? payload.terminalId : ''
+    if (!terminalId) return
+
+    if (type === 'taskComplete') {
+      const responseId = typeof payload.responseId === 'string' ? payload.responseId : undefined
+      const summary = typeof payload.summary === 'string' ? payload.summary : ''
+      const projectName = this.terminalProjects.get(terminalId) ?? 'Unknown'
+      const event: TaskEvent = {
+        id: generateTaskEventId(terminalId, 'taskComplete', `hook-${sessionId}-${Date.now()}`),
+        terminalId,
+        type: 'taskComplete',
+        taskName: summary || 'Task completed',
+        projectName,
+        agentType: 'claude',
+        responseId,
+        timestamp: Date.now()
+      }
+      this.handleTaskEvent(event)
+      return
+    }
+    if (type === 'reviewNeeded') {
+      const question = payload.question as TaskEvent['question']
+      const projectName = this.terminalProjects.get(terminalId) ?? 'Unknown'
+      const event: TaskEvent = {
+        id: generateTaskEventId(terminalId, 'reviewNeeded', `hook-askq-${Date.now()}`),
+        terminalId,
+        type: 'reviewNeeded',
+        taskName: (question?.text || '').trim() || 'Question requires attention',
+        projectName,
+        agentType: 'claude',
+        question,
+        timestamp: Date.now()
+      }
+      this.handleTaskEvent(event)
+      return
+    }
+    if (type === 'permissionRequested') {
+      // Permission flow: treat as reviewNeeded so notifier + inline buttons render.
+      // Phase-02 command-router learns the `permit:` callback separately.
+      const toolName = typeof payload.toolName === 'string' ? payload.toolName : 'unknown'
+      const permissionId = typeof payload.id === 'string' ? payload.id : ''
+      const projectName = this.terminalProjects.get(terminalId) ?? 'Unknown'
+      const event: TaskEvent = {
+        id: generateTaskEventId(terminalId, 'reviewNeeded', `hook-perm-${permissionId}`),
+        terminalId,
+        type: 'reviewNeeded',
+        taskName: `Permission request: ${toolName}`,
+        projectName,
+        agentType: 'claude',
+        context: `permissionId=${permissionId}`,
+        timestamp: Date.now()
+      }
+      this.handleTaskEvent(event)
+      return
+    }
+  }
+
+  /** Access the pending permission store (exposed for command-router wiring). */
+  getPendingPermissionStore() {
+    return pendingPermissionStore
   }
 
   // Process terminal output through the parser

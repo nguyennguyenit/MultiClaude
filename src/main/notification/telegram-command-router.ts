@@ -5,6 +5,7 @@ import { cleanTerminalOutput } from './terminal-output-cleaner'
 import { buildDetailSummary } from './terminal-summary-formatter'
 import { formatDetailMessage } from './detail-message-formatter'
 import { pendingQuestionStore } from './pending-question-store'
+import { pendingPermissionStore } from './pending-permission-store'
 import { callbackIdempotencyCache } from './callback-idempotency'
 import { callbackRateLimiter } from './callback-rate-limiter'
 
@@ -357,6 +358,9 @@ export class TelegramCommandRouter {
     if (action === 'submit') {
       return this.handleSubmitCallback(data)
     }
+    if (action === 'permit') {
+      return this.handlePermitCallback(data)
+    }
 
     if (action === 'tail') {
       // Support both legacy "tail:terminalId" and new "tail:eventType:terminalId"
@@ -415,6 +419,34 @@ export class TelegramCommandRouter {
     }
     const terminalId = parts.slice(2).join(':')
     return { index, terminalId }
+  }
+
+  /**
+   * `permit:<permissionId>:<allow|deny>` — routes a PermissionRequest decision
+   * back to the hook-router's pending-permission-store. Phase-02 flow.
+   */
+  private async handlePermitCallback(data: string): Promise<void> {
+    const parts = data.split(':')
+    if (parts.length !== 3) return
+    const permissionId = parts[1]
+    const action = parts[2]
+    if (action !== 'allow' && action !== 'deny') return
+
+    const entry = pendingPermissionStore.get(permissionId)
+    if (!entry) {
+      await this.sendReply('⌛ Permission request expired or already answered\\.')
+      return
+    }
+    const decision = action === 'allow'
+      ? { behavior: 'allow' as const }
+      : { behavior: 'deny' as const, message: 'Denied from phone' }
+    const resolved = pendingPermissionStore.resolve(permissionId, decision)
+    if (!resolved) {
+      await this.sendReply('⌛ Permission request expired or already answered\\.')
+      return
+    }
+    const emoji = action === 'allow' ? '✅' : '🛑'
+    await this.sendReply(`${emoji} ${action === 'allow' ? 'Allowed' : 'Denied'} \\(${this.esc(entry.toolName)}\\)`)
   }
 
   private parseSubmitCallback(data: string): { questionId?: string; terminalId: string } | null {
