@@ -270,9 +270,6 @@ export const TerminalPane = memo(function TerminalPane({
         </div>
       </div>
 
-      {/* Attachment thumbnail strip — hidden when no entries */}
-      <AttachmentStrip terminalId={terminalId} onRemove={handleAttachmentRemoveClick} />
-
       {/* Terminal content - takes remaining space */}
       <div style={{ flex: 1, minHeight: 0 }}>
         <TerminalView
@@ -285,6 +282,9 @@ export const TerminalPane = memo(function TerminalPane({
           onRefreshReady={handleTerminalRefresh}
         />
       </div>
+
+      {/* Attachment thumbnail strip — hidden when no entries */}
+      <AttachmentStrip terminalId={terminalId} onRemove={handleAttachmentRemoveClick} />
     </div>
   )
 })
