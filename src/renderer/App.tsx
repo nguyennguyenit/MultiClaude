@@ -234,9 +234,28 @@ function App() {
   // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
     const isClaudeMode = useAppStore.getState().terminals.find(t => t.id === terminalId)?.isClaudeMode
+
+    if (isClaudeMode) {
+      // Claude mode: wrap all paths into a single bracketed-paste envelope so
+      // Claude Code CLI sees one paste event containing every file path, and
+      // resolves each into its own [Image N] placeholder. Writing paths in
+      // separate writes makes Claude Code drop all but the first.
+      for (const filePath of paths) {
+        const mediaType = classifyMediaFile(filePath)
+        if (mediaType) {
+          useImageStore.getState().addImage(terminalId, filePath, mediaType)
+        }
+      }
+      const joined = paths.map(formatPathForTerminal).join(' ')
+      if (joined) {
+        window.electron.terminal.write(terminalId, `\x1b[200~${joined} \x1b[201~`)
+      }
+      return
+    }
+
     for (const filePath of paths) {
       const mediaType = classifyMediaFile(filePath)
-      if (mediaType && !isClaudeMode) {
+      if (mediaType) {
         const entry = useImageStore.getState().addImage(terminalId, filePath, mediaType)
         const token = buildMediaToken(mediaType, entry.index)
         usePendingMediaStore.getState().push(terminalId, {
@@ -245,10 +264,6 @@ function App() {
         })
         writeToDisplay(terminalId, token + ' ')
       } else {
-        // Claude mode or non-media file: write path directly to PTY
-        if (mediaType) {
-          useImageStore.getState().addImage(terminalId, filePath, mediaType)
-        }
         window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
       }
     }
