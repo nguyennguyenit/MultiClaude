@@ -2,6 +2,24 @@ import type { NotificationEventType, OutputMode } from './notification'
 import type { AgentType } from './index'
 
 /**
+ * AskUserQuestion option (as emitted by Claude Code tool_use input).
+ */
+export interface AskUserQuestionOption {
+  label: string
+  description?: string
+}
+
+/**
+ * Full AskUserQuestion payload preserved end-to-end from stream parser to Telegram notifier.
+ */
+export interface AskUserQuestionPayload {
+  text: string
+  header?: string
+  multiSelect: boolean
+  options: AskUserQuestionOption[]
+}
+
+/**
  * Unique task event emitted by output parsers.
  * Used by NotificationManager for deduplication and rich notifications.
  */
@@ -22,6 +40,8 @@ export interface TaskEvent {
   cwd?: string
   /** Agent type that generated this event (e.g. 'claude', 'codex') */
   agentType?: AgentType
+  /** Full AskUserQuestion payload (only present on reviewNeeded from Claude tool_use) */
+  question?: AskUserQuestionPayload
   /** Unix timestamp in milliseconds */
   timestamp: number
 }
