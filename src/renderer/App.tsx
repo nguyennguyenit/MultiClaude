@@ -18,6 +18,8 @@ import { getCurrentTerminalTheme } from './hooks/use-terminal-font-theme'
 import { useExecuteSplit } from './hooks/use-execute-split'
 import { usePaneTreeStore, flushPaneTreeSaves } from './stores/pane-tree-store'
 import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
+import { buildEvenVerticalLayout, migrateFlatToTree } from '@shared/utils/pane-tree-migration'
+import type { NewTerminalLayout } from './utils/shortcut-utils'
 import { registerSplitHandlers } from './utils/terminal-context-actions'
 import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
 import { buildMediaToken, classifyMediaFile } from './utils/media-classifier'
@@ -147,8 +149,15 @@ function App() {
     prevProjectIdRef.current = id
   }, [projects, switchToProject, removeProject, setActiveProject, setActiveTerminal])
 
-  // Handler: Add new terminal in active project
-  const handleAddTerminal = useCallback(async (shell?: ShellInfo) => {
+  // Handler: Add new terminal in active project.
+  // `options.layout` rebuilds the pane tree after insertion so all panes stay
+  // evenly sized: 'balanced' → auto-grid (Ctrl+T / + button), 'vertical' →
+  // equal column stack (Ctrl+N). Rebuilding replaces reconcile's default
+  // right-split append, which otherwise keeps shrinking the rightmost pane.
+  const handleAddTerminal = useCallback(async (
+    shell?: ShellInfo,
+    options?: { layout?: NewTerminalLayout }
+  ) => {
     // Get fresh state to avoid stale closure
     const { terminals } = useAppStore.getState()
     const currentProjectTerminals = activeProjectId
@@ -181,6 +190,20 @@ function App() {
         shell: isWindowsShell ? shellInfoToWindowsShell(effectiveShell) : savedSettings.windowsShell,
       })
       addTerminal(terminal)
+
+      // Rebuild the pane tree so every pane gets an even share.
+      if (activeProjectId) {
+        const layout: NewTerminalLayout = options?.layout ?? 'balanced'
+        const freshTerminals = useAppStore.getState().terminals
+        const leafIds = freshTerminals
+          .filter(t => t.projectId === activeProjectId)
+          .map(t => t.id)
+        const isPortrait = window.innerHeight > window.innerWidth
+        const nextTree = layout === 'vertical'
+          ? buildEvenVerticalLayout(leafIds)
+          : migrateFlatToTree(leafIds, isPortrait)
+        usePaneTreeStore.getState().setTree(activeProjectId, nextTree)
+      }
     } catch (err) {
       console.error('[handleAddTerminal] Failed to create terminal:', err)
       useToastStore.getState().addToast('Failed to create terminal. Please try again.', 'error')
@@ -348,7 +371,7 @@ function App() {
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
-    onAddTerminal: handleAddTerminal,
+    onAddTerminal: (opts) => void handleAddTerminal(undefined, opts),
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
     onToggleGitHubPanel: () => togglePanel('github'),

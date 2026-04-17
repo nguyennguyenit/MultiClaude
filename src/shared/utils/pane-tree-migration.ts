@@ -38,6 +38,19 @@ function buildRowChain(terminalIds: string[]): PaneTree {
   }
 }
 
+/**
+ * Build an evenly-distributed vertical-pane layout: every terminal sits in its
+ * own tall-and-narrow column side-by-side (row-split along the X axis).
+ * Exposed so /Ctrl+N can rebuild the layout into balanced vertical stripes
+ * regardless of prior splits.
+ */
+export function buildEvenVerticalLayout(terminalIds: string[]): PaneTree | null {
+  const ids = Array.from(new Set(terminalIds.filter((id): id is string => Boolean(id))))
+  if (ids.length === 0) return null
+  if (ids.length === 1) return { kind: 'leaf', terminalId: ids[0] }
+  return buildRowChain(ids)
+}
+
 function buildColChain(terminalIds: string[]): PaneTree {
   const n = terminalIds.length
   if (n === 0) throw new Error('buildColChain: empty list')

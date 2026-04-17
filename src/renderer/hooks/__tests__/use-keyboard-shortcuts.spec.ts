@@ -99,7 +99,7 @@ describe('useKeyboardShortcuts — split-pane editable-target guard', () => {
   })
 
   it('still fires non-split shortcuts when target is INPUT (e.g. new-terminal)', () => {
-    const onAddTerminal = vi.fn<() => void>()
+    const onAddTerminal = vi.fn()
     renderHook(() =>
       useKeyboardShortcuts({
         onAddTerminal,
@@ -119,6 +119,29 @@ describe('useKeyboardShortcuts — split-pane editable-target guard', () => {
     Object.defineProperty(ev, 'target', { value: input, configurable: true })
     window.dispatchEvent(ev)
     // onAddTerminal should still fire because guard only targets split-pane.
-    expect(onAddTerminal).toHaveBeenCalled()
+    expect(onAddTerminal).toHaveBeenCalledWith({ layout: 'balanced' })
+  })
+
+  it('Ctrl+N routes new-terminal with vertical layout', () => {
+    const onAddTerminal = vi.fn()
+    renderHook(() =>
+      useKeyboardShortcuts({
+        onAddTerminal,
+        onCloseTerminal: vi.fn(),
+        onSplit
+      })
+    )
+    const target = document.createElement('div')
+    document.body.appendChild(target)
+    const ev = new KeyboardEvent('keydown', {
+      key: 'n',
+      code: 'KeyN',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    })
+    Object.defineProperty(ev, 'target', { value: target, configurable: true })
+    window.dispatchEvent(ev)
+    expect(onAddTerminal).toHaveBeenCalledWith({ layout: 'vertical' })
   })
 })

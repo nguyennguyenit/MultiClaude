@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../stores'
 import { getGlobalShortcut } from '../utils'
+import type { NewTerminalLayout } from '../utils/shortcut-utils'
 import type { PaneSplitDirection } from '@shared/types'
 
 interface KeyboardShortcutsOptions {
-  onAddTerminal: () => void
+  onAddTerminal: (options?: { layout?: NewTerminalLayout }) => void
   onCloseTerminal: () => void
   onSelectProject?: (id: string) => void
   onToggleGitHubPanel?: () => void
@@ -14,7 +15,8 @@ interface KeyboardShortcutsOptions {
 /**
  * Global keyboard shortcuts hook
  * - Alt+1~9: Switch to project by index
- * - Ctrl+N/T: Create new terminal
+ * - Ctrl+T: New terminal, rebuild balanced grid
+ * - Ctrl+N: New terminal, rebuild evenly-stacked vertical layout
  * - Ctrl+W: Close active terminal
  * - Ctrl+G: Toggle GitHub panel
  */
@@ -51,7 +53,7 @@ export function useKeyboardShortcuts({
           return
         }
         case 'new-terminal':
-          onAddTerminal()
+          onAddTerminal({ layout: shortcut.layout })
           return
         case 'close-terminal':
           onCloseTerminal()
