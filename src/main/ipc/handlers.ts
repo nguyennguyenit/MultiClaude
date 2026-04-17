@@ -551,6 +551,23 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return notificationManager.getTelegramPairingStatus()
   })
 
+  // Mobile control (Phase-02 hook receiver)
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_GET_STATUS, () => {
+    return notificationManager.getMobileControlStatus()
+  })
+
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_ENABLE, () => {
+    return notificationManager.enableMobileControl()
+  })
+
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_DISABLE, () => {
+    return notificationManager.disableMobileControl()
+  })
+
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_REGEN_SECRET, () => {
+    return notificationManager.regenerateMobileControlSecret()
+  })
+
   // Pass manager references for remote control
   notificationManager.setManagers(terminalManager, projectStore)
 

@@ -143,6 +143,13 @@ export interface ElectronAPI {
     onPairingTimeout: (cb: () => void) => () => void
     onPairingWarning: (cb: (p: { chatId: number }) => void) => () => void
   }
+  mobileControl: {
+    getStatus: () => Promise<import('@main/notification/mobile-control-manager').MobileControlStatus>
+    enable: () => Promise<import('@main/notification/mobile-control-manager').MobileControlStatus>
+    disable: () => Promise<import('@main/notification/mobile-control-manager').MobileControlStatus>
+    regenerateSecret: () => Promise<import('@main/notification/mobile-control-manager').MobileControlStatus>
+    onStatusChanged: (cb: (status: import('@main/notification/mobile-control-manager').MobileControlStatus) => void) => () => void
+  }
   yolo: {
     get: (projectPath: string) => Promise<boolean>
     set: (projectPath: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
@@ -354,6 +361,17 @@ const api: ElectronAPI = {
       const h = (_: IpcRendererEvent, p: { chatId: number }) => cb(p)
       ipcRenderer.on(IPC_CHANNELS.TELEGRAM_PAIRING_WARNING, h)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_PAIRING_WARNING, h)
+    }
+  },
+  mobileControl: {
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.MOBILE_CONTROL_GET_STATUS),
+    enable: () => ipcRenderer.invoke(IPC_CHANNELS.MOBILE_CONTROL_ENABLE),
+    disable: () => ipcRenderer.invoke(IPC_CHANNELS.MOBILE_CONTROL_DISABLE),
+    regenerateSecret: () => ipcRenderer.invoke(IPC_CHANNELS.MOBILE_CONTROL_REGEN_SECRET),
+    onStatusChanged: (cb: (status: import('@main/notification/mobile-control-manager').MobileControlStatus) => void) => {
+      const h = (_: IpcRendererEvent, status: import('@main/notification/mobile-control-manager').MobileControlStatus) => cb(status)
+      ipcRenderer.on(IPC_CHANNELS.MOBILE_CONTROL_STATUS_CHANGED, h)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.MOBILE_CONTROL_STATUS_CHANGED, h)
     }
   },
   yolo: {

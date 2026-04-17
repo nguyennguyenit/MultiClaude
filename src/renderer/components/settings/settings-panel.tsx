@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { ThemeSelector } from './theme-selector'
 import { NotificationSettings } from './notification-settings'
+import { MobileControlSettings } from './mobile-control-settings'
 import { TerminalSettings } from './terminal-settings'
 import { UpdateSettings } from './update-settings'
 import { useUpdateStore } from '../../stores'
 
-type SettingsTab = 'appearance' | 'terminals' | 'notifications' | 'updates'
+type SettingsTab = 'appearance' | 'terminals' | 'notifications' | 'mobile-control' | 'updates'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -51,6 +52,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           Notifications
         </TabButton>
         <TabButton
+          active={activeTab === 'mobile-control'}
+          onClick={() => setActiveTab('mobile-control')}
+        >
+          Mobile
+        </TabButton>
+        <TabButton
           active={activeTab === 'updates'}
           onClick={() => setActiveTab('updates')}
           badge={hasUpdate}
@@ -64,6 +71,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         {activeTab === 'appearance' && <ThemeSelector />}
         {activeTab === 'terminals' && <TerminalSettings />}
         {activeTab === 'notifications' && <NotificationSettings />}
+        {activeTab === 'mobile-control' && <MobileControlSettings />}
         {activeTab === 'updates' && <UpdateSettings />}
       </div>
     </div>
