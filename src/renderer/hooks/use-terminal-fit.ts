@@ -17,6 +17,7 @@ import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { resolveFitViewportRestoreTarget } from '../utils/terminal-scroll-utils'
 
 const RESIZE_REFIT_SETTLE_DELAY = 120  // ms second fit after layout settles
+const FIT_RETRY_WHEN_HIDDEN_DELAY = 120  // ms retry when container briefly has 0 size
 
 interface UseTerminalFitParams {
   terminalRef: RefObject<XTerm | null>
@@ -93,13 +94,31 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     cancelScheduledFit()
     fitAnimationFrameRef.current = requestAnimationFrame(() => {
       fitAnimationFrameRef.current = null
-      if (!performFit()) return
+      // If performFit returned false because the container was 0×0 (pane
+      // briefly hidden during layout), schedule one retry — otherwise cols
+      // stay at the stale value and freshly-written wide content can appear
+      // to overflow until the next user-triggered resize.
+      if (!performFit()) {
+        const container = containerRef.current
+        const hiddenNow = !container || container.clientWidth === 0 || container.clientHeight === 0
+        if (hiddenNow && !disposedRef.current) {
+          fitSettleTimerRef.current = setTimeout(() => {
+            fitSettleTimerRef.current = null
+            if (!performFit()) return
+            fitSettleTimerRef.current = setTimeout(() => {
+              fitSettleTimerRef.current = null
+              performFit()
+            }, RESIZE_REFIT_SETTLE_DELAY)
+          }, FIT_RETRY_WHEN_HIDDEN_DELAY)
+        }
+        return
+      }
       fitSettleTimerRef.current = setTimeout(() => {
         fitSettleTimerRef.current = null
         performFit()
       }, RESIZE_REFIT_SETTLE_DELAY)
     })
-  }, [cancelScheduledFit, disposedRef, performFit])
+  }, [cancelScheduledFit, containerRef, disposedRef, performFit])
 
   // ── ResizeObserver + window resize ─────────────────────────────────────────
   const observedContainerSizeRef = useRef({ width: 0, height: 0 })

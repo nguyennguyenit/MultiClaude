@@ -480,6 +480,12 @@ export class TerminalManager extends EventEmitter {
       console.debug(`[terminal-manager] Skipping write during suspend: ${id}`)
       return false
     }
+    // Skip if terminal is being destroyed — pty stream may already be closing,
+    // causing async "write EOF" errors that escape to uncaughtException.
+    if (term.destroying) {
+      console.debug(`[terminal-manager] Skipping write on destroying terminal: ${id}`)
+      return false
+    }
     try {
       this.processInputForAgentDetection(term, data)
       term.pty.write(data)
@@ -497,6 +503,10 @@ export class TerminalManager extends EventEmitter {
     // Skip PTY operations during system suspend to prevent SIGTRAP
     if (term.suspended || this.systemSuspended) {
       console.debug(`[terminal-manager] Skipping resize during suspend: ${id}`)
+      return false
+    }
+    if (term.destroying) {
+      console.debug(`[terminal-manager] Skipping resize on destroying terminal: ${id}`)
       return false
     }
     try {
@@ -612,6 +622,7 @@ export class TerminalManager extends EventEmitter {
   invokeClaudeCode(id: string, sessionId?: string): boolean {
     const term = this.terminals.get(id)
     if (!term) return false
+    if (term.suspended || this.systemSuspended || term.destroying) return false
 
     let command = 'claude'
     if (sessionId) {
@@ -620,7 +631,12 @@ export class TerminalManager extends EventEmitter {
     }
     command += '\n'
 
-    term.pty.write(command)
+    try {
+      term.pty.write(command)
+    } catch (error) {
+      console.error(`[terminal-manager] invokeClaudeCode write failed for ${id}:`, (error as Error).message)
+      return false
+    }
     this.setClaudeMode(term)
     term.metadata.agentType = 'claude'
     this.emit('agentDetected', { terminalId: id, agentType: 'claude' as AgentType })

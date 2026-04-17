@@ -153,9 +153,20 @@ app.on('window-all-closed', async () => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error)
   // Don't show dialog for PTY-related errors during suspend/resume
-  // These are expected when system wakes and FDs become invalid
-  if (error.message?.includes('pty') || error.message?.includes('EIO')) {
-    console.warn('[main] PTY error ignored (likely from suspend/resume):', error.message)
+  // These are expected when system wakes and FDs become invalid.
+  // "write EOF" / "write after end" fire async from node-pty stream when an
+  // IPC input/resize lands between pty.kill() and the onExit event — the
+  // terminal is gone but the error escapes try/catch because the underlying
+  // socket.write is async.
+  const msg = error.message ?? ''
+  if (
+    msg.includes('pty') ||
+    msg.includes('EIO') ||
+    msg.includes('write EOF') ||
+    msg.includes('write after end') ||
+    msg.includes('EPIPE')
+  ) {
+    console.warn('[main] PTY error ignored (closed stream or suspend/resume):', msg)
     return
   }
   dialog.showErrorBox('Error', error.message)

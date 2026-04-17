@@ -381,6 +381,27 @@ describe('TerminalManager', () => {
       const result = await manager.destroyAsync('invalid')
       expect(result).toBe(false)
     })
+
+    it('ignores write/resize/invokeClaudeCode once destroyAsync has started', () => {
+      // Regression: async "write EOF" from node-pty stream fired after pty.kill()
+      // because write()/resize() didn't check term.destroying, letting queued
+      // IPC events land on a closing stream.
+      const term = manager.create()
+      mockPty.write.mockClear()
+      mockPty.resize.mockClear()
+
+      // Start destroy — sets destroying=true but doesn't resolve until onExit.
+      void manager.destroyAsync(term.id)
+
+      expect(manager.write(term.id, 'queued input')).toBe(false)
+      expect(manager.resize(term.id, 120, 40)).toBe(false)
+      expect(manager.invokeClaudeCode(term.id)).toBe(false)
+      expect(mockPty.write).not.toHaveBeenCalled()
+      expect(mockPty.resize).not.toHaveBeenCalled()
+
+      // Finalize cleanup so afterEach doesn't warn.
+      mockPty._exitCallback?.({ exitCode: 0 })
+    })
   })
 
   describe('destroyAllAsync', () => {
