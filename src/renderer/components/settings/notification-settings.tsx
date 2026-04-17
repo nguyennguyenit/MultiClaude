@@ -92,7 +92,7 @@ export function NotificationSettings({ onNavigateToMobile }: NotificationSetting
                 <button
                   type="button"
                   onClick={onNavigateToMobile}
-                  className="underline text-[var(--mc-accent)] hover:text-[var(--mc-accent-hover)] focus:outline-none"
+                  className="inline p-0 bg-transparent border-0 underline cursor-pointer text-[var(--mc-accent)] hover:text-[var(--mc-accent-hover)] focus:outline-none focus-visible:outline-none"
                 >
                   enable Mobile Control
                 </button>

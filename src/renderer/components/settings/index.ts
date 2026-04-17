@@ -1,4 +1,3 @@
-export { SettingsPanel } from './settings-panel'
 export { SettingsModal } from './settings-modal'
 export { SettingsSidebar } from './settings-sidebar'
 export { ThemeSelector } from './theme-selector'

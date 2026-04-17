@@ -4,6 +4,7 @@ import { SettingsSidebar, type SettingsTab } from './settings-sidebar'
 import { ThemeSelector } from './theme-selector'
 import { TerminalSettings } from './terminal-settings'
 import { NotificationSettings } from './notification-settings'
+import { MobileControlSettings } from './mobile-control-settings'
 import { UpdateSettings } from './update-settings'
 
 interface SettingsModalProps {
@@ -107,7 +108,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="flex-1 overflow-y-scroll text-left" style={{ padding: '32px 40px', scrollbarGutter: 'stable' }}>
             {activeTab === 'appearance' && <ThemeSelector />}
             {activeTab === 'terminals' && <TerminalSettings />}
-            {activeTab === 'notifications' && <NotificationSettings />}
+            {activeTab === 'notifications' && <NotificationSettings onNavigateToMobile={() => setActiveTab('mobile-control')} />}
+            {activeTab === 'mobile-control' && <MobileControlSettings />}
             {activeTab === 'updates' && <UpdateSettings />}
           </div>
         </div>
