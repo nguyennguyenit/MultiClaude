@@ -13,6 +13,8 @@ import { TelegramNotifier } from './telegram-notifier'
 import { DiscordNotifier } from './discord-notifier'
 import { TelegramPoller } from './telegram-poller'
 import { TelegramCommandRouter } from './telegram-command-router'
+import { TelegramAuthFlow } from './telegram-auth-flow'
+import { pendingQuestionStore } from './pending-question-store'
 import { ClaudeLogWatcher } from './claude-log-watcher'
 import { generateTaskEventId } from './parser-utils'
 import type { RemoteControlStatus } from '@shared/types'
@@ -56,6 +58,11 @@ export class NotificationManager extends EventEmitter {
   private projectStoreRef: ProjectStore | null = null
   private suspendHandler: (() => void) | null = null
   private resumeHandler: (() => void) | null = null
+
+  // Pairing (QR deep-link) transient state
+  private pairingPoller: TelegramPoller | null = null
+  private pairingAuthFlow: TelegramAuthFlow | null = null
+  private pairingBotToken: string | null = null
 
   constructor() {
     super()
@@ -253,6 +260,21 @@ export class NotificationManager extends EventEmitter {
       (text) => notifier.sendMarkdown(text)
     )
 
+    // Refresh inline keyboard on every multi-select toggle so users see ⚪ → 🔘 live.
+    this.commandRouter.onToggleEdit = (terminalId) => {
+      const entry = pendingQuestionStore.get(terminalId)
+      if (!entry || entry.messageId === undefined || entry.chatId === undefined) return
+      const rows = notifier.buildQuestionKeyboardPublic(
+        terminalId,
+        entry.questionId,
+        entry.question,
+        'reviewNeeded',
+        entry.selected
+      )
+      notifier.editReplyMarkup(entry.chatId, entry.messageId, { inline_keyboard: rows })
+        .catch(err => console.error('[NotificationManager] editReplyMarkup failed', err))
+    }
+
     // Register bot commands for Telegram autocomplete suggestions
     TelegramNotifier.registerBotCommands(creds.botToken).catch(console.error)
 
@@ -396,6 +418,101 @@ export class NotificationManager extends EventEmitter {
     }
   }
 
+  // Telegram pairing (QR deep-link flow)
+
+  async startTelegramPairing(botToken: string): Promise<{
+    ok: boolean
+    nonce?: string
+    botUsername?: string
+    error?: string
+  }> {
+    if (this.pairingAuthFlow && this.pairingAuthFlow.getState() === 'waiting') {
+      return { ok: false, error: 'Pairing already in progress' }
+    }
+
+    // Reject malformed tokens before path-embedding them into the Bot API URL.
+    // Telegram bot tokens: <numeric bot_id>:<alnum-with-_-, length ≥ 35>
+    if (!/^\d+:[A-Za-z0-9_-]{35,}$/.test(botToken)) {
+      return { ok: false, error: 'Invalid bot token format' }
+    }
+
+    // Validate token and capture username via getMe
+    let botUsername: string
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`)
+      if (!res.ok) return { ok: false, error: `Invalid bot token (HTTP ${res.status})` }
+      const data = (await res.json()) as {
+        ok: boolean
+        result?: { username?: string }
+      }
+      if (!data.ok || !data.result?.username) {
+        return { ok: false, error: 'Bot has no username — create a bot via @BotFather' }
+      }
+      botUsername = data.result.username
+    } catch (err) {
+      return { ok: false, error: `Network error: ${String(err)}` }
+    }
+
+    // Start a fresh auth flow + transient poller
+    const authFlow = new TelegramAuthFlow()
+    const poller = new TelegramPoller(botToken, '0')
+    poller.attachAuthFlow(authFlow)
+
+    const cleanup = () => {
+      poller.stop()
+      this.pairingAuthFlow = null
+      this.pairingPoller = null
+      this.pairingBotToken = null
+    }
+
+    authFlow.on('pairingTimeout', () => {
+      this.sendToRenderer(IPC_CHANNELS.TELEGRAM_PAIRING_TIMEOUT, undefined)
+      cleanup()
+    })
+    authFlow.on('pairingWarning', (p: { chatId: number }) => {
+      this.sendToRenderer(IPC_CHANNELS.TELEGRAM_PAIRING_WARNING, p)
+    })
+    authFlow.on('paired', (p: { chatId: number; botToken: string }) => {
+      // Persist credentials and spin up the real remote-control poller.
+      this.storage.setTelegram(p.botToken, String(p.chatId))
+      this.settings.telegramConfigured = true
+      this.updateSettings({ telegramEnabled: true })
+      this.sendToRenderer(IPC_CHANNELS.TELEGRAM_PAIRED, {
+        chatId: p.chatId,
+        botToken: p.botToken
+      })
+      cleanup()
+    })
+
+    this.pairingAuthFlow = authFlow
+    this.pairingPoller = poller
+    this.pairingBotToken = botToken
+
+    const { nonce } = authFlow.startPairing(botToken)
+    poller.start().catch(err => console.error('[NotificationManager] pairing poll failed', err))
+
+    this.sendToRenderer(IPC_CHANNELS.TELEGRAM_PAIRING_WAITING, { nonce, botUsername })
+    return { ok: true, nonce, botUsername }
+  }
+
+  cancelTelegramPairing(): void {
+    if (this.pairingAuthFlow) this.pairingAuthFlow.cancelPairing()
+    if (this.pairingPoller) this.pairingPoller.stop()
+    this.pairingAuthFlow = null
+    this.pairingPoller = null
+    this.pairingBotToken = null
+  }
+
+  getTelegramPairingStatus(): { state: 'idle' | 'waiting' | 'completed' } {
+    return { state: this.pairingAuthFlow?.getState() ?? 'idle' }
+  }
+
+  private sendToRenderer(channel: string, payload: unknown): void {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.webContents.send(channel, payload)
+    }
+  }
+
   // Telegram methods
   getTelegramCredentials(): { botToken: string; chatId: string } | null {
     return this.storage.getTelegram()
@@ -437,6 +554,7 @@ export class NotificationManager extends EventEmitter {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval)
     }
+    this.cancelTelegramPairing()
     this.stopRemoteControl()
     this.focusDetector.destroy()
     this.taskTracker.clearAll()

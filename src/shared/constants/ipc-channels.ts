@@ -96,6 +96,15 @@ export const IPC_CHANNELS = {
   NOTIFICATION_SET_ACTIVE_TERMINAL: 'notification:set-active-terminal',
   NOTIFICATION_REMOTE_CONTROL_STATUS: 'notification:remote-control-status',
 
+  // Telegram pairing (QR deep-link flow)
+  TELEGRAM_START_PAIRING: 'telegram:start-pairing',
+  TELEGRAM_CANCEL_PAIRING: 'telegram:cancel-pairing',
+  TELEGRAM_PAIRING_STATUS: 'telegram:pairing-status',
+  TELEGRAM_PAIRING_WAITING: 'telegram:pairing-waiting',
+  TELEGRAM_PAIRED: 'telegram:paired',
+  TELEGRAM_PAIRING_TIMEOUT: 'telegram:pairing-timeout',
+  TELEGRAM_PAIRING_WARNING: 'telegram:pairing-warning',
+
   // YOLO Mode channels
   YOLO_MODE_GET: 'yolo:get',
   YOLO_MODE_SET: 'yolo:set',

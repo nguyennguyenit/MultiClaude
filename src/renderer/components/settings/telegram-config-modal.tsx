@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import QRCode from 'qrcode'
 
 interface TelegramConfigModalProps {
   isOpen: boolean
@@ -7,6 +8,12 @@ interface TelegramConfigModalProps {
   isConfigured: boolean
   onClear: () => void
 }
+
+type PairingUi =
+  | { state: 'idle' }
+  | { state: 'starting' }
+  | { state: 'waiting'; nonce: string; botUsername: string; deepLink: string; qrDataUrl: string }
+  | { state: 'error'; message: string }
 
 export function TelegramConfigModal({
   isOpen,
@@ -20,12 +27,14 @@ export function TelegramConfigModal({
   const [testing, setTesting] = useState(false)
   const [testPassed, setTestPassed] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null)
+  const [pairing, setPairing] = useState<PairingUi>({ state: 'idle' })
 
   // Load saved credentials when modal opens
   useEffect(() => {
     if (!isOpen) return
     setTestResult(null)
     setTestPassed(false)
+    setPairing({ state: 'idle' })
 
     window.electron.notification.getTelegram().then((creds) => {
       if (creds) {
@@ -38,6 +47,29 @@ export function TelegramConfigModal({
       }
     })
   }, [isOpen])
+
+  // Subscribe to pairing IPC events while modal is open
+  useEffect(() => {
+    if (!isOpen) return
+    const offPaired = window.electron.telegram.onPaired((p) => {
+      setPairing({ state: 'idle' })
+      onSave(p.botToken, String(p.chatId))
+      onClose()
+    })
+    const offTimeout = window.electron.telegram.onPairingTimeout(() => {
+      setPairing({ state: 'error', message: 'Pairing timed out. Try again.' })
+    })
+    const offWarning = window.electron.telegram.onPairingWarning(() => {
+      setPairing({ state: 'error', message: 'Multiple devices tried to pair — please re-pair.' })
+    })
+    return () => {
+      offPaired()
+      offTimeout()
+      offWarning()
+      // If user closes modal mid-pairing, cancel on the main side.
+      window.electron.telegram.cancelPairing().catch(() => {})
+    }
+  }, [isOpen, onSave, onClose])
 
   if (!isOpen) return null
 
@@ -86,6 +118,30 @@ export function TelegramConfigModal({
     onClose()
   }
 
+  const handleStartPairing = async () => {
+    if (!botToken) return
+    setPairing({ state: 'starting' })
+    const res = await window.electron.telegram.startPairing(botToken)
+    if (!res.ok || !res.nonce || !res.botUsername) {
+      setPairing({ state: 'error', message: res.error ?? 'Failed to start pairing' })
+      return
+    }
+    const deepLink = `https://t.me/${res.botUsername}?start=mc-pair-${res.nonce}`
+    const qrDataUrl = await QRCode.toDataURL(deepLink, { margin: 1, width: 220 })
+    setPairing({
+      state: 'waiting',
+      nonce: res.nonce,
+      botUsername: res.botUsername,
+      deepLink,
+      qrDataUrl
+    })
+  }
+
+  const handleCancelPairing = async () => {
+    await window.electron.telegram.cancelPairing().catch(() => {})
+    setPairing({ state: 'idle' })
+  }
+
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
       <div className="rounded-xl w-[420px] max-w-[92vw] flex flex-col" style={{ background: 'var(--mc-bg-secondary)', border: '1px solid color-mix(in srgb, var(--mc-accent) 25%, var(--mc-border))', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
@@ -132,6 +188,63 @@ export function TelegramConfigModal({
           <div className="text-[11px] leading-relaxed px-3 py-2.5 rounded-md" style={{ background: 'var(--mc-bg-primary)', border: '1px solid var(--mc-border)', color: 'var(--mc-text-muted)' }}>
             <strong style={{ color: 'var(--mc-text-secondary)' }}>Important:</strong> You must send <code className="px-1 py-0.5 rounded text-[var(--mc-accent)]" style={{ background: 'var(--mc-bg-hover)' }}>/start</code> to your bot in Telegram before testing. The bot cannot message you until you initiate the conversation first.
           </div>
+
+          {/* QR pairing: only when a token is entered but no chatId and not mid-test */}
+          {botToken && !chatId && pairing.state === 'idle' && (
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md"
+              style={{ background: 'var(--mc-bg-primary)', border: '1px solid var(--mc-border)' }}>
+              <div className="text-[11px]" style={{ color: 'var(--mc-text-muted)' }}>
+                Skip the manual Chat ID lookup — scan a QR on your phone.
+              </div>
+              <button
+                type="button"
+                onClick={handleStartPairing}
+                className="px-3 py-1.5 text-xs rounded-md font-medium"
+                style={{ background: 'var(--mc-bg-hover)', color: 'var(--mc-text-primary)', border: '1px solid var(--mc-border)', cursor: 'pointer' }}
+              >
+                Scan QR
+              </button>
+            </div>
+          )}
+
+          {pairing.state === 'starting' && (
+            <div className="text-xs px-3 py-2 rounded-md" style={{ background: 'var(--mc-bg-primary)', border: '1px solid var(--mc-border)', color: 'var(--mc-text-muted)' }}>
+              Starting pairing…
+            </div>
+          )}
+
+          {pairing.state === 'waiting' && (
+            <div className="flex flex-col items-center gap-2 px-3 py-3 rounded-md"
+              style={{ background: 'var(--mc-bg-primary)', border: '1px solid var(--mc-border)' }}>
+              <img src={pairing.qrDataUrl} alt="Telegram pairing QR" width={180} height={180} />
+              <div className="text-[11px] text-center" style={{ color: 'var(--mc-text-muted)' }}>
+                Scan with Telegram, then tap Start. Window closes 60&nbsp;s after you open it.
+              </div>
+              <a
+                href={pairing.deepLink}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px]"
+                style={{ color: 'var(--mc-accent)' }}
+              >
+                Open in Telegram
+              </a>
+              <button
+                type="button"
+                onClick={handleCancelPairing}
+                className="text-[11px] px-2 py-1 rounded"
+                style={{ background: 'transparent', border: '1px solid var(--mc-border)', color: 'var(--mc-text-muted)', cursor: 'pointer' }}
+              >
+                Cancel pairing
+              </button>
+            </div>
+          )}
+
+          {pairing.state === 'error' && (
+            <div className="text-xs px-3 py-2 rounded-md bg-red-500/15 text-red-400">
+              {pairing.message}
+            </div>
+          )}
 
           {testResult && (
             <div className={`text-xs px-3 py-2 rounded-md ${testResult.success ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>

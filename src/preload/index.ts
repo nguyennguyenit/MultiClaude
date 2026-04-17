@@ -129,6 +129,20 @@ export interface ElectronAPI {
     onRemoteControlStatus: (callback: (status: RemoteControlStatus) => void) => () => void
     getRemoteControlStatus: () => Promise<RemoteControlStatus>
   }
+  telegram: {
+    startPairing: (botToken: string) => Promise<{
+      ok: boolean
+      nonce?: string
+      botUsername?: string
+      error?: string
+    }>
+    cancelPairing: () => Promise<boolean>
+    getPairingStatus: () => Promise<{ state: 'idle' | 'waiting' | 'completed' }>
+    onPairingWaiting: (cb: (p: { nonce: string; botUsername: string }) => void) => () => void
+    onPaired: (cb: (p: { chatId: number; botToken: string }) => void) => () => void
+    onPairingTimeout: (cb: () => void) => () => void
+    onPairingWarning: (cb: (p: { chatId: number }) => void) => () => void
+  }
   yolo: {
     get: (projectPath: string) => Promise<boolean>
     set: (projectPath: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
@@ -316,6 +330,31 @@ const api: ElectronAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
     },
     getRemoteControlStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS)
+  },
+  telegram: {
+    startPairing: (botToken: string) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_START_PAIRING, { botToken }),
+    cancelPairing: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_CANCEL_PAIRING),
+    getPairingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_PAIRING_STATUS),
+    onPairingWaiting: (cb: (p: { nonce: string; botUsername: string }) => void) => {
+      const h = (_: IpcRendererEvent, p: { nonce: string; botUsername: string }) => cb(p)
+      ipcRenderer.on(IPC_CHANNELS.TELEGRAM_PAIRING_WAITING, h)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_PAIRING_WAITING, h)
+    },
+    onPaired: (cb: (p: { chatId: number; botToken: string }) => void) => {
+      const h = (_: IpcRendererEvent, p: { chatId: number; botToken: string }) => cb(p)
+      ipcRenderer.on(IPC_CHANNELS.TELEGRAM_PAIRED, h)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_PAIRED, h)
+    },
+    onPairingTimeout: (cb: () => void) => {
+      const h = () => cb()
+      ipcRenderer.on(IPC_CHANNELS.TELEGRAM_PAIRING_TIMEOUT, h)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_PAIRING_TIMEOUT, h)
+    },
+    onPairingWarning: (cb: (p: { chatId: number }) => void) => {
+      const h = (_: IpcRendererEvent, p: { chatId: number }) => cb(p)
+      ipcRenderer.on(IPC_CHANNELS.TELEGRAM_PAIRING_WARNING, h)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_PAIRING_WARNING, h)
+    }
   },
   yolo: {
     get: (projectPath) => ipcRenderer.invoke(IPC_CHANNELS.YOLO_MODE_GET, projectPath),
