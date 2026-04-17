@@ -1,12 +1,16 @@
 import type { NotificationEventType } from '@shared/types/notification'
-import type { TaskEvent } from '@shared/types/notification-events'
+import type { TaskEvent, AskUserQuestionPayload } from '@shared/types/notification-events'
 import type { NotificationTestResult, AgentType } from '@shared/types'
 import { AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
+import { pendingQuestionStore } from './pending-question-store'
 
 const TELEGRAM_MAX_LENGTH = 4096
 const TELEGRAM_MAX_RETRIES = 3
 const TELEGRAM_INITIAL_BACKOFF_MS = 1000
 const MAX_FIELD_LENGTH = 256
+const MAX_BUTTON_TEXT_LEN = 60
+const MAX_BUTTONS_PER_ROW = 3
+const MAX_OPTION_ROWS = 8
 
 const AGENT_EMOJI: Record<AgentType, string> = {
   claude: '🟣',
@@ -44,6 +48,34 @@ export class TelegramNotifier {
     return true
   }
 
+  /**
+   * If `text` > 4000 chars, upload as a .txt document via sendDocument;
+   * otherwise send paginated messages. Replaces the Phase 03 web view for
+   * the common "very long response" case.
+   */
+  async sendLongResponse(args: { caption: string; text: string; fileName: string }): Promise<boolean> {
+    const LONG_THRESHOLD = 4000
+    if (args.text.length <= LONG_THRESHOLD) {
+      return this.send(`${args.caption}\n\n${args.text}`)
+    }
+    try {
+      const form = new FormData()
+      form.set('chat_id', this.chatId)
+      form.set('caption', args.caption)
+      const blob = new Blob([args.text], { type: 'text/plain; charset=utf-8' })
+      form.set('document', blob, args.fileName)
+      const response = await fetch(`https://api.telegram.org/bot${this.botToken}/sendDocument`, {
+        method: 'POST',
+        body: form
+      })
+      const data = (await response.json().catch(() => ({ ok: false }))) as { ok?: boolean }
+      return data.ok === true
+    } catch (err) {
+      console.error('[TelegramNotifier] sendDocument failed:', err)
+      return false
+    }
+  }
+
   /** Send text using MarkdownV2 parse mode (for command replies with backticks, bold, etc.) */
   async sendMarkdown(text: string): Promise<boolean> {
     const chunks = this.paginateMessage(text)
@@ -55,14 +87,47 @@ export class TelegramNotifier {
   }
 
   async sendTaskEvent(event: TaskEvent, terminalTitle?: string): Promise<boolean> {
+    // Persist question payload so callback handler can resolve label→text later.
+    // `put()` returns a questionId used to stamp the callback_data so stale
+    // taps on an earlier notification cannot be applied to a newer question.
+    let questionId: string | undefined
+    if (event.question && event.question.options.length > 0) {
+      questionId = pendingQuestionStore.put(event.terminalId, event.question)
+    }
+
     const text = this.formatTaskEvent(event, terminalTitle)
-    const keyboard = this.buildEventKeyboard(event)
+    const keyboard = this.buildEventKeyboard(event, questionId)
+
+    // F11: responses > 4000 chars — send a short caption + full text as .txt document.
+    // Paginated messages lose inline keyboards on non-last pages and explode the chat.
+    if (event.responseId && text.length > TELEGRAM_MAX_LENGTH - 96) {
+      const shortCaption = `${event.taskName.slice(0, 240)} — full response attached as .txt`
+      const docOk = await this.sendLongResponse({
+        caption: shortCaption,
+        text,
+        fileName: `task-${event.responseId}.txt`
+      })
+      if (!docOk) return false
+      // Follow-up message just for the inline keyboard.
+      const kbResult = await this.sendMessageRaw('🔘 Actions', { inline_keyboard: keyboard })
+      if (!kbResult.ok) return false
+      if (questionId && kbResult.messageId !== undefined) {
+        pendingQuestionStore.attachMessage(event.terminalId, this.chatId, kbResult.messageId)
+      }
+      return true
+    }
+
     const chunks = this.paginateMessage(text)
     for (let i = 0; i < chunks.length; i++) {
       const isLast = i === chunks.length - 1
       const replyMarkup = isLast ? { inline_keyboard: keyboard } : undefined
-      const ok = await this.sendWithRetry(chunks[i], replyMarkup)
-      if (!ok) return false
+      const result = await this.sendMessageRaw(chunks[i], replyMarkup)
+      if (!result.ok) return false
+
+      // Remember the keyboard message so toggles can edit it in place.
+      if (isLast && questionId && result.messageId !== undefined) {
+        pendingQuestionStore.attachMessage(event.terminalId, this.chatId, result.messageId)
+      }
     }
     return true
   }
@@ -72,6 +137,14 @@ export class TelegramNotifier {
     replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] },
     parseMode: 'HTML' | 'MarkdownV2' = 'HTML'
   ): Promise<boolean> {
+    return (await this.sendMessageRaw(text, replyMarkup, parseMode)).ok
+  }
+
+  private async sendMessageRaw(
+    text: string,
+    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] },
+    parseMode: 'HTML' | 'MarkdownV2' = 'HTML'
+  ): Promise<{ ok: boolean; messageId?: number }> {
     let backoff = TELEGRAM_INITIAL_BACKOFF_MS
 
     for (let attempt = 0; attempt <= TELEGRAM_MAX_RETRIES; attempt++) {
@@ -104,19 +177,66 @@ export class TelegramNotifier {
           continue
         }
 
-        const data = (await response.json()) as { ok: boolean }
-        return data.ok === true
+        const data = (await response.json()) as {
+          ok: boolean
+          result?: { message_id?: number }
+        }
+        if (data.ok === true) {
+          return { ok: true, messageId: data.result?.message_id }
+        }
+        return { ok: false }
       } catch (error) {
         if (attempt === TELEGRAM_MAX_RETRIES) {
           console.error('[TelegramNotifier] Send failed after retries:', error)
-          return false
+          return { ok: false }
         }
         await this.sleep(backoff)
         backoff = Math.min(backoff * 2, 30_000)
       }
     }
 
-    return false
+    return { ok: false }
+  }
+
+  /**
+   * Edit the reply_markup of a previously-sent message.
+   * Used by toggle callbacks to refresh ⚪/🔘 state on the inline keyboard.
+   */
+  async editReplyMarkup(
+    chatId: string | number,
+    messageId: number,
+    replyMarkup: { inline_keyboard: InlineKeyboardButton[][] }
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `https://api.telegram.org/bot${this.botToken}/editMessageReplyMarkup`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: replyMarkup
+          })
+        }
+      )
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean }
+      return data.ok === true
+    } catch (error) {
+      console.error('[TelegramNotifier] editReplyMarkup failed:', error)
+      return false
+    }
+  }
+
+  /** Build the same keyboard the original `sendTaskEvent` would build — used by toggle edits. */
+  buildQuestionKeyboardPublic(
+    terminalId: string,
+    questionId: string | undefined,
+    question: AskUserQuestionPayload,
+    eventType: NotificationEventType,
+    selected?: Set<number>
+  ): InlineKeyboardButton[][] {
+    return this.buildQuestionKeyboard(terminalId, question, eventType, questionId, selected)
   }
 
   private formatTaskEvent(event: TaskEvent, terminalTitle?: string): string {
@@ -163,12 +283,74 @@ export class TelegramNotifier {
     return lines.join('\n')
   }
 
-  private buildEventKeyboard(event: TaskEvent): InlineKeyboardButton[][] {
+  private buildEventKeyboard(event: TaskEvent, questionId?: string): InlineKeyboardButton[][] {
+    if (event.question && event.question.options.length > 0) {
+      return this.buildQuestionKeyboard(event.terminalId, event.question, event.type, questionId)
+    }
+    // Permission request (phase-02): `context` embeds `permissionId=<id>`
+    if (event.type === 'reviewNeeded' && event.context && event.context.startsWith('permissionId=')) {
+      const pid = event.context.slice('permissionId='.length).trim()
+      if (pid.length > 0) {
+        return [[
+          { text: '✅ Allow', callback_data: `permit:${pid}:allow` },
+          { text: '🛑 Deny', callback_data: `permit:${pid}:deny` }
+        ]]
+      }
+    }
     const chatText = event.type === 'reviewNeeded' ? 'Reply 💬' : 'Chat 💬'
     return [[
       { text: 'Details 🔍', callback_data: `tail:${event.type}:${event.terminalId}` },
       { text: chatText, callback_data: `chat:${event.terminalId}` }
     ]]
+  }
+
+  private buildQuestionKeyboard(
+    terminalId: string,
+    question: AskUserQuestionPayload,
+    eventType: NotificationEventType,
+    questionId?: string,
+    selected?: Set<number>
+  ): InlineKeyboardButton[][] {
+    const capped = question.options.slice(0, MAX_BUTTONS_PER_ROW * MAX_OPTION_ROWS)
+    const action = question.multiSelect ? 'toggle' : 'answer'
+    // If no qid provided, keep legacy shape (tests assume it exists).
+    const qidSuffix = questionId ? `:${questionId}` : ''
+
+    const buttons: InlineKeyboardButton[] = capped.map((opt, i) => {
+      const isSelected = question.multiSelect && selected?.has(i)
+      const prefix = question.multiSelect ? (isSelected ? '🔘 ' : '⚪ ') : ''
+      const safeLabel = this.sanitizeButtonText(opt.label)
+      const display = this.clipLabel(prefix + safeLabel)
+      return {
+        text: display,
+        callback_data: `${action}:${i}${qidSuffix}:${terminalId}`
+      }
+    })
+
+    const rows: InlineKeyboardButton[][] = []
+    for (let i = 0; i < buttons.length; i += MAX_BUTTONS_PER_ROW) {
+      rows.push(buttons.slice(i, i + MAX_BUTTONS_PER_ROW))
+    }
+
+    if (question.multiSelect) {
+      rows.push([{ text: 'Submit ✅', callback_data: `submit${qidSuffix}:${terminalId}` }])
+    }
+
+    rows.push([
+      { text: 'Details 🔍', callback_data: `tail:${eventType}:${terminalId}` }
+    ])
+
+    return rows
+  }
+
+  private sanitizeButtonText(label: string): string {
+    // Drop NUL and other C0 control chars except \t
+    return label.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '')
+  }
+
+  private clipLabel(text: string): string {
+    if (text.length <= MAX_BUTTON_TEXT_LEN) return text
+    return text.slice(0, MAX_BUTTON_TEXT_LEN - 1) + '…'
   }
 
   /** Escape HTML special characters */

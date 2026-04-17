@@ -96,6 +96,22 @@ export const IPC_CHANNELS = {
   NOTIFICATION_SET_ACTIVE_TERMINAL: 'notification:set-active-terminal',
   NOTIFICATION_REMOTE_CONTROL_STATUS: 'notification:remote-control-status',
 
+  // Mobile control (Claude Code hook receiver + UUID response store)
+  MOBILE_CONTROL_GET_STATUS: 'mobile-control:get-status',
+  MOBILE_CONTROL_ENABLE: 'mobile-control:enable',
+  MOBILE_CONTROL_DISABLE: 'mobile-control:disable',
+  MOBILE_CONTROL_REGEN_SECRET: 'mobile-control:regen-secret',
+  MOBILE_CONTROL_STATUS_CHANGED: 'mobile-control:status-changed',
+
+  // Telegram pairing (QR deep-link flow)
+  TELEGRAM_START_PAIRING: 'telegram:start-pairing',
+  TELEGRAM_CANCEL_PAIRING: 'telegram:cancel-pairing',
+  TELEGRAM_PAIRING_STATUS: 'telegram:pairing-status',
+  TELEGRAM_PAIRING_WAITING: 'telegram:pairing-waiting',
+  TELEGRAM_PAIRED: 'telegram:paired',
+  TELEGRAM_PAIRING_TIMEOUT: 'telegram:pairing-timeout',
+  TELEGRAM_PAIRING_WARNING: 'telegram:pairing-warning',
+
   // YOLO Mode channels
   YOLO_MODE_GET: 'yolo:get',
   YOLO_MODE_SET: 'yolo:set',

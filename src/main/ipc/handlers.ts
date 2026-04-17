@@ -537,6 +537,37 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return notificationManager.getRemoteControlStatus()
   })
 
+  // Telegram QR pairing
+  safeHandle(IPC_CHANNELS.TELEGRAM_START_PAIRING, async (_, { botToken }: { botToken: string }) => {
+    return notificationManager.startTelegramPairing(botToken)
+  })
+
+  safeHandle(IPC_CHANNELS.TELEGRAM_CANCEL_PAIRING, () => {
+    notificationManager.cancelTelegramPairing()
+    return true
+  })
+
+  safeHandle(IPC_CHANNELS.TELEGRAM_PAIRING_STATUS, () => {
+    return notificationManager.getTelegramPairingStatus()
+  })
+
+  // Mobile control (Phase-02 hook receiver)
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_GET_STATUS, () => {
+    return notificationManager.getMobileControlStatus()
+  })
+
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_ENABLE, () => {
+    return notificationManager.enableMobileControl()
+  })
+
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_DISABLE, () => {
+    return notificationManager.disableMobileControl()
+  })
+
+  safeHandle(IPC_CHANNELS.MOBILE_CONTROL_REGEN_SECRET, () => {
+    return notificationManager.regenerateMobileControlSecret()
+  })
+
   // Pass manager references for remote control
   notificationManager.setManagers(terminalManager, projectStore)
 

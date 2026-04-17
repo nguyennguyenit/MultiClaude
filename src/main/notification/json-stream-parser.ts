@@ -1,5 +1,11 @@
 import { EventEmitter } from 'events'
-import type { TaskEvent, JsonStreamEvent, NotificationEventType } from '@shared/types'
+import type {
+  TaskEvent,
+  JsonStreamEvent,
+  NotificationEventType,
+  AskUserQuestionPayload,
+  AskUserQuestionOption
+} from '@shared/types'
 import { generateTaskEventId } from './parser-utils'
 
 /**
@@ -57,8 +63,12 @@ export class JsonStreamParser extends EventEmitter {
 
     // Review needed: AskUserQuestion
     if (event.type === 'tool_use' && event.tool_name === 'AskUserQuestion') {
-      const question = (event.input as Record<string, unknown>)?.question as string || 'Input needed'
-      this.emitTaskEvent(terminalId, 'reviewNeeded', question, projectName)
+      const input = (event.input as Record<string, unknown>) || {}
+      const rawQuestion = typeof input.question === 'string' ? input.question : ''
+      const questionText = rawQuestion || 'Input needed'
+
+      const payload = this.buildQuestionPayload(input, questionText)
+      this.emitTaskEvent(terminalId, 'reviewNeeded', questionText, projectName, payload)
     }
 
     // Track model and duration from result events (like ccpoke does)
@@ -96,7 +106,42 @@ export class JsonStreamParser extends EventEmitter {
     return firstLine.slice(0, 100)
   }
 
-  private emitTaskEvent(terminalId: string, type: NotificationEventType, taskName: string, projectName: string): void {
+  private buildQuestionPayload(
+    input: Record<string, unknown>,
+    questionText: string
+  ): AskUserQuestionPayload | undefined {
+    const rawOptions = input.options
+    if (!Array.isArray(rawOptions)) return undefined
+
+    const options: AskUserQuestionOption[] = []
+    for (const raw of rawOptions) {
+      if (!raw || typeof raw !== 'object') continue
+      const o = raw as Record<string, unknown>
+      if (typeof o.label !== 'string' || o.label.length === 0) continue
+      const option: AskUserQuestionOption = { label: o.label }
+      if (typeof o.description === 'string') option.description = o.description
+      options.push(option)
+    }
+    if (options.length === 0) return undefined
+
+    const header = typeof input.header === 'string' ? input.header : undefined
+    const multiSelect = input.multiSelect === true
+
+    return {
+      text: questionText,
+      header,
+      multiSelect,
+      options
+    }
+  }
+
+  private emitTaskEvent(
+    terminalId: string,
+    type: NotificationEventType,
+    taskName: string,
+    projectName: string,
+    question?: AskUserQuestionPayload
+  ): void {
     const model = this.terminalModels.get(terminalId)
     const event: TaskEvent = {
       id: generateTaskEventId(terminalId, type, taskName),
@@ -108,6 +153,7 @@ export class JsonStreamParser extends EventEmitter {
       context: model ? `model: ${model}` : undefined,
       timestamp: Date.now()
     }
+    if (question) event.question = question
     this.emit('taskEvent', event)
   }
 

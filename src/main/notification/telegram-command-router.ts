@@ -4,6 +4,10 @@ import type { Project, Terminal } from '@shared/types'
 import { cleanTerminalOutput } from './terminal-output-cleaner'
 import { buildDetailSummary } from './terminal-summary-formatter'
 import { formatDetailMessage } from './detail-message-formatter'
+import { pendingQuestionStore } from './pending-question-store'
+import { pendingPermissionStore } from './pending-permission-store'
+import { callbackIdempotencyCache } from './callback-idempotency'
+import { callbackRateLimiter } from './callback-rate-limiter'
 
 const DEFAULT_TAIL_LINES = 20
 const ALLOWED_NEW_COMMANDS = ['claude', 'codex'] as const
@@ -27,6 +31,13 @@ export class TelegramCommandRouter {
   private sendReply: SendReply
 
   private pendingChat: { terminalId: string } | null = null
+
+  /**
+   * Optional hook invoked after a successful `toggle` — notification-manager wires
+   * this to refresh the inline keyboard via `editMessageReplyMarkup` so users see
+   * the ⚪/🔘 state flip on their phone.
+   */
+  onToggleEdit: ((terminalId: string) => void) | null = null
 
   constructor(
     terminalManager: TerminalManager,
@@ -324,11 +335,32 @@ export class TelegramCommandRouter {
   }
 
   async handleCallback(callbackId: string, data: string): Promise<void> {
+    // Idempotency: drop duplicate deliveries of the same callback_query.id.
+    if (callbackIdempotencyCache.seen(callbackId)) return
+
+    // Global rate limit: protect terminal-write path against flooding.
+    if (!callbackRateLimiter.tryAcquire()) {
+      await this.sendReply('⏳ Slow down — too many taps per second')
+      return
+    }
+
     const colonIdx = data.indexOf(':')
     if (colonIdx === -1) return
 
     const action = data.slice(0, colonIdx)
-    const terminalId = data.slice(colonIdx + 1)
+
+    if (action === 'answer') {
+      return this.handleAnswerCallback(data)
+    }
+    if (action === 'toggle') {
+      return this.handleToggleCallback(data)
+    }
+    if (action === 'submit') {
+      return this.handleSubmitCallback(data)
+    }
+    if (action === 'permit') {
+      return this.handlePermitCallback(data)
+    }
 
     if (action === 'tail') {
       // Support both legacy "tail:terminalId" and new "tail:eventType:terminalId"
@@ -343,6 +375,7 @@ export class TelegramCommandRouter {
         await this.handleTailById(rest)
       }
     } else if (action === 'chat' || action === 'reply') {
+      const terminalId = data.slice(colonIdx + 1)
       // Use all terminals (not scoped) — callback has exact terminalId, no ambiguity
       const terminals = this.terminalManager.list()
       let terminal = terminals.find(t => t.id === terminalId)
@@ -362,6 +395,164 @@ export class TelegramCommandRouter {
         `💬 *Terminal ${index}* \\(${this.esc(terminal.title)}\\) waiting for input\\.\nType a message \\(or /cancel\\):`
       )
     }
+  }
+
+  /**
+   * Parse `answer:<index>:<qid>:<terminalId>` (new form with qid, 4 segments) OR
+   * legacy `answer:<index>:<terminalId>` (3 segments, no qid).
+   * Returns parsed parts or null if malformed.
+   */
+  private parseIndexedCallback(data: string): {
+    index: number
+    questionId?: string
+    terminalId: string
+  } | null {
+    const parts = data.split(':')
+    if (parts.length < 3) return null
+    const index = Number(parts[1])
+    if (!Number.isInteger(index) || index < 0) return null
+
+    if (parts.length >= 4) {
+      const questionId = parts[2]
+      const terminalId = parts.slice(3).join(':')
+      return { index, questionId, terminalId }
+    }
+    const terminalId = parts.slice(2).join(':')
+    return { index, terminalId }
+  }
+
+  /**
+   * `permit:<permissionId>:<allow|deny>` — routes a PermissionRequest decision
+   * back to the hook-router's pending-permission-store. Phase-02 flow.
+   */
+  private async handlePermitCallback(data: string): Promise<void> {
+    const parts = data.split(':')
+    if (parts.length !== 3) return
+    const permissionId = parts[1]
+    const action = parts[2]
+    if (action !== 'allow' && action !== 'deny') return
+
+    const entry = pendingPermissionStore.get(permissionId)
+    if (!entry) {
+      await this.sendReply('⌛ Permission request expired or already answered\\.')
+      return
+    }
+    const decision = action === 'allow'
+      ? { behavior: 'allow' as const }
+      : { behavior: 'deny' as const, message: 'Denied from phone' }
+    const resolved = pendingPermissionStore.resolve(permissionId, decision)
+    if (!resolved) {
+      await this.sendReply('⌛ Permission request expired or already answered\\.')
+      return
+    }
+    const emoji = action === 'allow' ? '✅' : '🛑'
+    await this.sendReply(`${emoji} ${action === 'allow' ? 'Allowed' : 'Denied'} \\(${this.esc(entry.toolName)}\\)`)
+  }
+
+  private parseSubmitCallback(data: string): { questionId?: string; terminalId: string } | null {
+    // `submit:<qid>:<terminalId>` OR legacy `submit:<terminalId>`
+    const parts = data.split(':')
+    if (parts.length < 2) return null
+    if (parts.length >= 3) {
+      return { questionId: parts[1], terminalId: parts.slice(2).join(':') }
+    }
+    return { terminalId: parts.slice(1).join(':') }
+  }
+
+  private resolveQuestion(terminalId: string, questionId?: string) {
+    return questionId
+      ? pendingQuestionStore.getByQuestionId(terminalId, questionId)
+      : pendingQuestionStore.get(terminalId)
+  }
+
+  private async handleAnswerCallback(data: string): Promise<void> {
+    const parsed = this.parseIndexedCallback(data)
+    if (!parsed) return
+
+    const entry = this.resolveQuestion(parsed.terminalId, parsed.questionId)
+    if (!entry) {
+      await this.sendReply('⌛ Question expired or already answered\\.')
+      return
+    }
+
+    if (parsed.index >= entry.question.options.length) return
+    const label = entry.question.options[parsed.index].label
+
+    const terminal = this.findTerminalByIdOrSession(parsed.terminalId)
+    if (!terminal) {
+      await this.sendReply('⚠️ Terminal is closed\\. Cannot deliver answer\\.')
+      pendingQuestionStore.delete(parsed.terminalId)
+      return
+    }
+
+    const ok = this.terminalManager.write(terminal.id, label + '\r')
+    if (!ok) {
+      await this.sendReply(`Failed to write answer to terminal`)
+      return
+    }
+
+    pendingQuestionStore.delete(parsed.terminalId)
+    await this.sendReply(`✅ Sent: ${this.esc(label)}`)
+  }
+
+  private async handleToggleCallback(data: string): Promise<void> {
+    const parsed = this.parseIndexedCallback(data)
+    if (!parsed) return
+
+    const entry = this.resolveQuestion(parsed.terminalId, parsed.questionId)
+    if (!entry) {
+      await this.sendReply('⌛ Question expired or already answered\\.')
+      return
+    }
+    pendingQuestionStore.toggleSelection(parsed.terminalId, parsed.index)
+    // Note: keyboard edit (M1) is wired via onToggleEdit hook injected by notification-manager.
+    this.onToggleEdit?.(parsed.terminalId)
+  }
+
+  private async handleSubmitCallback(data: string): Promise<void> {
+    const parsed = this.parseSubmitCallback(data)
+    if (!parsed) return
+
+    const entry = this.resolveQuestion(parsed.terminalId, parsed.questionId)
+    if (!entry) {
+      await this.sendReply('⌛ Question expired or already answered\\.')
+      return
+    }
+
+    if (entry.selected.size === 0) {
+      await this.sendReply('ℹ️ Please select at least one option first\\.')
+      return
+    }
+
+    const labels = Array.from(entry.selected)
+      .sort((a, b) => a - b)
+      .map(i => entry.question.options[i]?.label)
+      .filter((l): l is string => typeof l === 'string')
+    const joined = labels.join(', ')
+
+    const terminal = this.findTerminalByIdOrSession(parsed.terminalId)
+    if (!terminal) {
+      await this.sendReply('⚠️ Terminal is closed\\. Cannot deliver answer\\.')
+      pendingQuestionStore.delete(parsed.terminalId)
+      return
+    }
+
+    const ok = this.terminalManager.write(terminal.id, joined + '\r')
+    if (!ok) {
+      await this.sendReply('Failed to write answer to terminal')
+      return
+    }
+
+    pendingQuestionStore.delete(parsed.terminalId)
+    await this.sendReply(`✅ Sent: ${this.esc(joined)}`)
+  }
+
+  private findTerminalByIdOrSession(idOrSession: string): Terminal | undefined {
+    const terminals = this.terminalManager.list()
+    return (
+      terminals.find(t => t.id === idOrSession) ??
+      terminals.find(t => t.claudeSessionId === idOrSession)
+    )
   }
 
   private async handleTailById(terminalId: string): Promise<void> {
