@@ -26,7 +26,7 @@ Built for developers who want the speed of Claude Code in a local terminal, but 
 - **Smart Terminal Rendering**: Three rendering modes (Performance/Balanced/Quality) with GPU controls and Claude-safe mode to optimize for speed or visual quality.
 - **Git + GitHub Inside the App**: Visual git status, staging, branches, stash, history, GitHub auth via `gh`, remote repo creation, plus issue and pull request views.
 - **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks.
-- **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths, clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
+- **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths with thumbnail preview strip (80×60 tiles), clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
 - **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal color palettes, and light/dark/system appearance without requiring a backend service.
 
 ## Ecosystem

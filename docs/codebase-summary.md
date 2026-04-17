@@ -76,8 +76,9 @@ Important behavior:
 
 - `TerminalGrid` keeps all project grids mounted and hides inactive ones
 - Each active group renders a `PaneTree` via `PaneTreeNode` — a recursive flex layout (tmux/iTerm-style binary split tree) replacing the legacy auto-grid
-- `TerminalPane` provides tab chrome, restore wiring, and action buttons
+- `TerminalPane` provides tab chrome, restore wiring, and action buttons; also mounts `AttachmentStrip` above the pane
 - `TerminalView` owns xterm lifecycle, focus, refresh, scroll tracking, and output processing
+- `AttachmentStrip` renders 80×60px thumbnail tiles for dropped images/videos, with filename tooltip and ✕ remove button
 
 This arrangement preserves terminal state across project switching without forcing unmount/remount churn.
 
@@ -155,6 +156,10 @@ Notable renderer files for the refactor:
 
 - settings persistence, provider configuration, test actions, active-terminal focus
 
+### Media
+
+- read-data-url — renderer requests size-capped thumbnail (80×60) as base64 data URL
+
 ### Other
 
 - settings get/set/reset
@@ -186,6 +191,17 @@ The output API remains as a compatibility facade:
 
 Those methods delegate to the plain terminal buffer module instead of storing output in Zustand.
 
+### Image Store
+
+`src/renderer/stores/image-store.ts` tracks per-terminal images and videos:
+
+- `addImage(terminalId, filePath, type)` — registers a dropped image/video
+- `getImages(terminalId)` — retrieves all entries for a terminal
+- `removeImage(terminalId, filePath)` — removes entry and returns it (used by attachment-strip remove button)
+- `clearImages(terminalId)` — clears all entries for a terminal (on Enter or Ctrl+C)
+
+Entries include `filePath`, `timestamp`, `type` ('image' | 'video'), and 1-based `index` per type for Claude Code [Image N] token generation.
+
 ### Settings Store
 
 The settings store uses a pending/saved split:
@@ -199,7 +215,6 @@ The settings store uses a pending/saved split:
 - `notification-store.ts` handles notification preferences and sound state
 - `update-store.ts` tracks update state
 - `toast-store.ts` queues UI toasts
-- `image-store.ts` tracks pasted and detected images for terminal previews
 
 ## Dependencies
 

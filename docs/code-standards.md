@@ -376,6 +376,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 - `cancel()`: Reverts pendingSettings to savedSettings
 - Main process validates all settings before persistence (validation firewall)
 
+### Attachment Strip Pattern (v3.1.1+)
+
+**Image/Video Thumbnail Strip**: Dropped images/videos display as 80×60px tiles above each terminal pane with ✕ remove buttons.
+
+**Store Integration:**
+- `image-store.ts`: Per-terminal image/video registry with `removeImage(terminalId, filePath)` method
+- `pending-media-store.ts`: Token queue for non-Claude mode; `removeTokenByPath()` for synchronization
+
+**Removal Handler:**
+- Non-Claude mode: Removes from image store, pending-media queue, and xterm display (if still trailing input)
+- Claude mode: Removes only from strip (cannot rewrite Claude Code's internal buffer)
+- Pattern: Mode-aware dispatch via `handleAttachmentRemove()` utility in `src/renderer/utils/attachment-remove-handler.ts`
+
 ### Pane Tree Store Pattern (v3.3.0)
 
 **Binary Split Tree Layout**: Terminals are organized in a recursive binary tree where each node is either a leaf (terminal) or a split container (vertical/horizontal).

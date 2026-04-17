@@ -22,6 +22,9 @@ export interface OnDataHandlerOptions {
   writeDisplay: (text: string) => void
   followLiveOutput: () => void
   pending: PendingMediaOps
+  // Called when pending paths were actually flushed into the PTY on Enter.
+  // Consumer uses this to clear the attachment strip after submit.
+  onFlushed?: (terminalId: string) => void
 }
 
 /**
@@ -33,7 +36,8 @@ export function createOnDataHandler({
   write,
   writeDisplay,
   followLiveOutput,
-  pending
+  pending,
+  onFlushed
 }: OnDataHandlerOptions): (data: string) => void {
   return (data: string) => {
     followLiveOutput()
@@ -79,6 +83,7 @@ export function createOnDataHandler({
           if (paths.length > 0) {
             const prefix = part ? ' ' : ''
             write(terminalId, prefix + joinPathsForTerminal(paths))
+            onFlushed?.(terminalId)
           }
           write(terminalId, '\r')
         }

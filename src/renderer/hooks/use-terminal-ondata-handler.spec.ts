@@ -12,6 +12,7 @@ describe('createOnDataHandler', () => {
   let decrementCharsAfter: ReturnType<typeof vi.fn>
   let incrementCharsAfter: ReturnType<typeof vi.fn>
   let popToken: ReturnType<typeof vi.fn>
+  let onFlushed: ReturnType<typeof vi.fn>
   let handler: (data: string) => void
 
   beforeEach(() => {
@@ -24,6 +25,7 @@ describe('createOnDataHandler', () => {
     decrementCharsAfter = vi.fn(() => false)
     incrementCharsAfter = vi.fn()
     popToken = vi.fn(() => null)
+    onFlushed = vi.fn()
 
     handler = createOnDataHandler({
       terminalId,
@@ -37,7 +39,8 @@ describe('createOnDataHandler', () => {
         decrementCharsAfter: decrementCharsAfter as unknown as (id: string) => boolean,
         incrementCharsAfter: incrementCharsAfter as unknown as (id: string) => void,
         popToken: popToken as unknown as OnDataHandlerOptions['pending']['popToken']
-      }
+      },
+      onFlushed: onFlushed as unknown as (id: string) => void
     })
   })
 
@@ -53,6 +56,17 @@ describe('createOnDataHandler', () => {
       handler('\r')
       expect(write).toHaveBeenCalledOnce()
       expect(write).toHaveBeenCalledWith(terminalId, '\r')
+    })
+
+    it('invokes onFlushed when paths were flushed on Enter', () => {
+      flush.mockReturnValue(['/a.png'])
+      handler('\r')
+      expect(onFlushed).toHaveBeenCalledWith(terminalId)
+    })
+
+    it('does not invoke onFlushed when no paths were flushed', () => {
+      handler('\r')
+      expect(onFlushed).not.toHaveBeenCalled()
     })
 
     it('handles \\r in multi-char paste data', () => {

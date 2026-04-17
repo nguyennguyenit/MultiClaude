@@ -125,6 +125,7 @@ export const IPC_CHANNELS = {
 
   // Media channels (unified image + video)
   MEDIA_OPEN: 'media:open',
+  MEDIA_READ_DATA_URL: 'media:read-data-url',
 
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',

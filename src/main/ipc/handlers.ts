@@ -13,6 +13,7 @@ import type { NotificationManager } from '../notification'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
 import { detectWsl } from '../terminal/wsl-detector'
 import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
+import { readMediaDataUrl } from './media-read-data-url-handler'
 
 interface Managers {
   terminalManager: TerminalManager
@@ -674,6 +675,11 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       return true
     }
     return false
+  })
+
+  // Thumbnail data URL for DOM rendering (attachment strip)
+  safeHandle(IPC_CHANNELS.MEDIA_READ_DATA_URL, (_, filePath: string) => {
+    return readMediaDataUrl(filePath)
   })
 
   // List screenshot files sorted by modification time (newest first)

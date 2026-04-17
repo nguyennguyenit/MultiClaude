@@ -1,8 +1,11 @@
 import { useEffect, useRef, useCallback, memo, useState, useMemo } from 'react'
 import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
+import { AttachmentStrip } from './attachment-strip'
 import { useFileDrop } from '../../hooks/use-file-drop'
 import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
 import { useAppStore } from '../../stores'
+import { handleAttachmentRemove } from '../../utils/attachment-remove-handler'
+import type { ImageEntry } from '../../stores/image-store'
 import { AGENT_BADGE_COLORS, AGENT_BADGE_TEXT, AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
 import type { AgentType } from '@shared/types'
 
@@ -119,6 +122,13 @@ export const TerminalPane = memo(function TerminalPane({
       onTitleChange?.(editTitle)
     }
   }, [editTitle, title, onTitleChange])
+
+  const handleAttachmentRemoveClick = useCallback(
+    (filePath: string, entry: ImageEntry) => {
+      handleAttachmentRemove({ terminalId, filePath, entry, isClaudeMode })
+    },
+    [terminalId, isClaudeMode]
+  )
 
   return (
     <div
@@ -259,6 +269,9 @@ export const TerminalPane = memo(function TerminalPane({
           </div>
         </div>
       </div>
+
+      {/* Attachment thumbnail strip — hidden when no entries */}
+      <AttachmentStrip terminalId={terminalId} onRemove={handleAttachmentRemoveClick} />
 
       {/* Terminal content - takes remaining space */}
       <div style={{ flex: 1, minHeight: 0 }}>

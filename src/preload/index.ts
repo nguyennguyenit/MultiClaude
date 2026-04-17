@@ -163,6 +163,7 @@ export interface ElectronAPI {
   }
   media: {
     open: (filePath: string) => Promise<boolean>
+    readDataUrl: (filePath: string) => Promise<string | null>
   }
   filePicker: {
     open: () => Promise<string[] | null>
@@ -386,7 +387,8 @@ const api: ElectronAPI = {
     listScreenshots: () => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS)
   },
   media: {
-    open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_OPEN, filePath)
+    open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_OPEN, filePath),
+    readDataUrl: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_READ_DATA_URL, filePath)
   },
   filePicker: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)

@@ -59,11 +59,14 @@ src/renderer/
 │       ├── terminal-pane.tsx             # Pane chrome and restore wiring
 │       ├── terminal-view.tsx             # xterm.js host and handler registration
 │       ├── terminal-output-handler.ts    # Chunk processing for visible output
-│       └── terminal-output-buffer.ts     # Non-reactive scrollback buffer module
+│       ├── terminal-output-buffer.ts     # Non-reactive scrollback buffer module
+│       ├── attachment-strip.tsx          # Horizontal thumbnail strip (80×60 tiles) above pane
+│       └── attachment-remove-handler.ts  # Remove button logic: clears strip (Claude mode) or pops pending-media + backspace (non-Claude)
 ├── stores/
 │   ├── app-store.ts                      # Projects, terminals, UI state, buffer facade
 │   ├── context-menu-store.ts             # Open/close state for themed context menu
 │   ├── pane-tree-store.ts                # Per-project pane trees, debounced IPC persist
+│   ├── image-store.ts                    # Per-terminal image/video entries with removeImage() method
 │   ├── settings-store.ts                 # Pending/saved settings flow
 │   ├── notification-store.ts             # Notification settings state
 │   ├── update-store.ts                   # Update state
@@ -153,6 +156,10 @@ Important current behavior:
 The renderer now uses `terminal:output` through the shared App-level subscription only. Individual terminal views no longer subscribe directly to IPC.
 
 The legacy `terminal:show-context-menu` channel has been removed; right-click is handled by a themed React Portal menu reading CSS variables from the active theme.
+
+### Media Channel
+
+- `media:read-data-url` — Renderer requests a size-capped base64 data URL for an image/video file. Main process uses Electron `nativeImage.createFromPath().resize()` to resize to 80×60px; returns data URL or `null` on error (e.g., unsupported format, file deleted). Includes SVG fallback for missing thumbnails.
 
 ### Other Channel Families
 

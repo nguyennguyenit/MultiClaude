@@ -66,4 +66,24 @@ describe('usePendingMediaStore', () => {
     usePendingMediaStore.getState().clear('t2')
     expect(usePendingMediaStore.getState().getQueue('t1').tokens).toHaveLength(1)
   })
+
+  it('removeTokenByPath returns null when queue empty', () => {
+    expect(usePendingMediaStore.getState().removeTokenByPath('t1', '/foo.png')).toBeNull()
+  })
+
+  it('removeTokenByPath returns null when path not found', () => {
+    usePendingMediaStore.getState().push('t1', TOKEN)
+    expect(usePendingMediaStore.getState().removeTokenByPath('t1', '/missing.png')).toBeNull()
+    expect(usePendingMediaStore.getState().getQueue('t1').tokens).toHaveLength(1)
+  })
+
+  it('removeTokenByPath removes first matching token and returns it', () => {
+    usePendingMediaStore.getState().push('t1', { path: '/a.png', displayLength: 9 })
+    usePendingMediaStore.getState().push('t1', { path: '/b.mp4', displayLength: 9 })
+    usePendingMediaStore.getState().push('t1', { path: '/a.png', displayLength: 9 })
+    const removed = usePendingMediaStore.getState().removeTokenByPath('t1', '/a.png')
+    expect(removed?.path).toBe('/a.png')
+    const remaining = usePendingMediaStore.getState().getQueue('t1').tokens.map((t) => t.path)
+    expect(remaining).toEqual(['/b.mp4', '/a.png'])
+  })
 })

@@ -18,6 +18,10 @@ interface PendingMediaState {
   incrementCharsAfter: (terminalId: string) => void
   decrementCharsAfter: (terminalId: string) => boolean
   popToken: (terminalId: string) => PendingToken | null
+  // Removes the first token whose `path` matches. Does NOT touch
+  // charsAfterLastToken — caller (attachment-remove-handler) decides whether
+  // the xterm display can be safely erased.
+  removeTokenByPath: (terminalId: string, path: string) => PendingToken | null
   getQueue: (terminalId: string) => TerminalQueue
 }
 
@@ -78,6 +82,17 @@ export const usePendingMediaStore = create<PendingMediaState>((set, get) => ({
     const token = tokens.pop()!
     set((state) => ({ queues: { ...state.queues, [terminalId]: { ...q, tokens } } }))
     return token
+  },
+
+  removeTokenByPath: (terminalId, path) => {
+    const q = get().queues[terminalId]
+    if (!q?.tokens.length) return null
+    const idx = q.tokens.findIndex((t) => t.path === path)
+    if (idx === -1) return null
+    const removed = q.tokens[idx]
+    const tokens = [...q.tokens.slice(0, idx), ...q.tokens.slice(idx + 1)]
+    set((state) => ({ queues: { ...state.queues, [terminalId]: { ...q, tokens } } }))
+    return removed
   },
 
   getQueue: (terminalId) => get().queues[terminalId] ?? emptyQueue()

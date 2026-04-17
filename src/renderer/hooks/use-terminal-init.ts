@@ -29,7 +29,7 @@ import {
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
 import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
-import { useSettingsStore, useToastStore, usePendingMediaStore } from '../stores'
+import { useSettingsStore, useToastStore, usePendingMediaStore, useImageStore } from '../stores'
 import { registerDisplayWriter, writeToDisplay } from '../stores/display-writer-registry'
 import { createOnDataHandler } from './use-terminal-ondata-handler'
 import { joinPathsForTerminal } from '../utils/terminal-path-utils'
@@ -351,7 +351,8 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         decrementCharsAfter: (id) => usePendingMediaStore.getState().decrementCharsAfter(id),
         incrementCharsAfter: (id) => usePendingMediaStore.getState().incrementCharsAfter(id),
         popToken: (id) => usePendingMediaStore.getState().popToken(id)
-      }
+      },
+      onFlushed: (id) => useImageStore.getState().clearImages(id)
     })
 
     terminal.onData((data) => {
@@ -376,6 +377,15 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       }
 
       baseHandler(data)
+
+      // Keep the attachment strip in sync with inputs that clear the prompt:
+      // - Enter (both Claude & non-Claude modes — handles Claude case where
+      //   pending queue is empty and onFlushed never fires).
+      // - Ctrl+C cancels the in-progress input, so the strip must follow.
+      const shouldSyncStrip = data === '\r' || data === '\x03'
+      if (shouldSyncStrip && useImageStore.getState().getImages(terminalId).length > 0) {
+        useImageStore.getState().clearImages(terminalId)
+      }
     })
 
     // ── Resize handler ───────────────────────────────────────────────────────
