@@ -70,7 +70,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
       <div className="h-[320px] overflow-y-auto">
         {activeTab === 'appearance' && <ThemeSelector />}
         {activeTab === 'terminals' && <TerminalSettings />}
-        {activeTab === 'notifications' && <NotificationSettings />}
+        {activeTab === 'notifications' && (
+          <NotificationSettings onNavigateToMobile={() => setActiveTab('mobile-control')} />
+        )}
         {activeTab === 'mobile-control' && <MobileControlSettings />}
         {activeTab === 'updates' && <UpdateSettings />}
       </div>

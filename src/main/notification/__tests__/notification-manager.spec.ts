@@ -104,4 +104,55 @@ describe('NotificationManager', () => {
 
     manager.destroy()
   })
+
+  // Runtime toggle contract for mobileControlEnabled:
+  // - When enabled: text-pattern `reviewNeeded` events coming out of the
+  //   OutputParser MUST be hard-dropped before handleTaskEvent fires.
+  // - When disabled: events pass through.
+  // Cast via `as unknown as ...` because the flag and parser are private;
+  // the guard lives at notification-manager.ts (~line 95-104) and must stay
+  // responsive to runtime enable/disable/re-enable toggles.
+  it('respects mobileControlEnabled runtime toggle for text-pattern reviewNeeded events', () => {
+    const terminalManager = {
+      findByClaudeSessionId: vi.fn(),
+      attachClaudeSession: vi.fn(),
+      get: vi.fn().mockReturnValue({ title: 'Terminal 1' })
+    }
+
+    const manager = new NotificationManager()
+    manager.setManagers(terminalManager as never, {} as never)
+
+    const internals = manager as unknown as {
+      parser: EventEmitter
+      mobileControlEnabled: boolean
+      handleTaskEvent: (event: unknown) => void
+    }
+    const handler = vi.spyOn(internals, 'handleTaskEvent').mockImplementation(() => {})
+
+    const makeEvent = (id: string) => ({
+      id,
+      terminalId: 'term-1',
+      type: 'reviewNeeded' as const,
+      taskName: 'bash requires approval',
+      projectName: 'MultiClaude',
+      timestamp: Date.now()
+    })
+
+    // Enable → suppressed
+    internals.mobileControlEnabled = true
+    internals.parser.emit('taskEvent', makeEvent('evt-1'))
+    expect(handler).not.toHaveBeenCalled()
+
+    // Disable → passes through
+    internals.mobileControlEnabled = false
+    internals.parser.emit('taskEvent', makeEvent('evt-2'))
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    // Re-enable → suppressed again (no additional calls)
+    internals.mobileControlEnabled = true
+    internals.parser.emit('taskEvent', makeEvent('evt-3'))
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    manager.destroy()
+  })
 })

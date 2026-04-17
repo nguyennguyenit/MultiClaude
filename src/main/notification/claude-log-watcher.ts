@@ -25,6 +25,11 @@ interface TrackedFile {
  * Watches Claude Code JSONL transcript files under ~/.claude/projects/.
  * Emits 'taskEvent' when Claude finishes a turn and is waiting for user input.
  *
+ * Immune to PTY redraw / SIGWINCH / resize noise — JSONL transcript is watched
+ * at the file level and only processes newly appended bytes. Terminal resize
+ * does not write anything to the transcript, so this path cannot false-trigger
+ * on redraws (unlike the PTY-output text-pattern path in plain-text-parser.ts).
+ *
  * Workflow:
  *  1. `register(cwd)` → watches ~/.claude/projects/<hash>/ for new .jsonl files
  *  2. On new/changed .jsonl: reads only newly appended bytes (byte-offset tracking)
