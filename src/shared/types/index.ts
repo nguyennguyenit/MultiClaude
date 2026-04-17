@@ -264,6 +264,12 @@ export interface AppSettings {
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   gpuRendererForClaudeTerminals?: boolean
+  /**
+   * Number of lines xterm.js keeps in the scrollback buffer.
+   * Higher values let the user scroll further back but use more memory
+   * (~1–2KB per line). Range: 1000–200000. Default: 20000.
+   */
+  scrollbackLines?: number
   glassmorphismEnabled: boolean
   // Terminal content font family (xterm)
   terminalFontFamily: TerminalFontId

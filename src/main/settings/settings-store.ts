@@ -1,6 +1,6 @@
 import Store from 'electron-store'
 import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode, UiStyle, TerminalColorPreset, TerminalFontId, AppFontId } from '@shared/types'
-import { DEFAULT_SETTINGS } from '@shared/constants'
+import { DEFAULT_SETTINGS, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 
 interface StoreSchema {
   settings: AppSettings
@@ -49,6 +49,17 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
       typeof settings.gpuRendererForClaudeTerminals === 'boolean'
         ? settings.gpuRendererForClaudeTerminals
         : defaults.gpuRendererForClaudeTerminals
+  }
+
+  // Validate scrollbackLines (clamp to allowed range; fall back to default on non-numeric input)
+  if (settings.scrollbackLines !== undefined) {
+    const raw = settings.scrollbackLines
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const clamped = Math.min(SCROLLBACK_MAX, Math.max(SCROLLBACK_MIN, Math.floor(raw)))
+      validated.scrollbackLines = clamped
+    } else {
+      validated.scrollbackLines = defaults.scrollbackLines
+    }
   }
 
   // Validate glassmorphismEnabled

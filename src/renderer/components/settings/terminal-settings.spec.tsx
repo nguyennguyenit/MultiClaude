@@ -50,4 +50,19 @@ describe('TerminalSettings', () => {
       disabled: true
     })
   })
+
+  it('renders the Scrollback Lines card with the default value badge', () => {
+    const html = renderToStaticMarkup(<TerminalSettings />)
+
+    expect(html).toContain('Scrollback Lines')
+    expect(html).toContain('20k lines')
+    expect(html).toContain('5k')
+    expect(html).toContain('100k')
+    expect(html).toContain('Custom')
+  })
+
+  // NOTE: zustand store updates don't reflect in renderToStaticMarkup SSR output
+  // in this project's current test setup, so assertions that depend on a
+  // mutated store slice cannot be verified here. The setScrollbackLines reducer
+  // itself is covered in src/renderer/stores/settings-store.spec.ts.
 })

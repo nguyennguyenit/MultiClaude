@@ -1,4 +1,5 @@
 import type { ColorThemeDefinition, AppSettings, TerminalColorPreset, TerminalFontId, AppFontId } from '../types'
+import { SCROLLBACK_DEFAULT } from './terminal'
 
 // ============================================
 // VibeTerminal Theme System
@@ -323,6 +324,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminalLimit: { preset: 9 },
   terminalRenderMode: 'balanced',
   gpuRendererForClaudeTerminals: false,
+  scrollbackLines: SCROLLBACK_DEFAULT,
   glassmorphismEnabled: false,
   terminalFontFamily: 'jetbrains-mono',
   windowsShell: { type: 'cmd' },

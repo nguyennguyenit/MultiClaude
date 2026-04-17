@@ -53,6 +53,7 @@ interface SettingsState {
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setGpuRendererForClaudeTerminals: (enabled: boolean) => void
+  setScrollbackLines: (lines: number) => void
   setWindowsShell: (shell: WindowsShell) => void
   setDefaultShell: (shell: ShellInfo | null) => Promise<void>
   setUiStyle: (style: UiStyle) => void
@@ -83,6 +84,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.colorTheme !== b.colorTheme) return false
   if (a.terminalRenderMode !== b.terminalRenderMode) return false
   if (a.gpuRendererForClaudeTerminals !== b.gpuRendererForClaudeTerminals) return false
+  if (a.scrollbackLines !== b.scrollbackLines) return false
   if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
   if (a.uiStyle !== b.uiStyle) return false
   if (a.modernFontFamily !== b.modernFontFamily) return false
@@ -174,6 +176,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setGpuRendererForClaudeTerminals: (enabled) => {
     const pending = { ...get().pendingSettings, gpuRendererForClaudeTerminals: enabled }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setScrollbackLines: (lines) => {
+    const pending = { ...get().pendingSettings, scrollbackLines: lines }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

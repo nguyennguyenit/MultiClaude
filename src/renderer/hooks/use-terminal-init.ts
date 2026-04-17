@@ -33,7 +33,7 @@ import { useSettingsStore, useToastStore, usePendingMediaStore } from '../stores
 import { registerDisplayWriter, writeToDisplay } from '../stores/display-writer-registry'
 import { createOnDataHandler } from './use-terminal-ondata-handler'
 import { joinPathsForTerminal } from '../utils/terminal-path-utils'
-import { getTerminalFontFamilyById, isAllowedExternalUrl } from '@shared/constants'
+import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
 import { getCurrentTerminalTheme } from './use-terminal-font-theme'
@@ -42,6 +42,13 @@ const TERMINAL_INIT_DELAY = 50         // ms after terminal.open() before loadin
 const TERMINAL_MIN_CONTRAST_RATIO = 2.0
 const USER_SCROLL_WHEEL_GRACE = 180    // ms wheel-scroll intent grace period
 const USER_SCROLL_DRAG_GRACE = 1200   // ms scrollbar-drag intent grace period
+
+// Clamp scrollback to the allowed range; fall back to default when value is
+// missing/corrupted so a stale stored setting can never disable scrollback.
+export function clampScrollback(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return SCROLLBACK_DEFAULT
+  return Math.min(SCROLLBACK_MAX, Math.max(SCROLLBACK_MIN, Math.floor(value)))
+}
 
 interface ViewportEventListener {
   target: EventTarget
@@ -141,7 +148,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       minimumContrastRatio: TERMINAL_MIN_CONTRAST_RATIO,
       allowProposedApi: true,
       convertEol: false,
-      scrollback: 5000,
+      scrollback: clampScrollback(useSettingsStore.getState().pendingSettings.scrollbackLines),
       reflowCursorLine: true,   // v6: include cursor line in reflow on resize
       // OSC 8 hyperlinks: CLIs (e.g. Claude Code) emit explicit hyperlink metadata
       // that survives line-wrapping. Without this handler, clicks fall back to

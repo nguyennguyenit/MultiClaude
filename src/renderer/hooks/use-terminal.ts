@@ -17,6 +17,7 @@ import { useTerminalKeyboard } from './use-terminal-keyboard'
 import { useTerminalClipboard } from './use-terminal-clipboard'
 import { useTerminalVisibility } from './use-terminal-visibility'
 import { useTerminalInit } from './use-terminal-init'
+import { useTerminalScrollback } from './use-terminal-scrollback'
 import { useTerminalScroll } from './use-terminal-scroll'
 import { useTerminalFit } from './use-terminal-fit'
 import { useTerminalDebug } from './use-terminal-debug'
@@ -115,6 +116,8 @@ export function useTerminal({
     terminalRef, disposedRef, isActive, isHidden, prevHiddenRef, isActiveRef,
     webglLoadingRef, scrollMachineRef, performFit, reconcileWebGL, clearTextureAtlas,
   })
+
+  useTerminalScrollback({ terminalRef, disposedRef })
 
   const { initTerminal } = useTerminalInit({
     terminalRef, fitAddonRef, disposedRef, containerRef, terminalId,

@@ -52,4 +52,12 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().pendingSettings.defaultShell).toEqual(zsh)
     expect(useSettingsStore.getState().settings.defaultShell).toEqual(zsh)
   })
+
+  it('marks settings as unsaved when scrollbackLines is changed', () => {
+    useSettingsStore.getState().setScrollbackLines(50_000)
+
+    expect(useSettingsStore.getState().pendingSettings.scrollbackLines).toBe(50_000)
+    expect(useSettingsStore.getState().settings.scrollbackLines).toBe(50_000)
+    expect(useSettingsStore.getState().hasUnsavedChanges).toBe(true)
+  })
 })

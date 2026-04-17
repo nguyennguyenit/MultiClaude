@@ -2,8 +2,14 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
 import { getShellKey } from '../../utils'
 import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
+import { SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX, SCROLLBACK_PRESETS } from '@shared/constants'
 import { SettingsTitle } from './settings-typography'
 import { ToggleSwitch } from './toggle-switch'
+
+function formatScrollback(value: number): string {
+  if (value >= 1000) return `${Math.round(value / 1000)}k`
+  return `${value}`
+}
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 2, label: '2' },
@@ -70,9 +76,20 @@ export function TerminalSettings() {
     setTerminalLimit,
     setTerminalRenderMode,
     setGpuRendererForClaudeTerminals,
+    setScrollbackLines,
     setWindowsShell
   } = useSettingsStore()
   const { terminalLimit } = pendingSettings
+  const scrollbackLines = pendingSettings.scrollbackLines ?? SCROLLBACK_DEFAULT
+  const isScrollbackPreset = (SCROLLBACK_PRESETS as readonly number[]).includes(scrollbackLines)
+  const [customScrollback, setCustomScrollback] = useState(
+    isScrollbackPreset ? SCROLLBACK_DEFAULT : scrollbackLines
+  )
+
+  // Keep custom input in sync if user enters a non-preset value via external save
+  useEffect(() => {
+    if (!isScrollbackPreset) setCustomScrollback(scrollbackLines)
+  }, [scrollbackLines, isScrollbackPreset])
 
   const [customValue, setCustomValue] = useState(
     terminalLimit.preset === 'custom' ? (terminalLimit.customValue ?? 9) : 9
@@ -84,6 +101,18 @@ export function TerminalSettings() {
       setCustomValue(terminalLimit.customValue)
     }
   }, [terminalLimit])
+
+  const handleScrollbackPreset = (value: number) => {
+    setScrollbackLines(value)
+  }
+
+  const handleScrollbackCustom = (raw: string) => {
+    const num = parseInt(raw, 10)
+    if (!Number.isFinite(num)) return
+    const clamped = Math.min(SCROLLBACK_MAX, Math.max(SCROLLBACK_MIN, num))
+    setCustomScrollback(clamped)
+    setScrollbackLines(clamped)
+  }
 
   const handlePresetChange = (preset: TerminalLimitPreset) => {
     if (preset === 'custom') {
@@ -289,6 +318,75 @@ export function TerminalSettings() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Scrollback Lines */}
+      <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
+              Scrollback Lines
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-1">
+              How far back you can scroll in each terminal. Higher values use more memory (~1–2KB per line).
+            </p>
+          </div>
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30">
+            {formatScrollback(scrollbackLines)} lines
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {SCROLLBACK_PRESETS.map((preset) => {
+            const isSelected = scrollbackLines === preset
+            return (
+              <button
+                key={preset}
+                onClick={() => handleScrollbackPreset(preset)}
+                className={`
+                  relative flex items-center justify-center px-5 py-2.5 rounded-lg text-sm font-semibold min-w-[4rem]
+                  transition-all duration-200
+                  ${isSelected
+                    ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] shadow-lg shadow-[var(--mc-accent)]/30 scale-105'
+                    : 'bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)] border border-transparent hover:border-[var(--mc-accent)]/30'}
+                `}
+              >
+                {formatScrollback(preset)}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => handleScrollbackPreset(customScrollback)}
+            className={`
+              relative flex items-center justify-center px-5 py-2.5 rounded-lg text-sm font-semibold min-w-[4rem]
+              transition-all duration-200
+              ${!isScrollbackPreset
+                ? 'bg-[var(--mc-accent)] text-[var(--mc-bg-primary)] shadow-lg shadow-[var(--mc-accent)]/30 scale-105'
+                : 'bg-[var(--mc-bg-hover)] hover:bg-[var(--mc-bg-active)] text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)] border border-transparent hover:border-[var(--mc-accent)]/30'}
+            `}
+          >
+            Custom
+          </button>
+        </div>
+
+        {!isScrollbackPreset && (
+          <div className="flex items-center gap-3 pt-1">
+            <span className="text-xs text-[var(--mc-text-muted)] uppercase tracking-wide">Custom lines</span>
+            <input
+              type="number"
+              min={SCROLLBACK_MIN}
+              max={SCROLLBACK_MAX}
+              step={1000}
+              value={customScrollback}
+              onChange={(e) => handleScrollbackCustom(e.target.value)}
+              className="w-28 px-3 py-1.5 text-sm rounded-lg
+                bg-[var(--mc-bg-primary)] border border-[var(--mc-accent)]/40
+                text-[var(--mc-text-primary)] font-semibold
+                focus:outline-none focus:ring-2 focus:ring-[var(--mc-accent)]/50 focus:border-[var(--mc-accent)]"
+              placeholder={`${SCROLLBACK_MIN}–${SCROLLBACK_MAX}`}
+            />
+          </div>
+        )}
       </div>
 
     </div>
