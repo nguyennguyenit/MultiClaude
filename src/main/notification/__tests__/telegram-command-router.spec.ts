@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TelegramCommandRouter } from '../telegram-command-router'
+import { callbackIdempotencyCache } from '../callback-idempotency'
+import { callbackRateLimiter } from '../callback-rate-limiter'
 import type { Terminal, Project } from '@shared/types'
 import type { TerminalManager } from '../../terminal/terminal-manager'
 import type { ProjectStore } from '../../project/project-store'
@@ -27,6 +29,8 @@ describe('TelegramCommandRouter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    callbackIdempotencyCache.reset()
+    callbackRateLimiter.reset()
     mockSendReply.mockResolvedValue(true)
     mockTerminalManager.create.mockReturnValue({
       id: 'new-term-id',
