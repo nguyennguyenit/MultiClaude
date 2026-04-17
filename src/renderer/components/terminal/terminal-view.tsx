@@ -10,7 +10,9 @@ import { registerTerminalOutputHandler } from '../../utils/terminal-output-dispa
 function findImagePathAtColumn(lineText: string, col: number, terminalId: string): { start: number; end: number } | null {
   const matches: { start: number; end: number }[] = []
 
-  // Check [Image #X] Claude refs + [Image N] / [Video N] input tokens
+  // Claude Code reference tokens: [Image #N] for screenshots it auto-attaches,
+  // plus legacy [Image N] / [Video N] tokens that still appear in restored
+  // terminal buffers from older sessions.
   const tokenRegex = /\[(?:Image(?:\s#)?|Video)\s\d+\]/g
   let match
   while ((match = tokenRegex.exec(lineText)) !== null) {

@@ -1,8 +1,5 @@
 import type { Terminal as XTerm } from '@xterm/xterm'
-import { useAppStore, useImageStore, usePendingMediaStore } from '../stores'
-import { writeToDisplay } from '../stores/display-writer-registry'
-import { buildMediaToken } from './media-classifier'
-import { formatPathForTerminal } from './terminal-path-utils'
+import { insertFilePathsIntoTerminal } from './insert-file-paths'
 
 /** Chunk size for text pastes. Beyond this, writes are split and yielded
  *  between so other IPC traffic (terminal output, resize, etc.) can interleave. */
@@ -41,20 +38,7 @@ async function tryPasteImage(
       if (!filePath) return true
 
       onBeforeWrite?.()
-      const terminal = useAppStore.getState().terminals.find((t) => t.id === terminalId)
-      const isClaudeMode = terminal?.isClaudeMode ?? false
-      const entry = useImageStore.getState().addImage(terminalId, filePath, 'image')
-
-      if (isClaudeMode) {
-        window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
-      } else {
-        const token = buildMediaToken('image', entry.index)
-        usePendingMediaStore.getState().push(terminalId, {
-          path: filePath,
-          displayLength: token.length
-        })
-        writeToDisplay(terminalId, token + ' ')
-      }
+      insertFilePathsIntoTerminal(terminalId, [filePath])
       return true
     } catch (err) {
       console.error('Failed to process clipboard image:', err)

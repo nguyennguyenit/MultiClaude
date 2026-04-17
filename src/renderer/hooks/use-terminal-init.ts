@@ -29,10 +29,7 @@ import {
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
 import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
-import { useSettingsStore, useToastStore, usePendingMediaStore, useImageStore } from '../stores'
-import { registerDisplayWriter, writeToDisplay } from '../stores/display-writer-registry'
-import { createOnDataHandler } from './use-terminal-ondata-handler'
-import { joinPathsForTerminal } from '../utils/terminal-path-utils'
+import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
@@ -49,6 +46,7 @@ export function clampScrollback(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return SCROLLBACK_DEFAULT
   return Math.min(SCROLLBACK_MAX, Math.max(SCROLLBACK_MIN, Math.floor(value)))
 }
+
 
 interface ViewportEventListener {
   target: EventTarget
@@ -264,9 +262,6 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     fitAddonRef.current = fitAddon
     registerTerminalDebugHandle()
 
-    // Register display writer so renderer-side media tokens can be written to xterm display
-    registerDisplayWriter(terminalId, (text) => terminal.write(text))
-
     // ── Clipboard listeners ──────────────────────────────────────────────────
     attachClipboardListeners(terminal)
 
@@ -318,10 +313,6 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         if (sequence) {
           e.preventDefault()
           followLiveOutput()
-          const paths = usePendingMediaStore.getState().flush(terminalId)
-          if (paths.length > 0) {
-            window.electron.terminal.write(terminalId, joinPathsForTerminal(paths))
-          }
           window.electron.terminal.write(terminalId, sequence)
           return false
         }
@@ -339,30 +330,16 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     // and swallow extra DELs from the IME.
     let imeDelDebt = 0
 
-    const baseHandler = createOnDataHandler({
-      terminalId,
-      write: (id, data) => window.electron.terminal.write(id, data),
-      writeDisplay: (text) => writeToDisplay(terminalId, text),
-      followLiveOutput,
-      pending: {
-        flush: (id) => usePendingMediaStore.getState().flush(id),
-        clear: (id) => usePendingMediaStore.getState().clear(id),
-        getQueue: (id) => usePendingMediaStore.getState().getQueue(id),
-        decrementCharsAfter: (id) => usePendingMediaStore.getState().decrementCharsAfter(id),
-        incrementCharsAfter: (id) => usePendingMediaStore.getState().incrementCharsAfter(id),
-        popToken: (id) => usePendingMediaStore.getState().popToken(id)
-      },
-      onFlushed: (id) => useImageStore.getState().clearImages(id)
-    })
-
     terminal.onData((data) => {
       // IME DEL-debt: swallow extra DELs that the IME emits after NFC collapse
       if (data === '\x7f' && imeDelDebt > 0) {
         imeDelDebt--
         return
       }
+      followLiveOutput()
 
       // Normalize payloads that may carry NFD text; track debt.
+      let payload = data
       if (data !== '\x7f' && data !== '\r' && data !== '\x03' && !data.includes('\r')) {
         const nfcData = data.normalize('NFC')
         const origLen = [...data].length
@@ -372,18 +349,13 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         } else {
           imeDelDebt = 0
         }
-        baseHandler(nfcData)
-        return
+        payload = nfcData
       }
 
-      baseHandler(data)
+      window.electron.terminal.write(terminalId, payload)
 
-      // Keep the attachment strip in sync with inputs that clear the prompt:
-      // - Enter (both Claude & non-Claude modes — handles Claude case where
-      //   pending queue is empty and onFlushed never fires).
-      // - Ctrl+C cancels the in-progress input, so the strip must follow.
-      const shouldSyncStrip = data === '\r' || data === '\x03'
-      if (shouldSyncStrip && useImageStore.getState().getImages(terminalId).length > 0) {
+      // Enter or Ctrl+C clears the prompt — drop any mirrored attachments.
+      if ((data === '\r' || data === '\x03') && useImageStore.getState().getImages(terminalId).length > 0) {
         useImageStore.getState().clearImages(terminalId)
       }
     })

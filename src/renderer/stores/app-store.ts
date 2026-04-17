@@ -8,7 +8,6 @@ import {
   getBufferedTerminalOutput
 } from './terminal-output-buffer'
 import { useImageStore } from './image-store'
-import { usePendingMediaStore } from './pending-media-store'
 
 export type ActiveView = 'terminals' | 'github'
 
@@ -102,7 +101,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       delete remainingKeyboardEnhancements[id]
       clearBufferedTerminalOutput(id)
       useImageStore.getState().clearImages(id)
-      usePendingMediaStore.getState().clear(id)
 
       const nextLastActiveTerminalByProjectId = { ...state.lastActiveTerminalByProjectId }
       if (removedTerminal) {
