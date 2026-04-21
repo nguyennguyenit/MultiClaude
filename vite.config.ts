@@ -72,7 +72,14 @@ export default defineConfig(({ command }) => {
       }
     },
     build: {
-      outDir: 'dist/renderer'
+      outDir: 'dist/renderer',
+      minify: 'terser',
+      terserOptions: {
+        mangle: {
+          // Don't mangle xterm internals
+          reserved: ['Terminal', 'FitAddon', 'WebLinksAddon', 'WebglAddon']
+        }
+      }
     },
     clearScreen: false,
     server: {
