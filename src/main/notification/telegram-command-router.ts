@@ -566,8 +566,19 @@ export class TelegramCommandRouter {
     }
 
     // Fallback: terminal may have exited after notification was sent
-    const resolvedId = terminal?.id ?? terminalId
-    const ghost = terminal ? null : this.terminalManager.getExitedSession(resolvedId)
+    let resolvedId = terminal?.id ?? terminalId
+    let ghost = terminal ? null : this.terminalManager.getExitedSession(resolvedId) ?? null
+
+    // Final fallback: callback_data carried a Claude session UUID for an already-exited
+    // terminal. Ghost cache is keyed by internal id, so resolve via claudeSessionId.
+    if (!terminal && !ghost) {
+      const match = this.terminalManager.findByClaudeSessionId(terminalId)
+      if (match) {
+        resolvedId = match.id
+        ghost = this.terminalManager.getExitedSession(match.id) ?? null
+      }
+    }
+
     if (!terminal && !ghost) {
       await this.sendReply('📄 Session ended — no cached output available\\.')
       return

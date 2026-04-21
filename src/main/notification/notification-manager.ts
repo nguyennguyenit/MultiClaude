@@ -106,8 +106,9 @@ export class NotificationManager extends EventEmitter {
     // Listen for task completion events from JSONL transcript watcher
     // JSONL events use Claude session ID as terminalId — translate to real terminal ID
     this.logWatcher.on('taskEvent', (event: TaskEvent) => {
-      // Hard gate: when mobile control is ON, hook path owns taskComplete/reviewNeeded
-      if (this.mobileControlEnabled && (event.type === 'taskComplete' || event.type === 'reviewNeeded')) return
+      // Always bind session_id to a terminal (even when mobile control owns notification
+      // emission) — otherwise the hook path cannot resolve session_id → terminalId and
+      // drops Stop/PermissionRequest events with `stop-no-terminal`.
       const match = this.terminalManagerRef?.findByClaudeSessionId(event.terminalId)
         ?? (event.cwd
           ? this.terminalManagerRef?.attachClaudeSession(event.terminalId, event.cwd)
@@ -116,6 +117,9 @@ export class NotificationManager extends EventEmitter {
         event.terminalId = match.id
       }
       event.agentType = 'claude'
+      // Hard gate: when mobile control is ON, hook path owns taskComplete/reviewNeeded
+      // emission to avoid duplicate notifications. Attachment above must still run.
+      if (this.mobileControlEnabled && (event.type === 'taskComplete' || event.type === 'reviewNeeded')) return
       this.handleTaskEvent(event)
     })
 

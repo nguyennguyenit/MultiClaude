@@ -12,6 +12,7 @@ const mockTerminalManager = {
   destroy: vi.fn<(id: string) => boolean>(),
   getSessions: vi.fn(),
   getExitedSession: vi.fn(),
+  findByClaudeSessionId: vi.fn<(sessionId: string) => { id: string } | undefined>(),
   create: vi.fn<(opts: { cwd?: string; projectId?: string; shell?: unknown }) => Terminal>()
 }
 
@@ -404,6 +405,35 @@ describe('TelegramCommandRouter', () => {
       await router.handleCallback('cq-1', 'tail:unknown-id')
       const reply = mockSendReply.mock.calls[0][0]
       expect(reply).toContain('Session ended')
+    })
+
+    it('tail action resolves exited ghost by Claude session UUID', async () => {
+      // Simulate JSONL path: callback_data holds a Claude session UUID (not internal id).
+      // Terminal has already exited, so live lookup and direct ghost lookup miss.
+      const sessionUuid = 'claude-session-abc'
+      mockTerminalManager.list.mockReturnValue([])
+      mockTerminalManager.getExitedSession.mockImplementation((id) =>
+        id === 'term-ghost-1'
+          ? {
+              id: 'term-ghost-1',
+              title: 'closed-session',
+              cwd: '/tmp',
+              outputBuffer: 'File updated\nAll tests passed',
+              lastOutputAt: 0,
+              claudeSessionId: sessionUuid,
+              exitedAt: Date.now()
+            }
+          : undefined
+      )
+      mockTerminalManager.findByClaudeSessionId.mockImplementation((sid) =>
+        sid === sessionUuid ? { id: 'term-ghost-1' } : undefined
+      )
+
+      await router.handleCallback('cq-ghost', `tail:taskComplete:${sessionUuid}`)
+      const reply = mockSendReply.mock.calls[0][0]
+      expect(reply).not.toContain('Session ended')
+      expect(reply).toContain('closed\\-session')
+      expect(reply).toContain('closed')
     })
 
     it('chat action sets pending chat and prompts for input', async () => {
