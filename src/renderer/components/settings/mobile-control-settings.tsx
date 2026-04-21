@@ -115,7 +115,7 @@ export function MobileControlSettings() {
         {status.running && (
           <button
             type="button"
-            className="self-start text-xs underline text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+            className="self-start bg-transparent border-0 p-0 text-xs underline text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => setShowRegenConfirm(true)}
             disabled={busy}
             data-testid="mc-regen-secret"
