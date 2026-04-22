@@ -219,30 +219,45 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
 
   /**
    * Full display refresh: dispose WebGL, redraw canvas, reinit WebGL, refit, restore viewport.
+   * Force a pty resize afterwards so CLIs (Claude Code, etc.) receive SIGWINCH and
+   * redraw the current prompt — otherwise narrow-wrapped lines in the buffer remain
+   * stale even after xterm cols/rows are corrected.
    * Debounced to avoid spam from rapid context-loss events.
    */
-  const refreshTerminal = useCallback((showNotification = false) => {
+  const refreshTerminal = useCallback((showNotification = true) => {
     if (disposedRef.current || !terminalRef.current) return
     if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
     refreshDebounceRef.current = setTimeout(() => {
-      if (disposedRef.current || !terminalRef.current) return
-      const savedViewportY = terminalRef.current.buffer.active.viewportY
+      const t = terminalRef.current
+      if (disposedRef.current || !t) return
+      const savedViewportY = t.buffer.active.viewportY
       clearTextureAtlas()
       try { webglAddonRef.current?.dispose() } catch { /* ignore */ }
       webglAddonRef.current = null
-      terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+      t.refresh(0, t.rows - 1)
       if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
         try {
           const addon = new WebglAddon()
           webglAddonRef.current = addon
-          terminalRef.current.loadAddon(addon)
+          t.loadAddon(addon)
           reconcileWebGL()
         } catch (e) { console.warn('WebGL addon failed to load:', e) }
       }
-      performFit(false)
-      if (savedViewportY >= 0) terminalRef.current.scrollToLine(savedViewportY)
+      const fitOk = performFit(false)
+      // Force pty SIGWINCH even when cols/rows didn't change — xterm's onResize
+      // only fires on dimension change, but the user-facing symptom (CLI stuck
+      // rendering at old width) needs an explicit resize to trigger redraw.
+      try {
+        window.electron.terminal.resize(terminalId, t.cols, t.rows)
+      } catch { /* ignore */ }
+      if (savedViewportY >= 0) t.scrollToLine(savedViewportY)
       if (showNotification) {
-        try { useToastStore.getState().addToast('Terminal display refreshed', 'info') } catch { /* ignore */ }
+        try {
+          useToastStore.getState().addToast(
+            fitOk ? 'Terminal refreshed' : 'Terminal refreshed (pane hidden — retry when visible)',
+            'info'
+          )
+        } catch { /* ignore */ }
       }
     }, REFRESH_DEBOUNCE)
   }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, performFit, reconcileWebGL, terminalId, terminalRef, webglAddonRef])
