@@ -547,9 +547,21 @@ function App() {
   }, [updateTerminalAgentType])
 
   // Handle terminals created externally (e.g. via Telegram /new command)
+  // Rebuild pane tree with balanced layout — same as Ctrl+T / + button
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onCreated((terminal) => {
       addTerminal(terminal)
+
+      const projectId = terminal.projectId
+      if (projectId) {
+        const freshTerminals = useAppStore.getState().terminals
+        const leafIds = freshTerminals
+          .filter(t => t.projectId === projectId)
+          .map(t => t.id)
+        const isPortrait = window.innerHeight > window.innerWidth
+        const nextTree = migrateFlatToTree(leafIds, isPortrait)
+        usePaneTreeStore.getState().setTree(projectId, nextTree)
+      }
     })
     return unsubscribe
   }, [addTerminal])
