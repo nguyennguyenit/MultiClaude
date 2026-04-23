@@ -18,7 +18,8 @@ import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { getCurrentTerminalTheme } from './hooks/use-terminal-font-theme'
 import { useExecuteSplit } from './hooks/use-execute-split'
 import { usePaneTreeStore, flushPaneTreeSaves } from './stores/pane-tree-store'
-import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
+import { closeLeafAndCollapse, findLeaf } from '@shared/utils/pane-tree'
+import { beginRendererCreate, isRendererCreateInFlight } from './utils/renderer-create-tracker'
 import { buildEvenVerticalLayout, migrateFlatToTree } from '@shared/utils/pane-tree-migration'
 import type { NewTerminalLayout } from './utils/shortcut-utils'
 import { registerSplitHandlers } from './utils/terminal-context-actions'
@@ -186,6 +187,7 @@ function App() {
     const isUnixShell = effectiveShell?.kind === 'unix'
     const isWindowsShell = effectiveShell && !isUnixShell
 
+    const releaseRendererCreate = beginRendererCreate()
     try {
       const terminal = await window.electron.terminal.create({
         cwd: activeProject?.path,
@@ -211,6 +213,8 @@ function App() {
     } catch (err) {
       console.error('[handleAddTerminal] Failed to create terminal:', err)
       useToastStore.getState().addToast('Failed to create terminal. Please try again.', 'error')
+    } finally {
+      releaseRendererCreate()
     }
   }, [activeProject, activeProjectId, addTerminal, selectedShell])
 
@@ -566,22 +570,40 @@ function App() {
     return unsubscribe
   }, [updateTerminalClaudeSessionId])
 
-  // Handle terminals created externally (e.g. via Telegram /new command)
-  // Rebuild pane tree with balanced layout — same as Ctrl+T / + button
+  // Handle terminals created externally (e.g. via Telegram /new command).
+  // Renderer-initiated splits (executeSplit / handleAddTerminal) ALSO trigger
+  // this broadcast — and the broadcast often races AHEAD of the renderer's
+  // own setTree call (the IPC reply and the broadcast are two separate channels
+  // arriving in any order). Two guards layer here:
+  //   1. isRendererCreateInFlight — set BEFORE the renderer's create IPC call,
+  //      cleared AFTER its setTree. If true, skip rebuild entirely; the
+  //      renderer-side handler owns geometry. This catches the broadcast-first
+  //      race that the findLeaf check below cannot, since the tree hasn't been
+  //      written yet at that moment.
+  //   2. findLeaf — defensive: if the terminal already lives in the tree (we
+  //      raced and lost), don't stomp it.
+  // Without (1), splitting right 4× produces "3 columns + 1 row underneath"
+  // because the broadcast reshapes to a 2×2 grid before executeSplit's split
+  // direction lands.
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onCreated((terminal) => {
       addTerminal(terminal)
 
       const projectId = terminal.projectId
-      if (projectId) {
-        const freshTerminals = useAppStore.getState().terminals
-        const leafIds = freshTerminals
-          .filter(t => t.projectId === projectId)
-          .map(t => t.id)
-        const isPortrait = window.innerHeight > window.innerWidth
-        const nextTree = migrateFlatToTree(leafIds, isPortrait)
-        usePaneTreeStore.getState().setTree(projectId, nextTree)
-      }
+      if (!projectId) return
+
+      if (isRendererCreateInFlight()) return
+
+      const existingTree = usePaneTreeStore.getState().getTree(projectId)
+      if (existingTree && findLeaf(existingTree, terminal.id)) return
+
+      const freshTerminals = useAppStore.getState().terminals
+      const leafIds = freshTerminals
+        .filter(t => t.projectId === projectId)
+        .map(t => t.id)
+      const isPortrait = window.innerHeight > window.innerWidth
+      const nextTree = migrateFlatToTree(leafIds, isPortrait)
+      usePaneTreeStore.getState().setTree(projectId, nextTree)
     })
     return unsubscribe
   }, [addTerminal])
