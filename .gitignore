@@ -68,3 +68,7 @@ IPA-WORKFLOW.md
 .superpowers/
 docs/superpowers/
 .claude/worktrees/
+
+# Local debug artifacts (video frame analysis, scratch captures)
+analysis/
+temp_frames/
