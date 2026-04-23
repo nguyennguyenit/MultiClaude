@@ -168,6 +168,24 @@ export class ClaudeLogWatcher extends EventEmitter {
       if (event) {
         this.emit('taskEvent', event)
       }
+      // Additive: emit each parsed JSONL line for context-window analyzer.
+      // Errors isolated so a malformed line can't break the taskEvent path.
+      for (const raw of lines) {
+        const trimmed = raw.trim()
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed) as { sessionId?: string; cwd?: string }
+          if (!parsed || typeof parsed !== 'object') continue
+          this.emit('jsonlLine', {
+            sessionId: parsed.sessionId,
+            cwd: parsed.cwd,
+            line: parsed,
+            filePath
+          })
+        } catch {
+          // skip malformed
+        }
+      }
     } catch {
       // File may have been deleted or truncated — reset offset
       state.bytesRead = 0

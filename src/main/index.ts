@@ -7,6 +7,8 @@ import { GitHeadWatcher } from './git/git-head-watcher'
 import { ProjectStore } from './project/project-store'
 import { SettingsStore } from './settings'
 import { NotificationManager } from './notification'
+import { ContextWindowAnalyzer } from './context'
+import { registerContextHandlers } from './ipc/context-handlers'
 import { registerIpcHandlers } from './ipc/handlers'
 import { registerGitHubHandlers } from './ipc/github-handlers'
 import { initAutoUpdater } from './updater'
@@ -23,6 +25,7 @@ let gitHeadWatcher: GitHeadWatcher | null = null
 let projectStore: ProjectStore | null = null
 let settingsStore: SettingsStore | null = null
 let notificationManager: NotificationManager | null = null
+let contextAnalyzer: ContextWindowAnalyzer | null = null
 
 // Vite dev server URL (injected by vite-plugin-electron)
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
@@ -50,6 +53,10 @@ function createWindow() {
   settingsStore = new SettingsStore()
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
+
+  // Context window analyzer (piggybacks on existing JSONL watcher)
+  contextAnalyzer = new ContextWindowAnalyzer(notificationManager.getLogWatcher())
+  registerContextHandlers(contextAnalyzer)
 
   // Kick off shell detection in the background (C3: stored as promise, no await needed)
   terminalManager.initializeShells()
@@ -142,6 +149,7 @@ app.on('window-all-closed', async () => {
   }
 
   gitHeadWatcher?.destroy()
+  contextAnalyzer?.destroy()
   notificationManager?.destroy()
 
   if (process.platform !== 'darwin') {

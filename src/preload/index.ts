@@ -25,7 +25,8 @@ import type {
   WslInfo,
   WindowsShell,
   WindowState,
-  RemoteControlStatus
+  RemoteControlStatus,
+  ContextSnapshot
 } from '@shared/types'
 
 // Type-safe API for renderer
@@ -202,6 +203,10 @@ export interface ElectronAPI {
     close: () => Promise<void>
   }
   onFileDrop: (callback: (filePath: string) => void) => () => void
+  context: {
+    getSnapshot: (sessionId: string) => Promise<ContextSnapshot | null>
+    onSnapshot: (callback: (snap: ContextSnapshot) => void) => () => void
+  }
 }
 
 const api: ElectronAPI = {
@@ -440,6 +445,14 @@ const api: ElectronAPI = {
     const listener = (_: unknown, data: { filePath: string }) => callback(data.filePath)
     ipcRenderer.on('file-dropped', listener)
     return () => ipcRenderer.removeListener('file-dropped', listener)
+  },
+  context: {
+    getSnapshot: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET, sessionId),
+    onSnapshot: (callback) => {
+      const listener = (_: IpcRendererEvent, snap: ContextSnapshot) => callback(snap)
+      ipcRenderer.on(IPC_CHANNELS.CONTEXT_SNAPSHOT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_SNAPSHOT, listener)
+    }
   }
 }
 

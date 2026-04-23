@@ -318,3 +318,6 @@ export * from './update'
 
 // Pane tree layout types
 export * from './pane-tree'
+
+// Context window breakdown types
+export * from './context-window'

@@ -101,6 +101,7 @@
     "@xterm/xterm": "^6.0.0",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.6.2",
+    "js-tiktoken": "^1.0.21",
     "proper-lockfile": "^4.1.2",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",

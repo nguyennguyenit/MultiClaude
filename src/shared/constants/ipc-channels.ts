@@ -144,6 +144,10 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESET: 'settings:reset',
+  // Context window analyzer channels
+  CONTEXT_GET: 'context:get',
+  CONTEXT_SNAPSHOT: 'context:snapshot',
+
   // Windows channels
   WINDOW_GET_STATE: 'window:get-state',
   WINDOW_STATE_CHANGED: 'window:state-changed',

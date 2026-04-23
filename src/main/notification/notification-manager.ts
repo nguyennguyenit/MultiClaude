@@ -135,6 +135,12 @@ export class NotificationManager extends EventEmitter {
     this.focusDetector.setWindow(window)
   }
 
+  /** Expose the JSONL watcher so other subsystems (context-window analyzer)
+   * can subscribe to `jsonlLine` events without reopening the same files. */
+  getLogWatcher(): ClaudeLogWatcher {
+    return this.logWatcher
+  }
+
   /** Store references to managers for remote control command routing */
   setManagers(terminalManager: TerminalManager, projectStore: ProjectStore): void {
     this.terminalManagerRef = terminalManager
