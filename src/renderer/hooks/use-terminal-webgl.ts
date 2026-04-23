@@ -29,12 +29,16 @@ const snapshotReplayMutex = new Map<string, Promise<void>>()
 const REFRESH_DEBOUNCE = 100  // ms debounce for refreshTerminal()
 
 /**
- * Determine if WebGL should be used based on render mode, active state, and hidden state.
- * Hidden terminals never use WebGL to save GPU resources.
+ * Determine if WebGL is allowed for this terminal based on settings only.
+ *
+ * Note: isActive/isHidden are accepted for API compatibility but intentionally
+ * ignored in the allow decision. Once loaded, the WebGL addon stays alive across
+ * terminal switches to avoid texture-atlas corruption caused by repeated
+ * load/dispose cycles (observed as stretched/garbled text when switching panes).
+ * Initial-load gating on isActive/isHidden happens in reconcileWebGL instead.
  */
-export function shouldUseWebGL(terminalId: string, isActive: boolean, isHidden: boolean): boolean {
-  if (isHidden) return false
-
+export function shouldUseWebGL(terminalId: string, _isActive?: boolean, _isHidden?: boolean): boolean {
+  void _isActive; void _isHidden
   const { pendingSettings } = useSettingsStore.getState()
   const isClaudeTerminal = useAppStore.getState().terminals.some(
     terminal => terminal.id === terminalId && terminal.isClaudeMode
@@ -45,14 +49,7 @@ export function shouldUseWebGL(terminalId: string, isActive: boolean, isHidden: 
   }
 
   const mode = pendingSettings.terminalRenderMode ?? 'balanced'
-  switch (mode) {
-    case 'performance':
-      return false
-    case 'balanced':
-      return isActive
-    case 'quality':
-      return true
-  }
+  return mode !== 'performance'
 }
 
 interface UseTerminalWebGLParams {
@@ -264,10 +261,16 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
   const reconcileWebGL = useCallback(() => {
     if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
 
-    const needsWebGL = shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)
+    const allowed = shouldUseWebGL(terminalId)
     const hasWebGL = webglAddonRef.current !== null
 
-    if (needsWebGL && !hasWebGL) {
+    // Initial load is gated on active+visible to avoid eagerly allocating WebGL
+    // contexts for inactive terminals (browsers cap concurrent WebGL contexts).
+    // Once loaded, the addon stays alive across terminal switches — see
+    // shouldUseWebGL() docstring for rationale.
+    const shouldLoad = allowed && isActiveRef.current && !isHiddenRef.current
+
+    if (shouldLoad && !hasWebGL) {
       webglLoadingRef.current = true
       requestAnimationFrame(() => {
         if (disposedRef.current || !terminalRef.current) {
@@ -285,7 +288,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         }
         webglLoadingRef.current = false
       })
-    } else if (!needsWebGL && hasWebGL) {
+    } else if (!allowed && hasWebGL) {
       try {
         webglAddonRef.current?.dispose()
       } catch {
