@@ -11,6 +11,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
+import { resumeAndFlush as resumeTerminalOutput } from '../utils/terminal-output-dispatcher'
 import { useTerminalWebGL } from './use-terminal-webgl'
 import { useTerminalFontTheme } from './use-terminal-font-theme'
 import { useTerminalKeyboard } from './use-terminal-keyboard'
@@ -146,8 +147,12 @@ export function useTerminal({
   useEffect(() => {
     disposedRef.current = false
     const scrollMachine = scrollMachineRef.current
+    const paneTerminalId = terminalId
     return () => {
       disposedRef.current = true
+      // Drain any pause state set by initTerminal in case unmount races ahead
+      // of snapshot-apply (prevents stuck pausedBuffer entry).
+      resumeTerminalOutput(paneTerminalId)
       scrollMachine.reset()
       clearUserViewportInteraction()
       cancelScheduledFit()

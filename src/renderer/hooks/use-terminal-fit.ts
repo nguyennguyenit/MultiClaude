@@ -47,6 +47,8 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const lastFitDimsRef = useRef<{ cols: number; rows: number } | null>(null)
+
   const performFit = useCallback((restoreViewport = true) => {
     const terminal = terminalRef.current
     const fitAddon = fitAddonRef.current
@@ -62,6 +64,8 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     } catch {
       return false
     }
+
+    lastFitDimsRef.current = { cols: terminal.cols, rows: terminal.rows }
 
     refreshVisibleRows()
 
@@ -113,12 +117,28 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
         }
         return
       }
+      // Settle pass: only run if the first fit actually changed cols/rows.
+      // When the container is stable (e.g. initial mount at already-correct
+      // size), the second fit would no-op at xterm level anyway — but skipping
+      // it entirely avoids a needless timer and keeps the fit-burst tight so
+      // the resize IPC debounce doesn't span across two frames.
+      const firstDims = lastFitDimsRef.current
       fitSettleTimerRef.current = setTimeout(() => {
         fitSettleTimerRef.current = null
+        const t = terminalRef.current
+        if (!t || disposedRef.current) return
+        if (firstDims && t.cols === firstDims.cols && t.rows === firstDims.rows) {
+          const c = containerRef.current
+          if (!c) return
+          // Only re-fit if container size drifted during settle window
+          // (flex layout still animating). Otherwise skip — nothing to do.
+          const prop = fitAddonRef.current?.proposeDimensions()
+          if (!prop || (prop.cols === t.cols && prop.rows === t.rows)) return
+        }
         performFit()
       }, RESIZE_REFIT_SETTLE_DELAY)
     })
-  }, [cancelScheduledFit, containerRef, disposedRef, performFit])
+  }, [cancelScheduledFit, containerRef, disposedRef, fitAddonRef, performFit, terminalRef])
 
   // ── ResizeObserver + window resize ─────────────────────────────────────────
   const observedContainerSizeRef = useRef({ width: 0, height: 0 })

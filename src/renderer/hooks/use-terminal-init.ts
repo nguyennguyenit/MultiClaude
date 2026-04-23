@@ -29,6 +29,7 @@ import {
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
 import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
+import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
@@ -134,6 +135,15 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       return
     }
 
+    // Pause live output dispatch until the snapshot is painted into xterm.
+    // Without this, live SIGWINCH-redraw bytes get written to xterm BEFORE the
+    // snapshot (which reflects the post-redraw final buffer). The snapshot is
+    // then overlaid on top of the live-rendered content, producing a visible
+    // "jump" as cursor moves / lines are cleared / prompt reprints. Buffering
+    // the live chunks until after snapshot write guarantees a single clean
+    // paint — any post-snapshot bytes are flushed via resumeAndFlush() below.
+    pauseAndBuffer(terminalId)
+
     const terminal = new XTerm({
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -168,6 +178,21 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     terminal.loadAddon(fitAddon)
 
     terminal.open(container)
+
+    // Sync fit + PTY resize BEFORE any shell output is written. Moving this out
+    // of the deferred setTimeout eliminates the new-pane jump: without it, the
+    // shell prints its first prompt at xterm's default 80×24, then we fit +
+    // SIGWINCH 50ms later and the shell redraws the prompt at the real size
+    // (visible 1–2 line dip). Doing it synchronously means the SIGWINCH fires
+    // while the shell is still spawning, so the first prompt is rendered once
+    // at the final cols/rows. Snapshot fetch below then reflects post-SIGWINCH
+    // state, avoiding a second redraw cycle when we paint into xterm.
+    try {
+      fitAddon.fit()
+      window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+    } catch {
+      // Container briefly 0×0 — deferred setTimeout path will retry via fitAddon.fit()
+    }
 
     // xterm v6 removed the v5 auto-sync of .xterm-viewport background-color.
     // Both .xterm-viewport (covers content box) and .xterm (8px padding strip,
@@ -288,33 +313,44 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         syncScrollPosition(false)
       }
 
+      // Resume live output AFTER snapshot has been painted. Buffered chunks
+      // received during init (most notably the shell's SIGWINCH redraw bytes
+      // emitted in response to the sync resize IPC above) are flushed in
+      // arrival order, on top of the snapshot. Because the snapshot already
+      // reflects the post-SIGWINCH headless state, the flush is typically a
+      // no-op or a small trailing delta — not a full replay.
+      const finishInit = () => {
+        if (disposedRef.current) return
+        resumeAndFlush(terminalId)
+      }
+
       if (initialOutputRef.current) {
         terminal.write(stripLeakedTerminalResponses(initialOutputRef.current), () => {
           requestAnimationFrame(restoreInitialViewport)
+          finishInit()
         })
       } else {
         // No prop-provided initialOutput — fetch snapshot from backend.
-        // Live chunks arriving during this await are tolerated: they append after
-        // snapshot write, producing correct final state (no data loss, no reset
-        // conflict). No pauseAndBuffer here — delaying first prompt would be noticeable.
         // V2 design decision: snapshot is clean PTY state, so stripLeakedTerminalResponses
         // is intentionally NOT applied (snapshot has no raw PTY leak artifacts).
         window.electron.terminal.getSnapshot(terminalId).then(snap => {
-          if (disposedRef.current || !terminalRef.current) return
+          if (disposedRef.current || !terminalRef.current) { finishInit(); return }
           if (snap.data) {
             terminal.write(snap.data, () => {
               requestAnimationFrame(restoreInitialViewport)
+              finishInit()
             })
           } else {
-            // Empty snapshot (fresh terminal) — just restore viewport + send SIGWINCH
+            // Empty snapshot (fresh terminal) — restore viewport; SIGWINCH
+            // already sent by the sync resize IPC at open() time.
             requestAnimationFrame(restoreInitialViewport)
-            window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+            finishInit()
           }
         }).catch(() => {
-          // Snapshot fetch failed — fall back to viewport restore + SIGWINCH
-          if (disposedRef.current || !terminalRef.current) return
+          // Snapshot fetch failed — fall back to viewport restore.
+          if (disposedRef.current || !terminalRef.current) { finishInit(); return }
           requestAnimationFrame(restoreInitialViewport)
-          window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+          finishInit()
         })
       }
 
