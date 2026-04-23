@@ -54,16 +54,22 @@ src/renderer/
 ├── App.tsx                               # Root component and shared terminal-output listener
 ├── components/
 │   ├── context-menu/                     # Themed Portal context menu (theme-aware via CSS vars)
+│   ├── context-window/                   # Context analyzer drawer (ContextWindowDrawer, useContextSnapshot)
 │   └── terminal/
 │       ├── terminal-grid.tsx             # Multi-project host; renders pane trees
-│       ├── pane-tree-node.tsx            # Recursive flex renderer + resize handles
+│       ├── pane-tree-node.tsx            # Recursive flex renderer + resize handles with rAF-coalesce
 │       ├── split-button.tsx              # + / ▾ split action-bar control
 │       ├── terminal-pane.tsx             # Pane chrome and restore wiring
-│       ├── terminal-view.tsx             # xterm.js host and handler registration
+│       ├── terminal-view.tsx             # xterm.js v6 host and handler registration
 │       ├── terminal-output-handler.ts    # Chunk processing for visible output
 │       ├── terminal-output-buffer.ts     # Non-reactive scrollback buffer module
-│       ├── attachment-strip.tsx          # Horizontal thumbnail strip (80×60 tiles) above pane
+│       ├── attachment-strip.tsx          # Horizontal thumbnail strip (80×60 tiles) below pane
 │       └── attachment-remove-handler.ts  # Remove button logic: clears strip (Claude mode) or pops pending-media + backspace (non-Claude)
+├── hooks/
+│   ├── use-terminal-init.ts              # xterm init + snapshot fetch
+│   ├── use-context-snapshot.ts           # Context analyzer real-time binding
+│   ├── use-pane-resize.ts                # rAF-coalesced divider drag
+│   └── [8 more sub-hooks]                # Modularized terminal hook refactor
 ├── stores/
 │   ├── app-store.ts                      # Projects, terminals, UI state, buffer facade
 │   ├── context-menu-store.ts             # Open/close state for themed context menu
@@ -75,6 +81,7 @@ src/renderer/
 │   └── toast-store.ts                    # Toast queue
 └── utils/
     ├── terminal-output-dispatcher.ts     # Shared output routing registry
+    ├── terminal-scroll-machine.ts        # Pure scroll state (zero React, zero xterm)
     ├── paste-from-clipboard.ts           # Shared image + text paste pipeline
     └── pane-tree-reconcile.ts            # Tree <-> terminal list reconciliation
 ```
@@ -125,13 +132,15 @@ Current output handling is deliberately centralized:
 
 On terminal mount (or remount after tab switch), `use-terminal-init.ts` invokes `terminal:get-snapshot` via the preload bridge. The main process serializes the headless terminal to a string (via `SerializeAddon`) and returns it. The renderer writes it into xterm as the initial view state. The renderer-side `terminal-output-buffer.ts` is only checked if no `initialOutput` prop is provided AND the snapshot has not arrived yet.
 
-#### Auto-Resync on System Resume
+The headless terminal in the main process is the authoritative visual state: every PTY byte writes to headless first, then broadcasts IPC. This eliminates render-order races and enables warp-style refresh.
 
-When the system wakes from sleep, `powerMonitor` emits `resume` in the main process. A debounced handler (2000 ms window, 200 ms PTY-settle delay) sends `terminal:system-resumed` IPC to the renderer lifecycle dispatcher, which triggers a silent snapshot re-fetch and replay for all mounted terminals. This corrects display corruption caused by the OS blanking the PTY on suspend.
+#### Warp-Style Refresh + System Resume
 
-#### Refresh Button Semantics
+**Refresh button**: Triggers immediate `terminal:get-snapshot` fetch, writes into xterm viewport, restores scrollback state recorded by headless terminal.
 
-The refresh button triggers an immediate `terminal:get-snapshot` fetch and re-writes the xterm viewport. It restores the scrollback state the headless terminal recorded. **Alt-buffer caveat:** interactive programs that manage their own screen (vim, tmux, less, etc.) repaint only when they receive a keystroke or resize signal. After a lid-close/resume cycle those programs may still appear blank until the user interacts with them. The refresh button cannot force a repaint for alt-buffer programs.
+**System resume**: When the system wakes from sleep, `powerMonitor` emits `resume` in the main process. A debounced handler (2000 ms window, 200 ms PTY-settle delay) sends `terminal:system-resumed` IPC to renderer lifecycle dispatcher, which triggers silent snapshot re-fetch and replay for all mounted terminals. This corrects display corruption caused by OS blanking the PTY on suspend.
+
+**Alt-buffer caveat**: Interactive programs (vim, tmux, less, etc.) manage their own screen and repaint only when they receive keystroke/resize signal. After suspend/resume, those programs may appear blank until user interacts. Refresh button restores scrollback but cannot force repaint for alt-buffer programs.
 
 Restore behavior:
 
@@ -160,23 +169,28 @@ Important current behavior:
 
 ### Terminal Surface
 
-- `terminal:create`
-- `terminal:destroy`
-- `terminal:input`
-- `terminal:resize`
-- `terminal:list`
-- `terminal:invoke-claude`
-- `terminal:detect-wsl`
-- `terminal:output`
-- `terminal:exit`
-- `terminal:title-change`
-- `terminal:get-snapshot` — renderer invokes to fetch serialized headless state; main process returns `SerializeAddon` output string or `null` if headless unavailable
-- `terminal:system-resumed` — main process pushes after system resume (debounced) to trigger silent re-fetch for all mounted terminals
-- `terminal:load-pane-tree` / `terminal:save-pane-tree` — per-project split-tree persistence (schemaVersion 2 with on-read migration from the legacy flat layout)
+- `terminal:create` — spawn new PTY + headless mirror
+- `terminal:destroy` — kill PTY, clean up headless, clear output buffer
+- `terminal:input` — write to PTY stdin
+- `terminal:resize` — SIGWINCH to PTY
+- `terminal:list` — enumerate active terminals
+- `terminal:invoke-claude` — spawn Claude session
+- `terminal:detect-wsl` — detect WSL distros on Windows
+- `terminal:output` — broadcast PTY output (after headless write)
+- `terminal:exit` — PTY exit code + signal
+- `terminal:title-change` — OSC escape sequence parsed title
+- `terminal:get-snapshot` — invoke: return serialized headless state string (SerializeAddon) or `null`
+- `terminal:system-resumed` — broadcast: trigger silent snapshot re-fetch for all mounted (debounced, 2s window)
+- `terminal:load-pane-tree` / `terminal:save-pane-tree` — per-project split-tree IPC (schemaVersion 2 with on-read legacy flat → tree migration)
 
 The renderer now uses `terminal:output` through the shared App-level subscription only. Individual terminal views no longer subscribe directly to IPC.
 
 The legacy `terminal:show-context-menu` channel has been removed; right-click is handled by a themed React Portal menu reading CSS variables from the active theme.
+
+### Context Window Channel
+
+- `context:get` — invoke: return snapshot for sessionId (main: `ContextWindowAnalyzer.getSnapshot(sessionId)`) with 6 category breakdown
+- `context:snapshot` — broadcast: push real-time snapshot on 300ms debounce per session (main emits on state change)
 
 ### Media Channel
 

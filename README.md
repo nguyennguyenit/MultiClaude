@@ -15,19 +15,20 @@
   </p>
 </div>
 
-**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage configurable terminal limits (preset or custom), keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+**MultiClaude** v3.4.4 is a desktop workspace for running Claude Code in parallel. It lets you manage configurable terminal limits (preset or custom), keep project-scoped layouts, work with Git and GitHub without leaving the app, receive task notifications across macOS, Windows, and Linux, and analyze terminal context window usage in real-time.
 
-Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, repo operations, and intelligent terminal management than a raw shell setup.
+Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, repo operations, intelligent terminal management, and context intelligence than a raw shell setup.
 
 ## What Makes It Different
 
-- **Parallel Claude Code Workspaces**: Run with configurable terminal limits (2, 4, 9, or custom) in an auto-split grid that scales from focused single-terminal work to broad multi-agent runs.
-- **Project-Scoped Persistence**: Each project keeps its own terminal layout, active sessions, and window state so context survives app restarts and repo switching.
-- **Smart Terminal Rendering**: Three rendering modes (Performance/Balanced/Quality) with GPU controls and Claude-safe mode to optimize for speed or visual quality.
+- **Parallel Claude Code Workspaces**: Run with configurable terminal limits (2, 4, 9, or custom) in a resizable pane tree (tmux/iTerm-style splits) that scales from focused single-terminal work to broad multi-agent runs.
+- **Project-Scoped Persistence**: Each project keeps its own pane tree layout, active sessions, and window state so context survives app restarts and repo switching.
+- **Smart Terminal Rendering**: Three rendering modes (Performance/Balanced/Quality) with GPU controls, Claude-safe mode to optimize for speed or visual quality, and warp-style snapshot refresh to recover display state.
+- **Context Window Analyzer**: Real-time breakdown of token usage by category (claude-md, mentioned-file, tool-output, thinking-text, task-coordination, user-messages) with toggle in Terminal Settings.
 - **Git + GitHub Inside the App**: Visual git status, staging, branches, stash, history, GitHub auth via `gh`, remote repo creation, plus issue and pull request views.
-- **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks.
+- **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks; multi-agent detection included.
 - **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths with thumbnail preview strip (80×60 tiles), clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
-- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal color palettes, and light/dark/system appearance without requiring a backend service.
+- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal ANSI palettes, and light/dark/system appearance without requiring a backend service.
 
 ## Ecosystem
 
@@ -85,8 +86,8 @@ npm run build
 |-------|------------|
 | Desktop | Electron 33 |
 | Frontend | React 19 + TypeScript |
-| Terminal | node-pty + xterm.js |
-| Styling | Tailwind CSS 3 |
+| Terminal | node-pty + xterm.js v6 + @xterm/headless v6 |
+| Styling | Tailwind CSS 4 |
 | State | Zustand |
 | Persistence | electron-store |
 | Git | simple-git + gh CLI |

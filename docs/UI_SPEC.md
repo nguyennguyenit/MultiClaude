@@ -16,7 +16,7 @@ MultiClaude is a desktop application with a minimal terminal aesthetic (VibeTerm
 | ID | Screen | Route/State | Component | Description |
 |----|--------|-------------|-----------|-------------|
 | S-01 | Welcome | `activeProjectId = null` | `WelcomeScreen` | No project selected |
-| S-02 | Terminal View | `activeProjectId != null` | `TerminalGrid` | Main terminal workspace |
+| S-02 | Terminal View | `activeProjectId != null` | `TerminalGrid` | Main terminal workspace + context analyzer drawer |
 | S-03 | Git Slide Panel | `activePanel = 'git'` | `GitPanel` | Git operations (slide from right/bottom) |
 | S-04 | GitHub Slide Panel | `activePanel = 'github'` | `GitHubPanel` | GitHub Issues/PRs (slide from right/bottom) |
 | S-05 | Settings Slide Panel | `activePanel = 'settings'` | `SettingsPanel` | App configuration (slide from right/bottom) |
@@ -30,7 +30,7 @@ App
 │   └── ProjectDropdown
 ├── MainContent (flex 1, overflow hidden)
 │   ├── [No Project] → WelcomeScreen
-│   └── [Has Project] → TerminalGrid
+│   └── [Has Project] → TerminalGrid + ContextWindowDrawer
 │       ├── TerminalPane[]
 │       │   ├── TerminalView (xterm.js)
 │       │   └── Bottom Tab Bar (terminal title)

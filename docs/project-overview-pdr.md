@@ -6,17 +6,18 @@
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 3.1.0-beta.1 |
+| Version | 3.4.4 |
 | License | MIT |
 | Platforms | Linux (AppImage/deb), macOS (dmg), Windows (exe) |
 | Repository | github.com/nguyennguyenit/MultiClaude |
 
 ## Core Value Proposition
 
-- **Multi-Agent Workflow**: Run up to 12 Claude Code instances in parallel with flexible pane tree splits
-- **Project Isolation**: Per-project terminal layouts with session persistence
+- **Multi-Agent Workflow**: Run up to 99 Claude Code instances in parallel with resizable pane tree (tmux/iTerm-style splits)
+- **Project Isolation**: Per-project pane tree layouts with session persistence and warp-style snapshot restore
+- **Context Intelligence**: Real-time token usage breakdown by category (claude-md, mentioned-file, tool-output, thinking-text, task-coordination, user-messages)
 - **Git Integration**: Visual git panel with commit, branch, stash, and history management
-- **Notifications**: Task completion alerts via native OS, Telegram, and Discord
+- **Notifications**: Task completion alerts via native OS, Telegram (with HTML preview & mobile control), and Discord; multi-agent detection
 
 ## Product Development Requirements (PDR)
 
@@ -74,13 +75,13 @@
 | ID | Requirement | Status | Notes |
 |----|-------------|--------|-------|
 | FR-6.1 | 7 UI color themes + Light/Dark/System modes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest) | Complete | Applied to app chrome |
-| FR-6.2 | 5 Terminal ANSI palette themes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark) | Complete | xterm.js colors |
-| FR-6.3 | Settings panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | Complete | Tabbed navigation |
-| FR-6.4 | Terminal rendering mode selector (Performance/Balanced/Quality) with Claude-safe toggle | Complete | WebGL + GPU control |
-| FR-6.5 | Terminal limit presets (2, 4, 9, custom) to constrain concurrent terminals | Complete | Prevents resource exhaustion |
+| FR-6.2 | 5 Terminal ANSI palette themes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark) | Complete | xterm v6 color integration |
+| FR-6.3 | Settings slide panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | Complete | Modal-free slide from right/bottom |
+| FR-6.4 | Terminal rendering mode selector (Performance/Balanced/Quality) with Claude-safe toggle | Complete | WebGL + GPU control + xterm v6 |
+| FR-6.5 | Terminal limit presets (2, 4, 9, custom) to constrain concurrent terminals | Complete | Enforced at spawn time |
 | FR-6.6 | Windows shell selector: cmd, PowerShell, WSL distros with persistent storage | Complete | Per-project shell choice |
 | FR-6.7 | Settings pending/saved flow: preview changes before persisting; hasUnsavedChanges tracking | Complete | Field-by-field equality check |
-| FR-6.8 | localStorage migration: one-time automatic migration on first load per session | Complete | Backward compatibility |
+| FR-6.8 | Context window analyzer toggle in Terminal Settings (requires restart) | Complete | Breakdown by 6 categories + isStale indicator |
 
 #### FR-7: Auto-Update
 | ID | Requirement | Status |
@@ -125,26 +126,28 @@
 
 ## Feature Roadmap
 
-### Completed (v3.1.0-beta)
-- Multi-terminal grid management with configurable terminal limits
-- Project tabs with persistence and smart terminal selection
-- Full Git/GitHub integration with visual status and stash management
-- Notification system (native/Telegram/Discord) with pattern detection
-- Auto-update system with changelog display
-- 7 UI themes + 5 terminal color palettes with dark/light modes
-- Terminal rendering modes (Performance/Balanced/Quality) with Claude-safe GPU control
-- Windows shell selection (cmd, PowerShell, WSL distros) with validation
+### Completed (v3.4.4)
+- Pane tree layout with resizable splits (tmux/iTerm-style binary split tree)
+- Per-project pane tree persistence (schemaVersion 2 with legacy flat → tree migration)
+- xterm.js v6 upgrade with @xterm/headless mirror for canonical visual state
+- Warp-style terminal snapshot restore with system resume handling
+- Terminal output rAF-coalesce for divider drag (eliminates 100Hz trackpad bursts)
+- Context window analyzer with 6-category breakdown + JSONL stream + IPC broadcast
+- Image/video attachment thumbnail strip (80×60px) with per-terminal registry
+- Telegram mobile control with HTML preview + Webhook routing
+- Multi-agent detection (Claude, Codex, Gemini, Aider) in notifications
+- Notification watcher with tool-approval, error, warning, review-needed patterns
+- 7 UI themes + 5 terminal ANSI palettes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark)
+- Terminal rendering modes (Performance/Balanced/Quality) with Claude-safe toggle
+- Windows shell selection (cmd, PowerShell, WSL distros) with UNC path conversion
+- System suspend/resume handling with powerMonitor + 2s debounce
 - Vietnamese IME auto-patch with status detection
-- Settings pending/saved flow with deep equality checking
-- System suspend/resume handling to prevent PTY crashes
-- OSC escape sequence parsing for terminal title updates
-- Terminal output buffering with intelligent trim strategy
 
-### Planned (v1.2.x)
-- Terminal output search
-- Git conflict resolution UI
-- Multi-window support
-- Plugin system for extensions
+### Planned (v3.5.x)
+- Terminal output search with context preservation
+- Git merge conflict resolution UI
+- Multi-window support for side-by-side projects
+- Context analyzer export (JSON/CSV format)
 
 ## Success Metrics
 
@@ -160,15 +163,16 @@
 ### Runtime Dependencies
 | Package | Version | Purpose |
 |---------|---------|---------|
-| @lydell/node-pty | ^1.0.0 | PTY spawning |
-| @xterm/xterm | ^5.5.0 | Terminal rendering |
-| @xterm/addon-webgl | ^0.18.0 | GPU acceleration |
-| electron-store | ^8.2.0 | Persistence |
+| @lydell/node-pty | ^1.0.0 | PTY spawning with suspend/resume |
+| @xterm/xterm | ^6.x | Terminal rendering (v6 upgrade) |
+| @xterm/headless | ^6.x | Canonical visual state mirror |
+| @xterm/addon-webgl | ^0.18.0+ | GPU acceleration (xterm v6) |
+| @xterm/addon-serialize | ^0.14.0+ | Snapshot serialization |
+| electron-store | ^8.2.0 | Persistence with validation |
 | electron-updater | ^6.6.2 | Auto-updates |
 | simple-git | ^3.27.0 | Git operations |
 | zustand | ^5.0.2 | State management |
 | react | ^19.0.0 | UI framework |
-| (removed) | (removed) | Replaced by pane-tree layout |
 
 ### Development Dependencies
 | Package | Version | Purpose |

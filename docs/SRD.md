@@ -8,7 +8,7 @@
 
 | Attribute | Value |
 |-----------|-------|
-| Version | 3.0.1-beta.13 |
+| Version | 3.4.4 |
 | License | MIT |
 | Platforms | Linux, macOS, Windows |
 | Repository | github.com/nguyennguyenit/MultiClaude |
@@ -80,19 +80,21 @@
 | ID | Requirement | Status | Screen |
 |----|-------------|--------|--------|
 | FR-05.1 | Native OS notifications | ✅ Complete | - |
-| FR-05.2 | Telegram bot integration | ✅ Complete | S-04 |
+| FR-05.2 | Telegram bot integration with HTML preview & mobile control | ✅ Complete | S-04 |
 | FR-05.3 | Discord webhook integration | ✅ Complete | S-04 |
-| FR-05.4 | Pattern detection (complete, failed, review) | ✅ Complete | - |
+| FR-05.4 | Pattern detection (complete, failed, review-needed) with multi-agent detection | ✅ Complete | - |
 | FR-05.5 | Sound presets | ✅ Complete | S-04 |
+| FR-05.6 | Notification watcher with tool-approval/error patterns | ✅ Complete | - |
 
 ### FR-06: Settings and Themes
 
 | ID | Requirement | Status | Screen |
 |----|-------------|--------|--------|
-| FR-06.1 | 10 color themes | ✅ Complete | S-04 |
+| FR-06.1 | 7 UI color themes + 5 terminal ANSI palettes | ✅ Complete | S-04 |
 | FR-06.2 | Light/Dark/System mode | ✅ Complete | S-04 |
-| FR-06.3 | Settings modal with tabbed navigation | ✅ Complete | S-04 |
-| FR-06.4 | Terminal rendering mode selector | ✅ Complete | S-04 |
+| FR-06.3 | Settings slide panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | ✅ Complete | S-04 |
+| FR-06.4 | Terminal rendering mode selector (Performance/Balanced/Quality) with Claude-safe toggle | ✅ Complete | S-04 |
+| FR-06.5 | Context window analyzer toggle in Terminal Settings | ✅ Complete | S-04 |
 
 ### FR-07: Auto-Update
 
@@ -108,10 +110,10 @@
 | ID | Screen | Route/State | Features |
 |----|--------|-------------|----------|
 | S-01 | Welcome | `activeProjectId = null` | FR-02.1 |
-| S-02 | Terminal View | `activeView = 'terminals'` | FR-01.*, FR-02.2, FR-02.3 |
-| S-03 | GitHub View | `activeView = 'github'` | FR-04.* |
-| S-04 | Settings Slide Panel | `activePanel = 'settings'` | FR-05.2-5, FR-06.*, FR-07.2-4 |
+| S-02 | Terminal View | `activeProjectId != null` | FR-01.*, FR-02.2, FR-02.3, FR-06.5 (context analyzer) |
 | S-03 | Git Slide Panel | `activePanel = 'git'` | FR-03.* |
+| S-04 | GitHub Slide Panel | `activePanel = 'github'` | FR-04.* |
+| S-05 | Settings Slide Panel | `activePanel = 'settings'` | FR-05.2-6, FR-06.*, FR-07.2-4 |
 
 ## 5. Non-Functional Requirements
 
@@ -151,21 +153,25 @@
 
 ## 9. Feature Roadmap
 
-### Completed (v1.1.x)
-- [x] Multi-terminal grid management
-- [x] Project tabs with persistence
-- [x] Full Git/GitHub integration
-- [x] Notification system
-- [x] Auto-update system
-- [x] 10 themes with dark/light modes
-- [x] Terminal rendering modes
-- [x] WSL shell support (Windows)
+### Completed (v3.4.4)
+- [x] Pane tree layout (tmux/iTerm-style resizable splits)
+- [x] Context window analyzer with 6-category breakdown
+- [x] Warp-style terminal snapshot & restore
+- [x] xterm.js v6 upgrade with @xterm/headless mirror
+- [x] Image/video attachment thumbnail strip
+- [x] Telegram mobile control with HTML preview
+- [x] Multi-agent notification detection
+- [x] 7 UI themes + 5 terminal ANSI palettes
+- [x] Terminal rendering modes (Performance/Balanced/Quality)
+- [x] Full Git/GitHub integration with visual operations
+- [x] Auto-update system with changelog display
+- [x] WSL shell support with UNC path conversion
 
-### Planned (v1.2.x)
-- [ ] Terminal output search
-- [ ] Git conflict resolution UI
-- [ ] Multi-window support
-- [ ] Plugin system for extensions
+### Planned (v3.5.x)
+- [ ] Terminal output search with context preservation
+- [ ] Git merge conflict resolution UI
+- [ ] Multi-window support for side-by-side projects
+- [ ] Context analyzer export (JSON, CSV)
 
 ## 10. IPA Checklist
 
