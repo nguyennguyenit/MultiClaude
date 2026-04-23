@@ -175,11 +175,22 @@ export function useTerminal({
   }, [cancelScheduledFit, clearUserViewportInteraction, unregisterTerminalDebugHandle])
 
   // ── Public API ─────────────────────────────────────────────────────────────
-  const focus = useCallback(() => { terminalRef.current?.focus() }, [])
+  // Focus the hidden helper textarea directly with preventScroll so the browser
+  // does not auto-scroll the viewport to the cursor when user focused the pane
+  // while scrolled up (e.g. mid text-selection for copy). Fall back to
+  // terminal.focus() if textarea is not yet attached (pre-mount edge case).
+  const focus = useCallback(() => {
+    const t = terminalRef.current
+    if (!t) return
+    if (t.textarea) t.textarea.focus({ preventScroll: true })
+    else t.focus()
+  }, [])
   const blur = useCallback(() => { terminalRef.current?.blur() }, [])
   const showCursor = useCallback(() => {
-    if (!terminalRef.current || disposedRef.current) return
-    terminalRef.current.focus()
+    const t = terminalRef.current
+    if (!t || disposedRef.current) return
+    if (t.textarea) t.textarea.focus({ preventScroll: true })
+    else t.focus()
   }, [])
   const clear = useCallback(() => { terminalRef.current?.clear() }, [])
   const getViewportSnapshot = useCallback(() => {
