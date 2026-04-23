@@ -228,6 +228,8 @@ function ProjectPaneView({
               width: `${r.w}%`,
               height: `${r.h}%`,
               display: 'flex',
+              minWidth: 0,
+              minHeight: 0,
               pointerEvents: 'auto',
               zIndex: t.id === activeTerminalId ? 1 : 0
             }}

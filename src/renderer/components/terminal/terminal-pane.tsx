@@ -136,7 +136,7 @@ export const TerminalPane = memo(function TerminalPane({
       data-terminal-id={terminalId}
       onClick={onActivate}
       {...dropHandlers}
-      style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minWidth: 0, minHeight: 0 }}
     >
       {/* Top tab bar */}
       <div className={`pane-tab-bar${isActive ? ' active' : ''}`}>
