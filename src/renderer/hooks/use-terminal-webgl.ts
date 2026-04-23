@@ -7,7 +7,7 @@
  *   - Expose clearTextureAtlas() helper for other hooks
  *   - Subscribe to render-mode + Claude-mode store changes (three useEffects)
  *   - Expose reloadWebGLForTheme() — dispose + reload WebGL after theme change
- *   - Expose refreshTerminal() — full display refresh with debounce
+ *   - Expose refreshTerminal() — full display refresh with snapshot replay
  *
  * Sub-hooks must NOT import from each other.  All orchestration lives in use-terminal.ts.
  */
@@ -16,6 +16,15 @@ import type { RefObject } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
 import type { Terminal as XTerm } from '@xterm/xterm'
 import { useSettingsStore, useAppStore, useToastStore } from '../stores'
+import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
+import { subscribeToSystemResume, unsubscribeFromSystemResume } from '../utils/terminal-lifecycle-dispatcher'
+
+// ── Per-terminal mutex ───────────────────────────────────────────────────────
+// Prevents concurrent snapshot replays (e.g. refresh + phase-4 auto-resync).
+// Map<terminalId, Promise<void>> — presence of key = lock is held.
+// Designed for phase-4 reuse: import snapshotReplayMutex and call isLocked() before
+// triggering auto-resync from powerMonitor/onSystemResumed.
+const snapshotReplayMutex = new Map<string, Promise<void>>()
 
 const REFRESH_DEBOUNCE = 100  // ms debounce for refreshTerminal()
 
@@ -71,8 +80,136 @@ interface UseTerminalWebGLResult {
   webglLoadingRef: RefObject<boolean>
   /** Dispose + reload WebGL after theme change (cursor color requires full reload) */
   reloadWebGLForTheme: () => void
-  /** Full display refresh: dispose WebGL, redraw, reinit WebGL, refit, restore viewport */
+  /** Full display refresh via snapshot replay (debounced). showNotification defaults true. */
   refreshTerminal: (showNotification?: boolean) => void
+}
+
+interface SnapshotReplayParams {
+  terminalId: string
+  terminalRef: RefObject<XTerm | null>
+  disposedRef: RefObject<boolean>
+  isActiveRef: RefObject<boolean>
+  isHiddenRef: RefObject<boolean>
+  clearTextureAtlas: () => void
+  webglAddonRef: RefObject<WebglAddon | null>
+  reconcileWebGL: () => void
+  performFit: (restoreViewport?: boolean) => boolean
+  silent: boolean
+}
+
+/**
+ * Core snapshot replay sequence — hardened against B1/H4/H6/M8 failure modes.
+ *
+ * Sequence:
+ *   mutex check → pauseAndBuffer → getSnapshot → (disposed check) →
+ *   WebGL teardown → terminal.reset() → alt-buffer exit (B1) → resize →
+ *   write snapshot data → WebGL reload → performFit → SIGWINCH →
+ *   resumeAndFlush → toast
+ *
+ * Exported so phase-4 (powerMonitor auto-resync) can call it with silent:true.
+ */
+export async function performSnapshotReplay(params: SnapshotReplayParams): Promise<void> {
+  const {
+    terminalId,
+    terminalRef,
+    disposedRef,
+    isActiveRef,
+    isHiddenRef,
+    clearTextureAtlas,
+    webglAddonRef,
+    reconcileWebGL,
+    performFit,
+    silent,
+  } = params
+
+  // H6: concurrent refresh + auto-resync guard
+  if (snapshotReplayMutex.has(terminalId)) return
+
+  let resolveMutex!: () => void
+  const lockPromise = new Promise<void>(resolve => { resolveMutex = resolve })
+  snapshotReplayMutex.set(terminalId, lockPromise)
+
+  try {
+    // H4: buffer live output chunks while we reset+replay
+    pauseAndBuffer(terminalId)
+
+    const snap = await window.electron.terminal.getSnapshot(terminalId)
+
+    // M8: terminal destroyed while IPC was in flight
+    if (disposedRef.current || !terminalRef.current) {
+      resumeAndFlush(terminalId)
+      return
+    }
+
+    const t = terminalRef.current
+
+    // Dispose WebGL before reset to avoid texture cache corruption
+    clearTextureAtlas()
+    try { webglAddonRef.current?.dispose() } catch { /* ignore */ }
+    webglAddonRef.current = null
+
+    t.reset()
+
+    // B1: force exit alt-buffer before replaying snapshot — ensures shell prompt
+    // is visible even if terminal was inside vim/less when refresh was triggered.
+    t.write('\x1b[?1049l', undefined)
+
+    // Apply snapshot dimensions if valid
+    if (snap.cols > 0 && snap.rows > 0) {
+      t.resize(snap.cols, snap.rows)
+    }
+
+    // Write snapshot data (skip write call if empty to avoid unnecessary parse)
+    if (snap.data) {
+      await new Promise<void>(resolve => {
+        t.write(snap.data, resolve)
+      })
+    }
+
+    // Reload WebGL after reset/write cycle
+    if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
+      try {
+        const addon = new WebglAddon()
+        webglAddonRef.current = addon
+        t.loadAddon(addon)
+        reconcileWebGL()
+      } catch (e) { console.warn('WebGL addon failed to load after snapshot replay:', e) }
+    }
+
+    const fitOk = performFit(false)
+
+    // SIGWINCH — makes CLI (vim, tmux, etc.) repaint at current dimensions
+    try {
+      window.electron.terminal.resize(terminalId, t.cols, t.rows)
+    } catch { /* ignore — non-fatal */ }
+
+    // H4: drain buffered live chunks (arrival order preserved)
+    resumeAndFlush(terminalId)
+
+    if (!silent) {
+      try {
+        useToastStore.getState().addToast(
+          fitOk ? 'Terminal refreshed' : 'Terminal refreshed (pane hidden — retry when visible)',
+          'info'
+        )
+      } catch { /* ignore */ }
+    }
+  } catch (err) {
+    // Ensure buffer is always flushed even on error, then surface the error as a toast
+    resumeAndFlush(terminalId)
+    console.error('Terminal snapshot replay failed:', err)
+    try {
+      useToastStore.getState().addToast('Terminal refresh error — could not fetch snapshot', 'error')
+    } catch { /* ignore */ }
+  } finally {
+    snapshotReplayMutex.delete(terminalId)
+    resolveMutex()
+  }
+}
+
+/** Test helper: check if a replay is currently in progress for a terminal. */
+export function isSnapshotReplayLocked(terminalId: string): boolean {
+  return snapshotReplayMutex.has(terminalId)
 }
 
 export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWebGLResult {
@@ -218,49 +355,67 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
   }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, reconcileWebGL, terminalId, terminalRef, webglAddonRef])
 
   /**
-   * Full display refresh: dispose WebGL, redraw canvas, reinit WebGL, refit, restore viewport.
-   * Force a pty resize afterwards so CLIs (Claude Code, etc.) receive SIGWINCH and
-   * redraw the current prompt — otherwise narrow-wrapped lines in the buffer remain
-   * stale even after xterm cols/rows are corrected.
-   * Debounced to avoid spam from rapid context-loss events.
+   * Full display refresh via snapshot replay.
+   * Fetches a headless PTY snapshot from the backend, resets xterm, and replays
+   * the snapshot data — restoring the visible terminal state after a GPU context
+   * loss, lid-wake, or explicit user refresh.
+   *
+   * Debounced to absorb rapid context-loss bursts.
+   * Delegates to performSnapshotReplay() which holds the per-terminal mutex,
+   * buffers live output during replay (H4), and handles disposal guard (M8).
    */
   const refreshTerminal = useCallback((showNotification = true) => {
     if (disposedRef.current || !terminalRef.current) return
     if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
     refreshDebounceRef.current = setTimeout(() => {
-      const t = terminalRef.current
-      if (disposedRef.current || !t) return
-      const savedViewportY = t.buffer.active.viewportY
-      clearTextureAtlas()
-      try { webglAddonRef.current?.dispose() } catch { /* ignore */ }
-      webglAddonRef.current = null
-      t.refresh(0, t.rows - 1)
-      if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
-        try {
-          const addon = new WebglAddon()
-          webglAddonRef.current = addon
-          t.loadAddon(addon)
-          reconcileWebGL()
-        } catch (e) { console.warn('WebGL addon failed to load:', e) }
-      }
-      const fitOk = performFit(false)
-      // Force pty SIGWINCH even when cols/rows didn't change — xterm's onResize
-      // only fires on dimension change, but the user-facing symptom (CLI stuck
-      // rendering at old width) needs an explicit resize to trigger redraw.
-      try {
-        window.electron.terminal.resize(terminalId, t.cols, t.rows)
-      } catch { /* ignore */ }
-      if (savedViewportY >= 0) t.scrollToLine(savedViewportY)
-      if (showNotification) {
-        try {
-          useToastStore.getState().addToast(
-            fitOk ? 'Terminal refreshed' : 'Terminal refreshed (pane hidden — retry when visible)',
-            'info'
-          )
-        } catch { /* ignore */ }
-      }
+      if (disposedRef.current || !terminalRef.current) return
+      void performSnapshotReplay({
+        terminalId,
+        terminalRef,
+        disposedRef,
+        isActiveRef,
+        isHiddenRef,
+        clearTextureAtlas,
+        webglAddonRef,
+        reconcileWebGL,
+        performFit,
+        silent: !showNotification,
+      })
     }, REFRESH_DEBOUNCE)
   }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, performFit, reconcileWebGL, terminalId, terminalRef, webglAddonRef])
+
+  // Phase 4: subscribe to system-resume lifecycle events.
+  // Triggers silent snapshot replay (no toast) on lid-wake, mirroring the same
+  // path as the explicit refresh button but with silent=true.
+  // snapshotReplayMutex inside performSnapshotReplay() coalesces concurrent fires.
+  useEffect(() => {
+    subscribeToSystemResume(terminalId, () => {
+      if (disposedRef.current || !terminalRef.current) return
+      void performSnapshotReplay({
+        terminalId,
+        terminalRef,
+        disposedRef,
+        isActiveRef,
+        isHiddenRef,
+        clearTextureAtlas,
+        webglAddonRef,
+        reconcileWebGL,
+        performFit,
+        silent: true,
+      })
+    })
+    return () => unsubscribeFromSystemResume(terminalId)
+  }, [
+    terminalId,
+    terminalRef,
+    disposedRef,
+    isActiveRef,
+    isHiddenRef,
+    clearTextureAtlas,
+    webglAddonRef,
+    reconcileWebGL,
+    performFit,
+  ])
 
   return { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal }
 }

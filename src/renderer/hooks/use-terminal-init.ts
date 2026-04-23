@@ -293,8 +293,29 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
           requestAnimationFrame(restoreInitialViewport)
         })
       } else {
-        requestAnimationFrame(restoreInitialViewport)
-        window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+        // No prop-provided initialOutput — fetch snapshot from backend.
+        // Live chunks arriving during this await are tolerated: they append after
+        // snapshot write, producing correct final state (no data loss, no reset
+        // conflict). No pauseAndBuffer here — delaying first prompt would be noticeable.
+        // V2 design decision: snapshot is clean PTY state, so stripLeakedTerminalResponses
+        // is intentionally NOT applied (snapshot has no raw PTY leak artifacts).
+        window.electron.terminal.getSnapshot(terminalId).then(snap => {
+          if (disposedRef.current || !terminalRef.current) return
+          if (snap.data) {
+            terminal.write(snap.data, () => {
+              requestAnimationFrame(restoreInitialViewport)
+            })
+          } else {
+            // Empty snapshot (fresh terminal) — just restore viewport + send SIGWINCH
+            requestAnimationFrame(restoreInitialViewport)
+            window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+          }
+        }).catch(() => {
+          // Snapshot fetch failed — fall back to viewport restore + SIGWINCH
+          if (disposedRef.current || !terminalRef.current) return
+          requestAnimationFrame(restoreInitialViewport)
+          window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+        })
       }
 
       syncFontAfterLoad()

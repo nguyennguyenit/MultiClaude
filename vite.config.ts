@@ -26,7 +26,7 @@ export default defineConfig(({ command }) => {
               minify: isBuild,
               outDir: 'dist/main',
               rollupOptions: {
-                external: ['@lydell/node-pty', 'electron', 'electron-store', 'simple-git']
+                external: ['@lydell/node-pty', 'electron', 'electron-store', 'simple-git', '@xterm/headless', '@xterm/addon-serialize']
               }
             },
             resolve: {

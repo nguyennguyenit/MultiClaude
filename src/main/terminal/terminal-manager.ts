@@ -4,10 +4,17 @@ import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
 import { existsSync, readdirSync, realpathSync } from 'fs'
 import path from 'path'
-import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS } from '@shared/constants'
+import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS, HEADLESS_SCROLLBACK_LINES } from '@shared/constants'
 import type { Terminal, TerminalSession, WindowsShell, AgentType, ShellInfo, WslInfo, CreateTerminalOptions } from '@shared/types'
 import { detectMacosShells } from './macos-shell-detector'
 import { detectWsl } from './wsl-detector'
+// @xterm/headless is CJS-only (package.json "module" field points to non-existent lib/xterm.mjs).
+// Externalized in vite.config.ts and required by Node runtime at execution — Node's ESM loader
+// rejects named imports from CJS, so use default-import + destructure pattern.
+import headlessPkg from '@xterm/headless'
+import type { Terminal as HeadlessTerminal } from '@xterm/headless'
+const { Terminal: HeadlessTerminalCtor } = headlessPkg
+import { SerializeAddon } from '@xterm/addon-serialize'
 
 const DESTROY_TIMEOUT_MS = 3000
 // Max exited terminals to keep for notification button lookups
@@ -18,12 +25,17 @@ interface PTYProcess {
   id: string
   pty: pty.IPty
   metadata: Terminal
+  // Raw-ANSI buffer kept ONLY for Telegram's text-only notification path.
+  // Visual terminal state = headless snapshot (see getSnapshot). Do not grow this for UI use.
   outputBuffer: string
   inputBuffer: string
   lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
   destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
   suspended?: boolean // True when system is suspended, prevents PTY operations
+  // Phase 1: headless terminal mirror for snapshot/restore
+  headlessTerm?: HeadlessTerminal
+  serializeAddon?: SerializeAddon
 }
 
 export class TerminalManager extends EventEmitter {
@@ -424,11 +436,37 @@ export class TerminalManager extends EventEmitter {
       oscBuffer: ''
     }
 
+    // Phase 1: construct headless mirror BEFORE registering pty.onData (red-team H3 ordering).
+    // allowProposedApi is required by SerializeAddon in xterm v6.
+    try {
+      const headlessTerm = new HeadlessTerminalCtor({
+        cols: 80,
+        rows: 24,
+        scrollback: HEADLESS_SCROLLBACK_LINES,
+        allowProposedApi: true,
+      })
+      const serializeAddon = new SerializeAddon()
+      // SerializeAddon.activate() expects @xterm/xterm Terminal, but the runtime
+      // interface is structurally compatible with headless Terminal. Cast needed
+      // because TypeScript declaration diverges at the source-type level only.
+      headlessTerm.loadAddon(serializeAddon as unknown as Parameters<typeof headlessTerm.loadAddon>[0])
+      termProcess.headlessTerm = headlessTerm
+      termProcess.serializeAddon = serializeAddon
+    } catch (err) {
+      // Non-fatal: headless terminal failed to initialize. PTY continues without snapshot support.
+      console.error(`[terminal-manager] Failed to init headless terminal for ${id}:`, (err as Error).message)
+    }
+
     // Handle terminal output
     ptyProcess.onData((data) => {
       // Skip processing during system suspend to prevent issues with invalid FDs
       if (termProcess.suspended || this.systemSuspended) return
 
+      // Phase 1: mirror PTY output to headless terminal BEFORE IPC emit.
+      // Nullish guard covers startup race where headless init failed.
+      termProcess.headlessTerm?.write(data)
+
+      // Raw-ANSI buffer — Telegram text-only path only. Visual source of truth = headless snapshot (getSnapshot).
       termProcess.outputBuffer += data
       termProcess.lastOutputAt = Date.now()
       if (termProcess.outputBuffer.length > TERMINAL_OUTPUT_BUFFER_MAX) {
@@ -464,6 +502,10 @@ export class TerminalManager extends EventEmitter {
       if (this.exitedTerminals.size > MAX_GHOST_TERMINALS) {
         this.exitedTerminals.delete(this.exitedTerminals.keys().next().value!)
       }
+      // Phase 1: dispose headless terminal on PTY exit to prevent memory leak
+      termProcess.headlessTerm?.dispose()
+      termProcess.headlessTerm = undefined
+      termProcess.serializeAddon = undefined
       this.terminals.delete(id)
     })
 
@@ -511,6 +553,9 @@ export class TerminalManager extends EventEmitter {
     }
     try {
       term.pty.resize(cols, rows)
+      // Phase 1: resize headless mirror inside same try block (validation V1).
+      // Wrapping ensures a post-dispose throw doesn't crash uncaught.
+      term.headlessTerm?.resize(cols, rows)
       return true
     } catch (error) {
       // PTY may be invalid after system resume - log but don't crash
@@ -519,9 +564,54 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
+  /**
+   * Drain the headless terminal's internal async write queue.
+   * xterm's write() is internally asynchronous; calling write('', callback) acts
+   * as a barrier — the callback fires after all previously queued writes complete.
+   * Required before calling serializeAddon.serialize() to guarantee output is fully
+   * reflected in the terminal buffer.
+   */
+  async flushHeadless(id: string): Promise<void> {
+    const proc = this.terminals.get(id)
+    if (!proc?.headlessTerm) return
+    await new Promise<void>(resolve => proc.headlessTerm!.write('', () => resolve()))
+  }
+
+  /**
+   * Serialize the headless terminal mirror for a given terminal ID.
+   * Drains the write queue first (B2) then serializes with full scrollback.
+   * Returns empty payload on missing id or serialize error (M7).
+   *
+   * Re-checks process existence after await to guard against PTY exit during serialize.
+   */
+  async getSnapshot(id: string): Promise<{ data: string; cols: number; rows: number }> {
+    const empty = { data: '', cols: 0, rows: 0 }
+    const proc = this.terminals.get(id)
+    if (!proc?.headlessTerm || !proc.serializeAddon) return empty
+    try {
+      // Drain pending writes before serializing (red-team B2)
+      await this.flushHeadless(id)
+      // Re-check after await — PTY may have exited while we awaited (guard against stale ref)
+      const current = this.terminals.get(id)
+      if (!current?.headlessTerm || !current.serializeAddon) return empty
+      return {
+        data: current.serializeAddon.serialize({ scrollback: HEADLESS_SCROLLBACK_LINES }),
+        cols: current.headlessTerm.cols,
+        rows: current.headlessTerm.rows,
+      }
+    } catch (err) {
+      console.warn('[terminal-manager] getSnapshot failed', { id, err: (err as Error).message })
+      return empty
+    }
+  }
+
   destroy(id: string): boolean {
     const term = this.terminals.get(id)
     if (!term) return false
+    // Phase 1: dispose headless before removing from map to prevent leak
+    term.headlessTerm?.dispose()
+    term.headlessTerm = undefined
+    term.serializeAddon = undefined
     term.pty.kill()
     this.terminals.delete(id)
     return true
@@ -573,6 +663,10 @@ export class TerminalManager extends EventEmitter {
         if (resolved) return
         resolved = true
         clearTimeout(timeout)
+        // Phase 1: dispose headless terminal on async destroy (mirrors create-time onExit handler)
+        term.headlessTerm?.dispose()
+        term.headlessTerm = undefined
+        term.serializeAddon = undefined
         this.terminals.delete(id)
       }
 

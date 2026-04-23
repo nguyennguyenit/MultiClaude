@@ -15,6 +15,8 @@ The current terminal output path is intentionally split:
 - `TerminalView` handles xterm writes and visible-output buffering for its own terminal
 - `terminal-output-buffer.ts` stores scrollback in a plain module, not reactive Zustand state
 
+**Canonical terminal state:** The main process maintains one `@xterm/headless` terminal instance per PTY (with `SerializeAddon`). This headless mirror receives every byte the PTY emits and is the authoritative visual state source. The renderer fetches it via `terminal:get-snapshot` IPC invoke on mount.
+
 ## High-Level Architecture
 
 ```text
@@ -100,29 +102,46 @@ Input still follows the usual Electron path:
 
 ```text
 PTY output
-  -> main-process IPC event
+  -> headless terminal mirror (main process, per-PTY @xterm/headless)
+  -> main-process IPC event (terminal:output)
   -> App.tsx shared listener
   -> terminal-output-dispatcher.ts
   -> TerminalView handler
   -> xterm.write()
-  -> visible-output append
-  -> terminal-output-buffer.ts
+  -> visible-output append (skipAppendRef guard prevents restore duplicates)
+  -> terminal-output-buffer.ts (transition cache only)
 ```
 
 Current output handling is deliberately centralized:
 
-- The main process still emits raw `terminal:output` IPC events
+- The main process writes every PTY byte into the per-PTY `@xterm/headless` terminal **before** emitting IPC. This headless instance (with `SerializeAddon`) is the canonical visual state.
 - `App.tsx` attaches one shared listener with `attachTerminalOutputDispatcher(window.electron.terminal.onOutput)`
 - `terminal-output-dispatcher.ts` keeps a `Map<terminalId, handler>` and forwards only to the matching terminal
 - `TerminalView` registers and cleans up its handler with `registerTerminalOutputHandler(...)`
 - `processTerminalOutputChunk()` writes the chunk into xterm, triggers `onOutput`, and appends only the visible data
-- `terminal-output-buffer.ts` stores scrollback in a plain `Map`, so output accumulation does not create reactive Zustand churn
+- `terminal-output-buffer.ts` is a **transition cache** for the <100ms window before a headless snapshot arrives; it is not the source of truth
 
-Restore behavior remains unchanged:
+#### Headless Snapshot IPC Flow
 
-- `TerminalPane` reads `initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId)`
+On terminal mount (or remount after tab switch), `use-terminal-init.ts` invokes `terminal:get-snapshot` via the preload bridge. The main process serializes the headless terminal to a string (via `SerializeAddon`) and returns it. The renderer writes it into xterm as the initial view state. The renderer-side `terminal-output-buffer.ts` is only checked if no `initialOutput` prop is provided AND the snapshot has not arrived yet.
+
+#### Auto-Resync on System Resume
+
+When the system wakes from sleep, `powerMonitor` emits `resume` in the main process. A debounced handler (2000 ms window, 200 ms PTY-settle delay) sends `terminal:system-resumed` IPC to the renderer lifecycle dispatcher, which triggers a silent snapshot re-fetch and replay for all mounted terminals. This corrects display corruption caused by the OS blanking the PTY on suspend.
+
+#### Refresh Button Semantics
+
+The refresh button triggers an immediate `terminal:get-snapshot` fetch and re-writes the xterm viewport. It restores the scrollback state the headless terminal recorded. **Alt-buffer caveat:** interactive programs that manage their own screen (vim, tmux, less, etc.) repaint only when they receive a keystroke or resize signal. After a lid-close/resume cycle those programs may still appear blank until the user interacts with them. The refresh button cannot force a repaint for alt-buffer programs.
+
+Restore behavior:
+
+- `TerminalPane` reads `initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId)` as a first-resort; if empty, `use-terminal-init.ts` fetches a headless snapshot via IPC
 - `skipAppendRef` suppresses duplicate appends during restore
 - `addTerminal()` and `removeTerminal()` clear stale buffer entries for reused or closed terminal IDs
+
+#### Legacy Raw Buffer (outputBuffer)
+
+`PTYProcess.outputBuffer` in the main process accumulates raw ANSI bytes for **Telegram notifications only** (text extraction for `/output` and smart-summary commands). It is not used for UI rendering. The visual source of truth is the headless terminal snapshot. This buffer must not be expanded for new UI use-cases.
 
 ### State Management
 
@@ -151,6 +170,8 @@ Important current behavior:
 - `terminal:output`
 - `terminal:exit`
 - `terminal:title-change`
+- `terminal:get-snapshot` — renderer invokes to fetch serialized headless state; main process returns `SerializeAddon` output string or `null` if headless unavailable
+- `terminal:system-resumed` — main process pushes after system resume (debounced) to trigger silent re-fetch for all mounted terminals
 - `terminal:load-pane-tree` / `terminal:save-pane-tree` — per-project split-tree persistence (schemaVersion 2 with on-read migration from the legacy flat layout)
 
 The renderer now uses `terminal:output` through the shared App-level subscription only. Individual terminal views no longer subscribe directly to IPC.

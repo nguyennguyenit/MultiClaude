@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
+import { shouldForwardResume } from '../utils/resume-debounce-helper'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -129,6 +130,26 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
   })
 
+  // Phase 4: forward system-resumed event to all BrowserWindows with debounce.
+  // powerMonitor on macOS double-fires; shouldForwardResume() blocks the second
+  // fire within a 2000ms window. A 200ms settle delay gives PTYs time to flush
+  // buffered output before the renderer triggers snapshot replay.
+  //
+  // LIFECYCLE NOTE: this listener is never explicitly removed. Safe because
+  // registerIpcHandlers is called exactly once per TerminalManager instance,
+  // and the TerminalManager is re-instantiated when the BrowserWindow is
+  // recreated. If that assumption changes, add an off() in a shutdown hook.
+  terminalManager.on('terminal-resumed', () => {
+    if (!shouldForwardResume(Date.now())) return
+    setTimeout(() => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED)
+        }
+      }
+    }, 200)
+  })
+
   // Forward terminal created events (e.g. from Telegram /new command) to renderer
   terminalManager.on('created', ({ terminal }: { terminal: import('@shared/types').Terminal }) => {
     if (terminal.cwd) {
@@ -210,6 +231,9 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (!payload || typeof payload.projectId !== 'string' || !payload.projectId) return
     projectStore.savePaneTree(payload.projectId, payload.tree ?? null)
   })
+
+  safeHandle(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, (_e, terminalId: string) =>
+    terminalManager.getSnapshot(terminalId))
 
   // Project handlers
   safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {

@@ -16,6 +16,9 @@ export const IPC_CHANNELS = {
   TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
   TERMINAL_LOAD_PANE_TREE: 'terminal:load-pane-tree',
   TERMINAL_SAVE_PANE_TREE: 'terminal:save-pane-tree',
+  TERMINAL_GET_SNAPSHOT: 'terminal:get-snapshot',
+  // Phase 4: forwarded to renderer when system resumes from sleep/suspend
+  TERMINAL_SYSTEM_RESUMED: 'terminal:system-resumed',
 
   // Project channels
   PROJECT_LIST: 'project:list',

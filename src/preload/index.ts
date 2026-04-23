@@ -41,12 +41,15 @@ export interface ElectronAPI {
     getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
     loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
     savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
+    getSnapshot: (terminalId: string) => Promise<{ data: string; cols: number; rows: number }>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
     onCreated: (callback: (terminal: Terminal) => void) => () => void
     onAgentDetected: (callback: (data: { terminalId: string; agentType: string }) => void) => () => void
+    /** Phase 4: subscribe to system-resume IPC events. Returns unsubscribe closure. */
+    onSystemResumed: (callback: () => void) => () => void
   }
   project: {
     list: () => Promise<Project[]>
@@ -213,6 +216,9 @@ const api: ElectronAPI = {
     getAvailableShells: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SHELLS),
     loadPaneTree: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, projectId),
     savePaneTree: (projectId, tree) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, { projectId, tree }),
+    getSnapshot: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, terminalId) as
+        Promise<{ data: string; cols: number; rows: number }>,
     onOutput: (callback) => {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)
@@ -242,6 +248,12 @@ const api: ElectronAPI = {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
+    },
+    onSystemResumed: (callback) => {
+      // IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED carries no payload — callback takes no args
+      const listener = () => callback()
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED, listener)
     }
   },
   project: {

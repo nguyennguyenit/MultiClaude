@@ -24,6 +24,7 @@ import { registerSplitHandlers } from './utils/terminal-context-actions'
 import { shellInfoToWindowsShell } from './utils'
 import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
 import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
+import { attachTerminalLifecycleDispatcher } from './utils/terminal-lifecycle-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { ShellInfo, Project } from '@shared/types'
 
@@ -520,6 +521,10 @@ function App() {
     })
     return unsubscribe
   }, [])
+
+  // Phase 4: attach lifecycle dispatcher BEFORE output dispatcher so any buffering
+  // that happens during snapshot replay doesn't race with resume fanout.
+  useEffect(() => attachTerminalLifecycleDispatcher(window.electron.terminal.onSystemResumed), [])
 
   useEffect(() => attachTerminalOutputDispatcher(window.electron.terminal.onOutput), [])
 
