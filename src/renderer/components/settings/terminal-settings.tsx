@@ -77,6 +77,7 @@ export function TerminalSettings() {
     setTerminalRenderMode,
     setGpuRendererForClaudeTerminals,
     setScrollbackLines,
+    setEnableContextWindow,
     setWindowsShell
   } = useSettingsStore()
   const { terminalLimit } = pendingSettings
@@ -387,6 +388,37 @@ export function TerminalSettings() {
             />
           </div>
         )}
+      </div>
+
+      {/* Context Window Breakdown */}
+      <div className="settings-card rounded-2xl flex flex-col gap-3 p-5">
+        <div>
+          <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
+            Context Window Breakdown
+          </p>
+          <p className="text-xs text-[var(--mc-text-muted)] mt-1">
+            Drawer that estimates how your active Claude session is spending its
+            context budget across six categories (CLAUDE.md, tool output, thinking, etc.).
+          </p>
+        </div>
+        <div className="flex items-start gap-3 pt-1">
+          <ToggleSwitch
+            checked={pendingSettings.enableContextWindow !== false}
+            onChange={setEnableContextWindow}
+          />
+          <div>
+            <p
+              className="text-sm font-medium text-[var(--mc-text-primary)]"
+              title="Requires restart to take effect"
+            >
+              Enable context window breakdown
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
+              Turning this off skips the JSONL analyzer and hides the drawer —
+              <span className="font-semibold"> requires restart</span> to take effect.
+            </p>
+          </div>
+        </div>
       </div>
 
     </div>

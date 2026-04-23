@@ -54,6 +54,7 @@ interface SettingsState {
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
   setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setScrollbackLines: (lines: number) => void
+  setEnableContextWindow: (enabled: boolean) => void
   setWindowsShell: (shell: WindowsShell) => void
   setDefaultShell: (shell: ShellInfo | null) => Promise<void>
   setUiStyle: (style: UiStyle) => void
@@ -192,6 +193,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setWindowsShell: (shell) => {
     const pending = { ...get().pendingSettings, windowsShell: shell }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setEnableContextWindow: (enabled) => {
+    const pending = { ...get().pendingSettings, enableContextWindow: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
