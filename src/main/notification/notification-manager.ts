@@ -103,6 +103,19 @@ export class NotificationManager extends EventEmitter {
       this.handleTaskEvent(event)
     })
 
+    // Eagerly bind sessionId ↔ terminal on the first JSONL line seen for a
+    // session. Without this the drawer stays empty until the first taskEvent
+    // fires (which never happens for text-only conversations, or when the user
+    // picks a session via `claude --resume` TUI picker with no uuid on argv).
+    // Accept lines without cwd (e.g. permission-mode / file-history-snapshot)
+    // — attachClaudeSession has a last-resort fallback that picks the most
+    // recently active Claude terminal when no cwd match is available.
+    this.logWatcher.on('jsonlLine', (ev: { sessionId?: string; cwd?: string }) => {
+      if (!ev.sessionId) return
+      if (this.terminalManagerRef?.findByClaudeSessionId(ev.sessionId)) return
+      this.terminalManagerRef?.attachClaudeSession(ev.sessionId, ev.cwd ?? '')
+    })
+
     // Listen for task completion events from JSONL transcript watcher
     // JSONL events use Claude session ID as terminalId — translate to real terminal ID
     this.logWatcher.on('taskEvent', (event: TaskEvent) => {

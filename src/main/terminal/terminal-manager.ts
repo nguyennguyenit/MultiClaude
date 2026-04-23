@@ -768,7 +768,8 @@ export class TerminalManager extends EventEmitter {
     const existing = this.findByClaudeSessionId(sessionId)
     if (existing) return existing
 
-    const claudeTerminals = Array.from(this.terminals.values())
+    const allTerminals = Array.from(this.terminals.values())
+    const claudeTerminals = allTerminals
       .filter(term => term.metadata.agentType === 'claude' || term.metadata.isClaudeMode)
 
     // Prefer unbound terminals, then most recently active
@@ -781,26 +782,49 @@ export class TerminalManager extends EventEmitter {
         return this.getCreatedAtMs(b.metadata.createdAt) - this.getCreatedAtMs(a.metadata.createdAt)
       })
 
-    // Tier 1: Exact CWD match
+    // Tier 1: Exact CWD match among known Claude terminals
     const exactMatch = sortByAffinity(
       claudeTerminals.filter(t => t.metadata.cwd === cwd)
     )[0]
 
     // Tier 2: Same project basename (handles symlinks, resolved paths, sub-dirs)
-    const cwdBasename = path.basename(cwd)
-    const basenameMatch = !exactMatch
+    const cwdBasename = cwd ? path.basename(cwd) : ''
+    const basenameMatch = !exactMatch && cwdBasename
       ? sortByAffinity(
           claudeTerminals.filter(t => path.basename(t.metadata.cwd || '') === cwdBasename)
         )[0]
       : undefined
 
-    // Tier 3: Most recently active Claude terminal (last resort)
-    const fallback = !exactMatch && !basenameMatch
+    // Tier 3: Most recently active Claude terminal (last resort within claude set)
+    const claudeFallback = !exactMatch && !basenameMatch
       ? sortByAffinity(claudeTerminals)[0]
       : undefined
 
-    const candidate = exactMatch ?? basenameMatch ?? fallback
+    // Tier 4: No Claude-flagged terminal found — keystroke detection can miss
+    // `claude` (restored PTY, paste, history recall, certain shells). Fall back
+    // to *any* unbound terminal matching cwd, then any matching basename, then
+    // the most recently active terminal. Upgrade it to Claude mode on bind.
+    let relaxedCandidate: PTYProcess | undefined
+    if (!exactMatch && !basenameMatch && !claudeFallback) {
+      const unbound = allTerminals.filter(t => !t.metadata.claudeSessionId)
+      relaxedCandidate =
+        sortByAffinity(unbound.filter(t => t.metadata.cwd === cwd))[0]
+        ?? (cwdBasename
+          ? sortByAffinity(unbound.filter(t => path.basename(t.metadata.cwd || '') === cwdBasename))[0]
+          : undefined)
+        ?? sortByAffinity(unbound)[0]
+    }
+
+    const candidate = exactMatch ?? basenameMatch ?? claudeFallback ?? relaxedCandidate
     if (!candidate) return undefined
+
+    // If we took the relaxed path, mark the terminal as Claude-mode so the UI
+    // badge / filters behave correctly going forward.
+    if (relaxedCandidate && !candidate.metadata.isClaudeMode) {
+      this.setClaudeMode(candidate)
+      candidate.metadata.agentType = 'claude'
+      this.emit('agentDetected', { terminalId: candidate.id, agentType: 'claude' as AgentType })
+    }
 
     this.setClaudeSessionId(candidate, sessionId)
     return { id: candidate.id }
