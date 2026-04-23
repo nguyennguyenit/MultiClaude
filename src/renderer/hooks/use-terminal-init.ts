@@ -352,6 +352,11 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     let imeDelDebt = 0
 
     terminal.onData((data) => {
+      // Drop xterm focus-report events (DECSET 1004). Forwarding them causes
+      // inline TUI apps (e.g. Claude Code) to re-render on every OS window
+      // blur/focus, which shifts the prompt down since the redraw can't
+      // reliably erase the previous frame in inline (non-alt-buffer) mode.
+      if (data === '\x1b[I' || data === '\x1b[O') return
       // IME DEL-debt: swallow extra DELs that the IME emits after NFC collapse
       if (data === '\x7f' && imeDelDebt > 0) {
         imeDelDebt--
