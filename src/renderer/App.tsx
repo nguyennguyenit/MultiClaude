@@ -10,7 +10,8 @@ import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
-import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener, useContextWindowStore } from './stores'
+import { ContextWindowDrawer } from './components/context-window'
 import { useContextMenuStore } from './stores/context-menu-store'
 import { insertFilePathsIntoTerminal } from './utils/insert-file-paths'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
@@ -38,6 +39,7 @@ function App() {
   const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
   const updateTerminalClaudeMode = useAppStore((state) => state.updateTerminalClaudeMode)
   const updateTerminalAgentType = useAppStore((state) => state.updateTerminalAgentType)
+  const updateTerminalClaudeSessionId = useAppStore((state) => state.updateTerminalClaudeSessionId)
   const addProject = useAppStore((state) => state.addProject)
   const removeProject = useAppStore((state) => state.removeProject)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -355,6 +357,7 @@ function App() {
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
     onToggleGitHubPanel: () => togglePanel('github'),
+    onToggleContextWindow: () => useContextWindowStore.getState().toggle(),
     // Always pass the handler — executeSplit's internal gate emits notifyLimit
     // uniformly, matching the xterm-focused hotkey path. Previously this was
     // gated by `canSplit`, which made the global hotkey silently no-op at limit.
@@ -551,6 +554,15 @@ function App() {
     return unsubscribe
   }, [updateTerminalAgentType])
 
+  // Propagate Claude sessionId changes from main → renderer store (drives
+  // context-window drawer binding).
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onClaudeSessionIdChanged(({ terminalId, sessionId }) => {
+      updateTerminalClaudeSessionId(terminalId, sessionId)
+    })
+    return unsubscribe
+  }, [updateTerminalClaudeSessionId])
+
   // Handle terminals created externally (e.g. via Telegram /new command)
   // Rebuild pane tree with balanced layout — same as Ctrl+T / + button
   useEffect(() => {
@@ -588,6 +600,9 @@ function App() {
 
       {/* Themed context menu (portal) */}
       <ThemedContextMenu />
+
+      {/* Per-turn context window breakdown drawer (Cmd/Ctrl+Shift+C) */}
+      <ContextWindowDrawer />
 
       {/* Settings modal */}
       <SettingsModal

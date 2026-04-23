@@ -109,6 +109,13 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     notificationManager.handleAgentExit(terminalId, exitCode)
   })
 
+  // Forward Claude session id changes (for context-window drawer binding)
+  terminalManager.on('claudeSessionIdChanged', ({ terminalId, sessionId }: { terminalId: string; sessionId: string }) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, { terminalId, sessionId })
+    }
+  })
+
   // Forward agent detection to renderer for badge display
   terminalManager.on('agentDetected', ({ terminalId, agentType }: { terminalId: string; agentType: AgentType }) => {
     notificationManager.setTerminalAgentType(terminalId, agentType)

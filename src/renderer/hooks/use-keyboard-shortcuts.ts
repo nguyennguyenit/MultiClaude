@@ -9,6 +9,7 @@ interface KeyboardShortcutsOptions {
   onCloseTerminal: () => void
   onSelectProject?: (id: string) => void
   onToggleGitHubPanel?: () => void
+  onToggleContextWindow?: () => void
   onSplit?: (direction: PaneSplitDirection) => void
 }
 
@@ -25,6 +26,7 @@ export function useKeyboardShortcuts({
   onCloseTerminal,
   onSelectProject,
   onToggleGitHubPanel,
+  onToggleContextWindow,
   onSplit
 }: KeyboardShortcutsOptions) {
   useEffect(() => {
@@ -61,6 +63,9 @@ export function useKeyboardShortcuts({
         case 'toggle-github-panel':
           onToggleGitHubPanel?.()
           return
+        case 'toggle-context-window':
+          onToggleContextWindow?.()
+          return
         case 'split-pane':
           onSplit?.(shortcut.direction)
           return
@@ -69,7 +74,7 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitHubPanel, onSplit])
+  }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitHubPanel, onToggleContextWindow, onSplit])
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

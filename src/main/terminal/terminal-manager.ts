@@ -331,6 +331,12 @@ export class TerminalManager extends EventEmitter {
     }
   }
 
+  private setClaudeSessionId(term: PTYProcess, sessionId: string): void {
+    if (term.metadata.claudeSessionId === sessionId) return
+    term.metadata.claudeSessionId = sessionId
+    this.emit('claudeSessionIdChanged', { terminalId: term.metadata.id, sessionId })
+  }
+
   private setClaudeMode(term: PTYProcess): void {
     if (term.metadata.isClaudeMode && term.metadata.allowTitleUpdate) return
 
@@ -369,7 +375,7 @@ export class TerminalManager extends EventEmitter {
             this.setClaudeMode(term)
             const sessionId = this.extractClaudeSessionId(command)
             if (sessionId) {
-              term.metadata.claudeSessionId = sessionId
+              this.setClaudeSessionId(term, sessionId)
             }
           } else {
             // Non-claude agents also get title updates
@@ -721,7 +727,7 @@ export class TerminalManager extends EventEmitter {
     let command = 'claude'
     if (sessionId) {
       command += ` --resume ${sessionId}`
-      term.metadata.claudeSessionId = sessionId
+      this.setClaudeSessionId(term, sessionId)
     }
     command += '\n'
 
@@ -796,7 +802,7 @@ export class TerminalManager extends EventEmitter {
     const candidate = exactMatch ?? basenameMatch ?? fallback
     if (!candidate) return undefined
 
-    candidate.metadata.claudeSessionId = sessionId
+    this.setClaudeSessionId(candidate, sessionId)
     return { id: candidate.id }
   }
 

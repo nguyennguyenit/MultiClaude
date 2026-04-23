@@ -4,3 +4,4 @@ export { useNotificationStore, setupNotificationListener } from './notification-
 export { useToastStore } from './toast-store'
 export { useUpdateStore, setupUpdateListener } from './update-store'
 export { useImageStore, type ImageEntry, type MediaType } from './image-store'
+export { useContextWindowStore } from './context-window-store'

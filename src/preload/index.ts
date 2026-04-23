@@ -49,6 +49,7 @@ export interface ElectronAPI {
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
     onCreated: (callback: (terminal: Terminal) => void) => () => void
     onAgentDetected: (callback: (data: { terminalId: string; agentType: string }) => void) => () => void
+    onClaudeSessionIdChanged: (callback: (data: { terminalId: string; sessionId: string }) => void) => () => void
     /** Phase 4: subscribe to system-resume IPC events. Returns unsubscribe closure. */
     onSystemResumed: (callback: () => void) => () => void
   }
@@ -253,6 +254,11 @@ const api: ElectronAPI = {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
+    },
+    onClaudeSessionIdChanged: (callback) => {
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, listener)
     },
     onSystemResumed: (callback) => {
       // IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED carries no payload — callback takes no args

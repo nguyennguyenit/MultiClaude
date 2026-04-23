@@ -16,6 +16,7 @@ export type GlobalShortcut =
   | { type: 'new-terminal'; layout: NewTerminalLayout }
   | { type: 'close-terminal' }
   | { type: 'toggle-github-panel' }
+  | { type: 'toggle-context-window' }
   | { type: 'split-pane'; direction: PaneSplitDirection }
 
 const ARROW_TO_DIRECTION: Record<string, PaneSplitDirection> = {
@@ -48,6 +49,9 @@ export function getGlobalShortcut(event: ShortcutEventLike): GlobalShortcut | nu
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey) {
     const direction = ARROW_TO_DIRECTION[event.code ?? event.key]
     if (direction) return { type: 'split-pane', direction }
+    if (event.code === 'KeyC' || event.key.toLowerCase() === 'c') {
+      return { type: 'toggle-context-window' }
+    }
   }
 
   if ((event.ctrlKey || event.metaKey) && !event.altKey) {

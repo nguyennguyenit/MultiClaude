@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
   TERMINAL_CREATED: 'terminal:created',
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
+  TERMINAL_CLAUDE_SESSION_ID_CHANGED: 'terminal:claude-session-id-changed',
   TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
   TERMINAL_LOAD_PANE_TREE: 'terminal:load-pane-tree',
   TERMINAL_SAVE_PANE_TREE: 'terminal:save-pane-tree',
