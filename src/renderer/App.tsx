@@ -48,6 +48,9 @@ function App() {
   const switchToProject = useAppStore((state) => state.switchToProject)
   const savedDefaultShell = useSettingsStore((state) => state.savedSettings.defaultShell)
   const setDefaultShell = useSettingsStore((state) => state.setDefaultShell)
+  const contextWindowEnabled = useSettingsStore(
+    (state) => state.savedSettings.enableContextWindow !== false
+  )
 
   // Active slide panel: 'github' | 'settings' | null
   const [activePanel, setActivePanel] = useState<string | null>(null)
@@ -601,8 +604,9 @@ function App() {
       {/* Themed context menu (portal) */}
       <ThemedContextMenu />
 
-      {/* Per-turn context window breakdown drawer (Cmd/Ctrl+Shift+C) */}
-      <ContextWindowDrawer />
+      {/* Per-turn context window breakdown drawer (Cmd/Ctrl+Shift+C).
+          Feature-flagged via AppSettings.enableContextWindow (startup-only). */}
+      {contextWindowEnabled && <ContextWindowDrawer />}
 
       {/* Settings modal */}
       <SettingsModal

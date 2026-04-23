@@ -252,6 +252,22 @@ The repo also uses a local release command for GitHub release automation.
 - Settings still use validation before persistence in the main process
 - Security depends on context isolation, a typed preload bridge, and safeStorage for secrets
 
+### Context Window Breakdown
+
+- Main module: `src/main/context/*` — `ContextWindowAnalyzer` piggybacks on the
+  existing `ClaudeLogWatcher` JSONL stream and sorts each line into six buckets
+  (claude-md, mentioned-file, tool-output, thinking-text, task-coordination,
+  user-messages). Debounced snapshot emits at 300ms.
+- IPC channels: `context:get` (invoke) + `context:snapshot` (broadcast).
+- Renderer: `ContextWindowDrawer` binds to the active pane's `claudeSessionId`
+  via `useContextSnapshot`, which also exposes an `isStale` flag after 10s of
+  feed silence.
+- Feature flag: `AppSettings.enableContextWindow` (default `true`,
+  startup-only — main analyzer + IPC handlers are only instantiated when the
+  flag is set, and the renderer drawer mount is gated on the same setting).
+- Analyzer hardens per-line parsing under `try/catch`; malformed JSONL emits a
+  single `error` event per session and never crashes the main process.
+
 ## Related Docs
 
 - [System Architecture](./system-architecture.md)

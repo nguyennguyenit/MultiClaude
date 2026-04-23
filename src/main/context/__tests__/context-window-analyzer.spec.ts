@@ -62,6 +62,29 @@ describe('ContextWindowAnalyzer', () => {
     a.destroy()
   })
 
+  it('swallows categorizer errors and emits a single error event per session', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+    const errSpy = vi.fn()
+    a.on('error', errSpy)
+
+    // Two lines crafted to make categorizer throw: `message` getter explodes.
+    const boomLine = Object.defineProperty({ type: 'user' } as Record<string, unknown>, 'message', {
+      get() { throw new Error('boom') },
+      enumerable: true
+    })
+
+    expect(() => {
+      emit({ sessionId: 's-err', filePath: 'f', line: boomLine })
+      emit({ sessionId: 's-err', filePath: 'f', line: boomLine })
+    }).not.toThrow()
+
+    expect(errSpy).toHaveBeenCalledTimes(1)
+    expect(errSpy.mock.calls[0][0]).toBeInstanceOf(Error)
+    a.destroy()
+  })
+
   it('merges CLAUDE.md content into claude-md bucket after first line', async () => {
     const { source, emit } = makeSource()
     const reader = { load: vi.fn(async () => ({ text: 'x'.repeat(400), bytes: 400, sources: ['/CLAUDE.md'] })) }

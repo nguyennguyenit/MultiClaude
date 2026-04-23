@@ -67,4 +67,28 @@ describe('ContextWindowDrawer', () => {
     act(() => { close.click() })
     expect(useContextWindowStore.getState().isOpen).toBe(false)
   })
+
+  it('exposes ARIA landmarks: complementary region + one progressbar per category', async () => {
+    act(() => {
+      useAppStore.setState({
+        terminals: [makeTerm('t1', 'sess-xyz')],
+        activeTerminalId: 't1'
+      })
+    })
+    render(<ContextWindowDrawer />)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+
+    const region = screen.getByRole('complementary', { name: /context window breakdown/i })
+    expect(region).toBeTruthy()
+    const bars = screen.getAllByRole('progressbar')
+    expect(bars.length).toBe(6)
+    // Each progressbar has a non-negative aria-valuenow within aria-valuemax
+    for (const bar of bars) {
+      const now = Number(bar.getAttribute('aria-valuenow'))
+      const max = Number(bar.getAttribute('aria-valuemax'))
+      expect(Number.isFinite(now)).toBe(true)
+      expect(now).toBeGreaterThanOrEqual(0)
+      expect(now).toBeLessThanOrEqual(max)
+    }
+  })
 })

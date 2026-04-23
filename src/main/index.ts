@@ -54,9 +54,15 @@ function createWindow() {
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
 
-  // Context window analyzer (piggybacks on existing JSONL watcher)
-  contextAnalyzer = new ContextWindowAnalyzer(notificationManager.getLogWatcher())
-  registerContextHandlers(contextAnalyzer)
+  // Context window analyzer (piggybacks on existing JSONL watcher).
+  // Gated by AppSettings.enableContextWindow (startup-only; restart to toggle).
+  if (settingsStore.getSettings().enableContextWindow !== false) {
+    contextAnalyzer = new ContextWindowAnalyzer(notificationManager.getLogWatcher())
+    contextAnalyzer.on('error', (err) => {
+      console.warn('[context-analyzer]', err)
+    })
+    registerContextHandlers(contextAnalyzer)
+  }
 
   // Kick off shell detection in the background (C3: stored as promise, no await needed)
   terminalManager.initializeShells()

@@ -62,6 +62,13 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
     }
   }
 
+  // Validate enableContextWindow
+  if (settings.enableContextWindow !== undefined) {
+    validated.enableContextWindow = typeof settings.enableContextWindow === 'boolean'
+      ? settings.enableContextWindow
+      : defaults.enableContextWindow
+  }
+
   // Validate glassmorphismEnabled
   if (settings.glassmorphismEnabled !== undefined) {
     validated.glassmorphismEnabled = typeof settings.glassmorphismEnabled === 'boolean'

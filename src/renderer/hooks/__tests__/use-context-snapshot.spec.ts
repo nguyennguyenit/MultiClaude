@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useContextSnapshot } from '../use-context-snapshot'
+import { useContextSnapshot, STALE_THRESHOLD_MS } from '../use-context-snapshot'
 import type { ContextSnapshot } from '@shared/types'
 
 function snap(sessionId: string, total = 10): ContextSnapshot {
@@ -38,24 +38,29 @@ describe('useContextSnapshot', () => {
     })
   })
 
-  it('returns null for null sessionId', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns null snapshot for null sessionId', () => {
     const { result } = renderHook(() => useContextSnapshot(null))
-    expect(result.current).toBeNull()
+    expect(result.current.snapshot).toBeNull()
+    expect(result.current.isStale).toBe(false)
   })
 
   it('hydrates via getSnapshot then updates on event', async () => {
     const { result } = renderHook(() => useContextSnapshot('s1'))
-    await waitFor(() => expect(result.current?.total).toBe(5))
+    await waitFor(() => expect(result.current.snapshot?.total).toBe(5))
     act(() => { listeners.forEach((cb) => cb(snap('s1', 99))) })
-    expect(result.current?.total).toBe(99)
+    expect(result.current.snapshot?.total).toBe(99)
   })
 
   it('ignores snapshots for a different session', async () => {
     const { result } = renderHook(() => useContextSnapshot('s1'))
-    await waitFor(() => expect(result.current).not.toBeNull())
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull())
     act(() => { listeners.forEach((cb) => cb(snap('other', 999))) })
-    expect(result.current?.sessionId).toBe('s1')
-    expect(result.current?.total).toBe(5)
+    expect(result.current.snapshot?.sessionId).toBe('s1')
+    expect(result.current.snapshot?.total).toBe(5)
   })
 
   it('clears state and rebinds on sessionId change', async () => {
@@ -63,15 +68,33 @@ describe('useContextSnapshot', () => {
       ({ sid }: { sid: string | null }) => useContextSnapshot(sid),
       { initialProps: { sid: 's1' as string | null } }
     )
-    await waitFor(() => expect(result.current?.sessionId).toBe('s1'))
+    await waitFor(() => expect(result.current.snapshot?.sessionId).toBe('s1'))
     rerender({ sid: 's2' })
-    // transiently null, then resolves to s2
-    await waitFor(() => expect(result.current?.sessionId).toBe('s2'))
+    await waitFor(() => expect(result.current.snapshot?.sessionId).toBe('s2'))
   })
 
   it('unsubscribes on unmount', () => {
     const { unmount } = renderHook(() => useContextSnapshot('s1'))
     unmount()
     expect(unsubs).toBe(1)
+  })
+
+  it('flips isStale true after silence exceeding threshold', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    const { result } = renderHook(() => useContextSnapshot('s1'))
+    // let the async hydration resolve
+    await vi.runOnlyPendingTimersAsync()
+    await waitFor(() => expect(result.current.snapshot?.total).toBe(5))
+    expect(result.current.isStale).toBe(false)
+    await act(async () => {
+      vi.advanceTimersByTime(STALE_THRESHOLD_MS + 1_500)
+    })
+    expect(result.current.isStale).toBe(true)
+
+    // fresh snapshot clears the stale flag
+    await act(async () => {
+      listeners.forEach((cb) => cb(snap('s1', 12)))
+    })
+    expect(result.current.isStale).toBe(false)
   })
 })

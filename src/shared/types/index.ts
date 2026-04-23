@@ -286,6 +286,12 @@ export interface AppSettings {
   terminalStyleOptions?: TerminalStyleOptions
   // Legacy: Activity Bar state (removed in VibeTerminal reskin)
   activityBarState?: ActivityBarState
+  /**
+   * Toggle the context-window breakdown feature (drawer + main analyzer).
+   * Startup-only: a restart is required for changes to take effect.
+   * Default: true.
+   */
+  enableContextWindow?: boolean
 }
 
 // GitHub Issues/PRs types

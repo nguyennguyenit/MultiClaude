@@ -24,6 +24,8 @@ interface SessionState {
   debounceTimer: NodeJS.Timeout | null
   lastActivity: number
   mdLoaded: boolean
+  /** True after emitting an error for this session (prevents log spam). */
+  errorReported: boolean
 }
 
 /** Minimal EventEmitter-shaped source the analyzer subscribes to. */
@@ -75,18 +77,28 @@ export class ContextWindowAnalyzer extends EventEmitter {
       void this.loadClaudeMd(sessionId, cwd)
     }
     state.lastActivity = Date.now()
-    const shapedLine = line as Parameters<typeof categorizeLine>[0]
-    const hits = categorizeLine(shapedLine, state.detector, state.registry)
-    if (hits.length === 0) return
-    for (const h of hits) {
-      const bucket = state.snapshot.buckets[h.category]
-      bucket.tokens += h.tokens
-      bucket.chars += h.chars
-      bucket.itemCount += 1
-      state.snapshot.total += h.tokens
+    try {
+      const shapedLine = line as Parameters<typeof categorizeLine>[0]
+      const hits = categorizeLine(shapedLine, state.detector, state.registry)
+      if (hits.length === 0) return
+      for (const h of hits) {
+        const bucket = state.snapshot.buckets[h.category]
+        bucket.tokens += h.tokens
+        bucket.chars += h.chars
+        bucket.itemCount += 1
+        state.snapshot.total += h.tokens
+      }
+      state.snapshot.updatedAt = Date.now()
+      this.scheduleEmit(state)
+    } catch (err) {
+      this.reportError(state, err)
     }
-    state.snapshot.updatedAt = Date.now()
-    this.scheduleEmit(state)
+  }
+
+  private reportError(state: SessionState, err: unknown): void {
+    if (state.errorReported) return
+    state.errorReported = true
+    this.emit('error', err instanceof Error ? err : new Error(String(err)))
   }
 
   private createSession(sessionId: string, cwd?: string): SessionState {
@@ -102,7 +114,8 @@ export class ContextWindowAnalyzer extends EventEmitter {
       registry: createToolUseRegistry(),
       debounceTimer: null,
       lastActivity: Date.now(),
-      mdLoaded: false
+      mdLoaded: false,
+      errorReported: false
     }
   }
 

@@ -19,7 +19,7 @@ export function ContextWindowDrawer() {
     return t?.claudeSessionId ?? null
   })
 
-  const snap = useContextSnapshot(activeSessionId)
+  const { snapshot: snap, isStale } = useContextSnapshot(activeSessionId)
   const total = snap?.total ?? 0
 
   const rows = useMemo(() => {
@@ -37,13 +37,29 @@ export function ContextWindowDrawer() {
     })
   }, [snap, total])
 
+  const staleChip = isStale ? (
+    <span
+      className="context-stale-chip"
+      data-testid="context-stale-chip"
+      title="No update for >10s — feed may be stalled"
+    >
+      Stale
+    </span>
+  ) : null
+
   return (
     <SlidePanel
       isOpen={isOpen}
       onClose={() => setOpen(false)}
       title="Context window"
+      headerExtra={staleChip}
     >
-      <div className="context-window-body" data-testid="context-window-body">
+      <aside
+        role="complementary"
+        aria-label="Claude context window breakdown"
+        className="context-window-body"
+        data-testid="context-window-body"
+      >
         {!activeSessionId || !snap ? (
           <div className="context-empty" data-testid="context-empty">
             No Claude session in the active pane yet.
@@ -51,7 +67,7 @@ export function ContextWindowDrawer() {
         ) : (
           <>
             <ContextWindowHeader total={total} sessionId={activeSessionId} />
-            <div className="context-rows">
+            <div className="context-rows" role="list">
               {rows.map((r) => (
                 <ContextCategoryRow
                   key={r.key}
@@ -59,12 +75,13 @@ export function ContextWindowDrawer() {
                   tokens={r.tokens}
                   pctOfTotal={r.pctOfTotal}
                   color={r.color}
+                  total={total}
                 />
               ))}
             </div>
           </>
         )}
-      </div>
+      </aside>
     </SlidePanel>
   )
 }
