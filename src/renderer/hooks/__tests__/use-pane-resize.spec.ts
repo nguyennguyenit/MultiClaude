@@ -19,7 +19,7 @@ function fakePointerDown(
   return { pointerId, clientX, clientY, currentTarget: target }
 }
 
-function dispatchMove(
+function dispatchMoveRaw(
   target: HTMLElement,
   clientX: number,
   clientY: number,
@@ -48,8 +48,25 @@ describe('usePaneResize', () => {
   let setRatio: ReturnType<typeof vi.fn<(ratio: number) => void>>
   let container: HTMLDivElement
   let handle: HTMLDivElement
+  let rafQueue: FrameRequestCallback[] = []
+
+  // Impl rAF-coalesces ratio updates (see use-pane-resize.ts). Queue
+  // callbacks and flush after each dispatch so we observe the value without
+  // racing impl's `scheduledFrame = rAF(...)` assignment — a purely sync
+  // stub would leave scheduledFrame non-null and wedge subsequent moves.
+  function flushRaf(): void {
+    const pending = rafQueue
+    rafQueue = []
+    pending.forEach(cb => cb(performance.now()))
+  }
 
   beforeEach(() => {
+    rafQueue = []
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      rafQueue.push(cb)
+      return rafQueue.length
+    })
+    vi.stubGlobal('cancelAnimationFrame', () => {})
     setRatio = vi.fn<(ratio: number) => void>()
     container = document.createElement('div')
     handle = document.createElement('div')
@@ -64,6 +81,16 @@ describe('usePaneResize', () => {
     document.body.appendChild(container)
     document.body.appendChild(handle)
   })
+
+  function dispatchMove(
+    target: HTMLElement,
+    clientX: number,
+    clientY: number,
+    pointerId = 1
+  ): void {
+    dispatchMoveRaw(target, clientX, clientY, pointerId)
+    flushRaf()
+  }
 
   function mount(orientation: 'row' | 'column', startRatio = 0.5, minPanePx = 10) {
     // Default minPanePx is low so tests focused on the raw-ratio math keep
