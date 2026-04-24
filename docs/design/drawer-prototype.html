@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Context Drawer Extended — Prototype</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#161a22; --panel-2:#1c222d; --border:#283040;
+    --text:#e6e8ee; --muted:#8a93a6; --accent:#6aa9ff; --accent-2:#a389ff;
+    --cat-md:#6aa9ff; --cat-file:#55c6a9; --cat-tool:#e5b25d;
+    --cat-think:#a389ff; --cat-task:#e06c75; --cat-user:#8a93a6;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:13px/1.45 ui-sans-serif,-apple-system,Segoe UI,Inter,system-ui,sans-serif;}
+  h1{font-size:14px;margin:24px 16px 8px;color:var(--muted);font-weight:500;letter-spacing:.05em;text-transform:uppercase}
+  .viewport{margin:12px 16px 36px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel)}
+  .viewport-label{padding:6px 12px;font-size:11px;color:var(--muted);background:var(--panel-2);border-bottom:1px solid var(--border)}
+  .drawer{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .panes{display:flex;gap:6px;flex-wrap:wrap}
+  .pane{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+    border:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-size:12px;cursor:pointer}
+  .pane.active{border-color:var(--accent);color:var(--text);background:rgba(106,169,255,.08)}
+  .pane .dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+  .pane.active .dot{background:var(--accent)}
+  .close{color:var(--muted);background:none;border:none;font-size:16px;cursor:pointer}
+  .bar-row{display:flex;align-items:center;gap:10px}
+  .bar{flex:1;height:10px;border-radius:6px;overflow:hidden;background:var(--panel-2);display:flex}
+  .bar>span{height:100%;display:block}
+  .bar-meta{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;white-space:nowrap}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .section{border-top:1px solid var(--border);padding:8px 0 0}
+  .section-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:6px 2px}
+  .section-head .title{font-weight:500}
+  .section-head .tag{font-size:10px;color:var(--accent-2);margin-left:6px;letter-spacing:.04em}
+  .section-head .hint{color:var(--muted);font-size:11px}
+  .section.closed .section-body{display:none}
+  .section-body{padding:4px 2px 10px;color:var(--muted)}
+  .turn-row{display:grid;grid-template-columns:60px 1fr 80px;gap:8px;align-items:center;padding:2px 0;font-size:12px}
+  .turn-row .bars{display:flex;gap:1px;height:6px}
+  .turn-row .bars>span{display:block}
+  .trace-line{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text)}
+  .trace-line .muted{color:var(--muted)}
+  .timeline{display:flex;align-items:center;gap:6px;height:18px}
+  .timeline .mark{width:10px;height:10px;border-radius:50%;background:var(--cat-task)}
+  .timeline .seg{height:4px;background:var(--panel-2);flex:1;border-radius:2px;overflow:hidden;position:relative}
+  .timeline .seg>span{position:absolute;inset:0;background:var(--accent)}
+  .grid-full .drawer{max-width:none}
+  .grid-compact .drawer{max-width:none}
+</style>
+</head>
+<body>
+
+<h1>1280×720 — compact</h1>
+<div class="viewport grid-compact" style="max-width:1280px">
+  <div class="viewport-label">ContextWindowDrawer · compact breakpoint</div>
+  <div class="drawer">
+    <div class="header">
+      <div class="panes">
+        <span class="pane active"><i class="dot"></i>Pane A · master</span>
+        <span class="pane"><i class="dot"></i>Pane B · feature/x</span>
+        <span class="pane"><i class="dot"></i>Pane C · debug</span>
+      </div>
+      <button class="close" aria-label="close">×</button>
+    </div>
+
+    <div class="bar-row">
+      <div class="bar" title="6-category stacked">
+        <span style="width:22%;background:var(--cat-md)"></span>
+        <span style="width:18%;background:var(--cat-file)"></span>
+        <span style="width:31%;background:var(--cat-tool)"></span>
+        <span style="width:10%;background:var(--cat-think)"></span>
+        <span style="width:8%;background:var(--cat-task)"></span>
+        <span style="width:11%;background:var(--cat-user)"></span>
+      </div>
+      <div class="bar-meta">45,312 / 200,000 tok · 22.7%</div>
+    </div>
+
+    <div class="legend">
+      <span><i style="background:var(--cat-md)"></i>claude-md</span>
+      <span><i style="background:var(--cat-file)"></i>mentioned-file</span>
+      <span><i style="background:var(--cat-tool)"></i>tool-output</span>
+      <span><i style="background:var(--cat-think)"></i>thinking</span>
+      <span><i style="background:var(--cat-task)"></i>task-coord</span>
+      <span><i style="background:var(--cat-user)"></i>user-msg</span>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><span class="title">Turn-Injection Diff</span><span class="tag">ADVANCED</span></div><span class="hint">50 turns ▾</span></div>
+      <div class="section-body">
+        <div class="turn-row"><span class="muted">T-50</span><div class="bars"><span style="width:120px;background:var(--cat-tool)"></span><span style="width:30px;background:var(--cat-think)"></span></div><span class="muted">+1,842</span></div>
+        <div class="turn-row"><span class="muted">T-49</span><div class="bars"><span style="width:60px;background:var(--cat-file)"></span></div><span class="muted">+820</span></div>
+        <div class="turn-row"><span class="muted">T-48</span><div class="bars"><span style="width:10px;background:var(--cat-user)"></span></div><span class="muted">+120</span></div>
+      </div>
+    </div>
+
+    <div class="section closed">
+      <div class="section-head"><div><span class="title">Execution Trace</span><span class="tag">ADVANCED</span></div><span class="hint">▸</span></div>
+    </div>
+    <div class="section closed">
+      <div class="section-head"><div><span class="title">Compaction Timeline</span><span class="tag">ADVANCED</span></div><span class="hint">▸</span></div>
+    </div>
+    <div class="section closed">
+      <div class="section-head"><div><span class="title">Extended Thinking</span><span class="tag">ADVANCED</span></div><span class="hint">▸</span></div>
+    </div>
+  </div>
+</div>
+
+<h1>1920×1080 — full</h1>
+<div class="viewport grid-full" style="max-width:1920px">
+  <div class="viewport-label">ContextWindowDrawer · full breakpoint (all sections open)</div>
+  <div class="drawer">
+    <div class="header">
+      <div class="panes">
+        <span class="pane active"><i class="dot"></i>Pane A · master · 45.3k</span>
+        <span class="pane"><i class="dot"></i>Pane B · feature/x · 12.1k</span>
+        <span class="pane"><i class="dot"></i>Pane C · debug · 3.2k</span>
+        <span class="pane"><i class="dot"></i>+ new pane</span>
+      </div>
+      <button class="close" aria-label="close">×</button>
+    </div>
+
+    <div class="bar-row">
+      <div class="bar">
+        <span style="width:22%;background:var(--cat-md)"></span>
+        <span style="width:18%;background:var(--cat-file)"></span>
+        <span style="width:31%;background:var(--cat-tool)"></span>
+        <span style="width:10%;background:var(--cat-think)"></span>
+        <span style="width:8%;background:var(--cat-task)"></span>
+        <span style="width:11%;background:var(--cat-user)"></span>
+      </div>
+      <div class="bar-meta">45,312 / 200,000 tok · 22.7% · updated 120ms ago</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><span class="title">Turn-Injection Diff</span><span class="tag">ADVANCED</span></div><span class="hint">▾ 50 turns shown</span></div>
+      <div class="section-body">
+        <div class="turn-row"><span class="muted">T-50</span><div class="bars">
+          <span style="width:200px;background:var(--cat-tool)"></span>
+          <span style="width:40px;background:var(--cat-think)"></span>
+          <span style="width:15px;background:var(--cat-user)"></span>
+        </div><span class="muted">+1,842 tok</span></div>
+        <div class="turn-row"><span class="muted">T-49</span><div class="bars">
+          <span style="width:90px;background:var(--cat-file)"></span>
+          <span style="width:20px;background:var(--cat-md)"></span>
+        </div><span class="muted">+820 tok</span></div>
+        <div class="turn-row"><span class="muted">T-48</span><div class="bars">
+          <span style="width:10px;background:var(--cat-user)"></span>
+        </div><span class="muted">+120 tok</span></div>
+        <div class="turn-row"><span class="muted">T-47</span><div class="bars">
+          <span style="width:310px;background:var(--cat-tool)"></span>
+          <span style="width:50px;background:var(--cat-task)"></span>
+        </div><span class="muted">+3,105 tok</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><span class="title">Execution Trace</span><span class="tag">ADVANCED</span></div><span class="hint">▾ turn T-47</span></div>
+      <div class="section-body">
+        <div class="trace-line">▸ <b>thinking</b> <span class="muted">(420 tok)</span></div>
+        <div class="trace-line" style="padding-left:14px">▸ <b>Read</b> <span class="muted">src/main/context/context-window-analyzer.ts (82 ln)</span></div>
+        <div class="trace-line" style="padding-left:14px">▸ <b>Grep</b> <span class="muted">pattern="handleLine" · 4 hits</span></div>
+        <div class="trace-line" style="padding-left:14px">▸ <b>Task</b> <span class="muted">researcher · jsonl-schema · returned 4 fixtures</span></div>
+        <div class="trace-line" style="padding-left:28px">▸ <span class="muted">[parallel]</span> <b>Task</b> <span class="muted">scout · context-map</span></div>
+        <div class="trace-line">▸ <b>output</b> <span class="muted">(612 tok)</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><span class="title">Compaction Timeline</span><span class="tag">ADVANCED</span></div><span class="hint">▾ 2 events</span></div>
+      <div class="section-body">
+        <div class="timeline">
+          <span class="muted">14:02</span>
+          <div class="seg"><span style="width:70%"></span></div>
+          <span class="mark" title="compact: 187k→42k"></span>
+          <div class="seg"><span style="width:40%"></span></div>
+          <span class="mark" title="compact: 155k→38k"></span>
+          <div class="seg"><span style="width:30%"></span></div>
+          <span class="muted">now</span>
+        </div>
+        <div style="padding-top:6px;font-size:11.5px">
+          <div>◉ 14:31 · heuristic · <b>187,420 → 42,110</b> tok (−77%)</div>
+          <div>◉ 15:58 · heuristic · <b>155,801 → 38,902</b> tok (−75%)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><span class="title">Extended Thinking</span><span class="tag">ADVANCED</span></div><span class="hint">▾ 26 blocks · 11,204 tok</span></div>
+      <div class="section-body">
+        <div class="trace-line">T-47 · <span class="muted">420 tok</span> · [signature-only, no text logged]</div>
+        <div class="trace-line">T-43 · <span class="muted">312 tok</span> · "Let me first read the analyzer to see how…"</div>
+        <div class="trace-line">T-38 · <span class="muted">805 tok</span> · "The scout's map shows the computation path…"</div>
+        <div class="trace-line muted" style="margin-top:6px">Syntax highlight: OFF · toggle in Settings → Advanced Context Window</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
