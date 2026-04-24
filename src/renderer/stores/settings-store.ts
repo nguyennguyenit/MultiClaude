@@ -55,6 +55,8 @@ interface SettingsState {
   setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setScrollbackLines: (lines: number) => void
   setEnableContextWindow: (enabled: boolean) => void
+  setEnableContextWindowAdvanced: (enabled: boolean) => void
+  setEnableThinkingSyntaxHighlight: (enabled: boolean) => void
   setWindowsShell: (shell: WindowsShell) => void
   setDefaultShell: (shell: ShellInfo | null) => Promise<void>
   setUiStyle: (style: UiStyle) => void
@@ -91,6 +93,9 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.modernFontFamily !== b.modernFontFamily) return false
   if (a.terminalFontFamily !== b.terminalFontFamily) return false
   if (a.activityBarState !== b.activityBarState) return false
+  if (a.enableContextWindow !== b.enableContextWindow) return false
+  if (a.enableContextWindowAdvanced !== b.enableContextWindowAdvanced) return false
+  if (a.enableThinkingSyntaxHighlight !== b.enableThinkingSyntaxHighlight) return false
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
   const bLimit = b.terminalLimit
@@ -201,6 +206,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setEnableContextWindow: (enabled) => {
     const pending = { ...get().pendingSettings, enableContextWindow: enabled }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setEnableContextWindowAdvanced: (enabled) => {
+    const pending = { ...get().pendingSettings, enableContextWindowAdvanced: enabled }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setEnableThinkingSyntaxHighlight: (enabled) => {
+    const pending = { ...get().pendingSettings, enableThinkingSyntaxHighlight: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

@@ -51,6 +51,15 @@ describe('TerminalSettings', () => {
     })
   })
 
+  it('renders the Advanced context-window checkboxes with restart hint', () => {
+    const html = renderToStaticMarkup(<TerminalSettings />)
+
+    expect(html).toContain('Advanced features')
+    expect(html).toContain('Turn-injection diff')
+    expect(html).toContain('Thinking syntax highlighting')
+    expect(html).toContain('Requires restart')
+  })
+
   it('renders the Scrollback Lines card with the default value badge', () => {
     const html = renderToStaticMarkup(<TerminalSettings />)
 

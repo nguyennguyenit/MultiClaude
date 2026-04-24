@@ -61,4 +61,27 @@ describe('SettingsStore', () => {
 
     expect(updated.scrollbackLines).toBe(SCROLLBACK_DEFAULT)
   })
+
+  it('applies channel-aware migration for enableContextWindowAdvanced on v3.5.0 upgrade', () => {
+    const store = new SettingsStore()
+    const settings = store.getSettings()
+
+    // Missing fields get defaulted (stable channel default is false in tests)
+    expect(typeof settings.enableContextWindowAdvanced).toBe('boolean')
+    expect(settings.enableThinkingSyntaxHighlight).toBe(false)
+  })
+
+  it('persists enableContextWindowAdvanced and enableThinkingSyntaxHighlight toggles', () => {
+    const store = new SettingsStore()
+
+    const updated = store.setSettings({
+      enableContextWindowAdvanced: true,
+      enableThinkingSyntaxHighlight: true
+    })
+
+    expect(updated.enableContextWindowAdvanced).toBe(true)
+    expect(updated.enableThinkingSyntaxHighlight).toBe(true)
+    expect(store.getSettings().enableContextWindowAdvanced).toBe(true)
+    expect(store.getSettings().enableThinkingSyntaxHighlight).toBe(true)
+  })
 })

@@ -1,6 +1,21 @@
 import Store from 'electron-store'
+import { app } from 'electron'
 import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode, UiStyle, TerminalColorPreset, TerminalFontId, AppFontId } from '@shared/types'
 import { DEFAULT_SETTINGS, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
+
+/**
+ * Detect whether the current build is on a pre-release channel
+ * (beta / rc / alpha) — drives channel-aware defaults for
+ * enableContextWindowAdvanced. Falls back to stable if app.getVersion()
+ * is unavailable (non-Electron contexts, e.g. tests).
+ */
+function isPreReleaseChannel(): boolean {
+  try {
+    return /-(beta|rc|alpha)/i.test(app.getVersion())
+  } catch {
+    return false
+  }
+}
 
 interface StoreSchema {
   settings: AppSettings
@@ -67,6 +82,20 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
     validated.enableContextWindow = typeof settings.enableContextWindow === 'boolean'
       ? settings.enableContextWindow
       : defaults.enableContextWindow
+  }
+
+  // Validate enableContextWindowAdvanced
+  if (settings.enableContextWindowAdvanced !== undefined) {
+    validated.enableContextWindowAdvanced = typeof settings.enableContextWindowAdvanced === 'boolean'
+      ? settings.enableContextWindowAdvanced
+      : defaults.enableContextWindowAdvanced
+  }
+
+  // Validate enableThinkingSyntaxHighlight
+  if (settings.enableThinkingSyntaxHighlight !== undefined) {
+    validated.enableThinkingSyntaxHighlight = typeof settings.enableThinkingSyntaxHighlight === 'boolean'
+      ? settings.enableThinkingSyntaxHighlight
+      : defaults.enableThinkingSyntaxHighlight
   }
 
   // Validate glassmorphismEnabled
@@ -175,9 +204,24 @@ export class SettingsStore {
     })
   }
 
-  /** Retrieve current settings from disk. */
+  /** Retrieve current settings from disk, applying channel-aware defaults
+   *  for any fields missing from the persisted payload (e.g. v3.5.0 users
+   *  upgrading to v3.6.0). Writes back once so subsequent reads are stable.
+   */
   getSettings(): AppSettings {
-    return this.store.get('settings')
+    const raw = this.store.get('settings')
+    const patched: AppSettings = { ...raw }
+    let changed = false
+    if (raw.enableContextWindowAdvanced === undefined) {
+      patched.enableContextWindowAdvanced = isPreReleaseChannel()
+      changed = true
+    }
+    if (raw.enableThinkingSyntaxHighlight === undefined) {
+      patched.enableThinkingSyntaxHighlight = false
+      changed = true
+    }
+    if (changed) this.store.set('settings', patched)
+    return patched
   }
 
   /**

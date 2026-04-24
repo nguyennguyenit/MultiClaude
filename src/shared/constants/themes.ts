@@ -338,5 +338,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     useBorderChars: false
   },
   activityBarState: DEFAULT_ACTIVITY_BAR_STATE,
-  enableContextWindow: true
+  enableContextWindow: true,
+  // Channel-aware default assigned at first run by main settings-store
+  // (beta/rc/alpha → true, stable → false). Typed false here so renderer
+  // snapshots before first main sync do not falsely enable advanced paths.
+  enableContextWindowAdvanced: false,
+  enableThinkingSyntaxHighlight: false
 }

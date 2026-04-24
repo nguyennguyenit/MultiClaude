@@ -292,6 +292,19 @@ export interface AppSettings {
    * Default: true.
    */
   enableContextWindow?: boolean
+  /**
+   * Toggle the advanced context-window features (turn-injection diff,
+   * execution trace, compaction timeline, extended thinking viewer).
+   * Startup-only. Default: channel-aware — true on beta/rc/alpha channel,
+   * false on stable. See src/main/settings/settings-store.ts channel detect.
+   */
+  enableContextWindowAdvanced?: boolean
+  /**
+   * Toggle lazy-loaded syntax highlighter in the Extended Thinking viewer.
+   * Startup-only. Default: false (adds ~25KB gzip chunk when enabled).
+   * Ignored when enableContextWindowAdvanced is false.
+   */
+  enableThinkingSyntaxHighlight?: boolean
 }
 
 // GitHub Issues/PRs types

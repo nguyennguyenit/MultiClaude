@@ -78,6 +78,8 @@ export function TerminalSettings() {
     setGpuRendererForClaudeTerminals,
     setScrollbackLines,
     setEnableContextWindow,
+    setEnableContextWindowAdvanced,
+    setEnableThinkingSyntaxHighlight,
     setWindowsShell
   } = useSettingsStore()
   const { terminalLimit } = pendingSettings
@@ -416,6 +418,51 @@ export function TerminalSettings() {
             <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
               Turning this off skips the JSONL analyzer and hides the drawer —
               <span className="font-semibold"> requires restart</span> to take effect.
+            </p>
+          </div>
+        </div>
+
+        {/* Advanced features — nested under master */}
+        <div className="flex items-start gap-3 pt-3 pl-6 border-l-2 border-[var(--mc-border)]/60">
+          <ToggleSwitch
+            checked={Boolean(pendingSettings.enableContextWindowAdvanced)}
+            onChange={setEnableContextWindowAdvanced}
+            disabled={pendingSettings.enableContextWindow === false}
+          />
+          <div>
+            <p
+              className="text-sm font-medium text-[var(--mc-text-primary)]"
+              title="Requires restart to take effect"
+            >
+              Advanced features
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
+              Turn-injection diff · Execution trace · Compaction timeline · Extended thinking.
+              <span className="font-semibold"> Requires restart.</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Thinking syntax highlight — nested under advanced */}
+        <div className="flex items-start gap-3 pt-2 pl-12 border-l-2 border-[var(--mc-border)]/60">
+          <ToggleSwitch
+            checked={Boolean(pendingSettings.enableThinkingSyntaxHighlight)}
+            onChange={setEnableThinkingSyntaxHighlight}
+            disabled={
+              pendingSettings.enableContextWindow === false ||
+              !pendingSettings.enableContextWindowAdvanced
+            }
+          />
+          <div>
+            <p
+              className="text-sm font-medium text-[var(--mc-text-primary)]"
+              title="Requires restart. Loads a ~25KB code-highlight chunk on first expand."
+            >
+              Thinking syntax highlighting
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
+              Lazy-loads a ~25KB highlighter chunk only when a thinking block is expanded.
+              <span className="font-semibold"> Requires restart.</span>
             </p>
           </div>
         </div>
