@@ -15,9 +15,17 @@ import type { Terminal as XTerm } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { resolveFitViewportRestoreTarget } from '../utils/terminal-scroll-utils'
+import { isPaneDragging, subscribePaneDragging } from '../utils/pane-drag-state'
 
 const RESIZE_REFIT_SETTLE_DELAY = 120  // ms second fit after layout settles
 const FIT_RETRY_WHEN_HIDDEN_DELAY = 120  // ms retry when container briefly has 0 size
+
+// xterm's buffer reflow corrupts at very narrow widths — rows get split into
+// character-per-line stretched blocks that orphan in scrollback after the
+// user drags the pane back wider. Skip fit if proposed cols would go below
+// this floor; the pane stays visually narrow but the terminal keeps its
+// previous cols (content clips on the right, but re-opens intact).
+const MIN_SAFE_COLS = 20
 
 interface UseTerminalFitParams {
   terminalRef: RefObject<XTerm | null>
@@ -59,6 +67,10 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     const savedViewportY = terminal.buffer.active.viewportY
     const wasAtBottom = scrollMachineRef.current.isAtBottom
 
+    // Skip fit when proposed cols would corrupt xterm reflow.
+    const proposed = fitAddon.proposeDimensions()
+    if (proposed && proposed.cols < MIN_SAFE_COLS) return false
+
     try {
       fitAddon.fit()
     } catch {
@@ -93,11 +105,26 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     }
   }, [])
 
+  // Defer fit() while a pane divider is being dragged. xterm's internal
+  // reflow at rapidly-changing cols leaves wrapped rows orphaned in
+  // scrollback — duplicated banners, character-per-line stretched blocks.
+  // Gate fit on drag state: mark pending, flush on drag end.
+  const fitPendingDuringDragRef = useRef(false)
+
   const fit = useCallback(() => {
     if (disposedRef.current) return
+    if (isPaneDragging()) {
+      fitPendingDuringDragRef.current = true
+      return
+    }
     cancelScheduledFit()
     fitAnimationFrameRef.current = requestAnimationFrame(() => {
       fitAnimationFrameRef.current = null
+      // Drag may have started between fit() call and rAF firing — defer.
+      if (isPaneDragging()) {
+        fitPendingDuringDragRef.current = true
+        return
+      }
       // If performFit returned false because the container was 0×0 (pane
       // briefly hidden during layout), schedule one retry — otherwise cols
       // stay at the stale value and freshly-written wide content can appear
@@ -108,9 +135,11 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
         if (hiddenNow && !disposedRef.current) {
           fitSettleTimerRef.current = setTimeout(() => {
             fitSettleTimerRef.current = null
+            if (isPaneDragging()) { fitPendingDuringDragRef.current = true; return }
             if (!performFit()) return
             fitSettleTimerRef.current = setTimeout(() => {
               fitSettleTimerRef.current = null
+              if (isPaneDragging()) { fitPendingDuringDragRef.current = true; return }
               performFit()
             }, RESIZE_REFIT_SETTLE_DELAY)
           }, FIT_RETRY_WHEN_HIDDEN_DELAY)
@@ -127,6 +156,7 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
         fitSettleTimerRef.current = null
         const t = terminalRef.current
         if (!t || disposedRef.current) return
+        if (isPaneDragging()) { fitPendingDuringDragRef.current = true; return }
         if (firstDims && t.cols === firstDims.cols && t.rows === firstDims.rows) {
           const c = containerRef.current
           if (!c) return
@@ -165,6 +195,21 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     window.addEventListener('resize', h)
     return () => window.removeEventListener('resize', h)
   }, [fit])
+
+  // When drag starts, cancel any already-scheduled fit so it can't fire
+  // mid-drag. When drag ends, flush a pending fit at the final size.
+  useEffect(() => {
+    return subscribePaneDragging(() => {
+      if (isPaneDragging()) {
+        cancelScheduledFit()
+        fitPendingDuringDragRef.current = true
+        return
+      }
+      if (!fitPendingDuringDragRef.current) return
+      fitPendingDuringDragRef.current = false
+      fit()
+    })
+  }, [cancelScheduledFit, fit])
 
   return { performFit, cancelScheduledFit, fit }
 }
