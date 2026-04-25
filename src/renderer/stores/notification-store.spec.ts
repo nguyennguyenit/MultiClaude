@@ -71,12 +71,13 @@ describe('useNotificationStore', () => {
     })
 
     const cleanup = setupNotificationListener()
-    expect(paneStatusCb).not.toBeNull()
+    const cb = paneStatusCb as ((p: { terminalId: string; status: TerminalTaskStatus }) => void) | null
+    expect(cb).not.toBeNull()
 
-    paneStatusCb?.({ terminalId: 't1', status: 'done' })
+    cb!({ terminalId: 't1', status: 'done' })
     expect(useAppStore.getState().terminals[0].taskStatus).toBe('done')
 
-    paneStatusCb?.({ terminalId: 't1', status: 'failed' })
+    cb!({ terminalId: 't1', status: 'failed' })
     expect(useAppStore.getState().terminals[0].taskStatus).toBe('failed')
 
     cleanup()

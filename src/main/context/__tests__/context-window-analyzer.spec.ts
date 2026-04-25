@@ -85,6 +85,47 @@ describe('ContextWindowAnalyzer', () => {
     a.destroy()
   })
 
+  it('tracks per-turn deltas: each fresh user-text line opens a new turn', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+
+    // Turn 1
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'first question' } } })
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'thinking-1' }] } } })
+    // Turn 2 (new user text)
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'second question' } } })
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'thinking-2' }] } } })
+
+    // Flush turn-2 close by emitting an unrelated user line — but easier: query getTurnDetail after turn 2 closes.
+    // Turn 2 hasn't been closed yet (no third user line). Force close by starting turn 3.
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'third question' } } })
+
+    const snap = a.getSnapshot('s')
+    expect(snap?.turnDeltas).toBeDefined()
+    expect(snap!.turnDeltas!.length).toBe(2)
+    expect(snap!.turnDeltas![0].turnId).toBe(1)
+    expect(snap!.turnDeltas![1].turnId).toBe(2)
+    expect(snap!.turnDeltas![0].totalDelta).toBeGreaterThan(0)
+    expect(a.getTurnDetail('s', 1)).not.toBeNull()
+    a.destroy()
+  })
+
+  it('does not bump turn counter on system-reminder user lines', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'real question' } } })
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: '<system-reminder>injected</system-reminder>' } } })
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'follow-up' } } })
+
+    const snap = a.getSnapshot('s')
+    expect(snap!.turnDeltas!.length).toBe(1)
+    expect(snap!.turnDeltas![0].turnId).toBe(1)
+    a.destroy()
+  })
+
   it('merges CLAUDE.md content into claude-md bucket after first line', async () => {
     const { source, emit } = makeSource()
     const reader = { load: vi.fn(async () => ({ text: 'x'.repeat(400), bytes: 400, sources: ['/CLAUDE.md'] })) }

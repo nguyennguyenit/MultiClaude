@@ -2941,3 +2941,124 @@ button, input, select, textarea, optgroup, option {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* Turn injection diff (Phase 3) */
+.turn-diff {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.turn-diff-title {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-fg-muted, #999);
+}
+
+.turn-diff-empty {
+  margin-top: 16px;
+  padding: 12px;
+  color: var(--color-fg-muted, #888);
+  font-size: 12px;
+  text-align: center;
+}
+
+.turn-diff-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.turn-diff-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-fg, #ccc);
+  text-align: left;
+}
+
+.turn-diff-row:hover { background: var(--color-bg-hover, rgba(255, 255, 255, 0.05)); }
+.turn-diff-row.is-open { background: var(--color-bg-active, rgba(100, 150, 255, 0.08)); }
+.turn-diff-row.is-spike { color: #fbbf24; font-weight: 600; }
+
+.turn-diff-id {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  min-width: 32px;
+}
+
+.turn-diff-total {
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+}
+
+.turn-diff-sparkline {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.turn-diff-spark { height: 100%; }
+
+.turn-diff-loading {
+  padding: 6px 16px;
+  font-size: 11px;
+  color: var(--color-fg-muted, #888);
+  font-style: italic;
+}
+
+.turn-diff-detail {
+  padding: 4px 8px 8px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.turn-diff-detail-empty {
+  padding: 8px 24px;
+  font-size: 11px;
+  color: var(--color-fg-muted, #888);
+}
+
+.turn-diff-cat-header {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 8px;
+  border-left: 3px solid;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.turn-diff-items {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0 0 0 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.turn-diff-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-fg-muted, #aaa);
+}
+
+.turn-diff-item-tokens {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}

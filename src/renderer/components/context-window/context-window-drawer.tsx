@@ -6,6 +6,7 @@ import { CATEGORY_META } from './context-category-meta'
 import { ContextCategoryRow } from './context-category-row'
 import { ContextWindowHeader } from './context-window-header'
 import { PaneSwitcherHeader } from './pane-switcher-header'
+import { TurnInjectionDiff } from './turn-injection-diff'
 import type { ContextCategory } from '@shared/types'
 
 const ORDERED_CATEGORIES: ContextCategory[] = (Object.keys(CATEGORY_META) as ContextCategory[])
@@ -82,6 +83,9 @@ export function ContextWindowDrawer() {
                 />
               ))}
             </div>
+            {advancedEnabled ? (
+              <TurnInjectionDiff sessionId={activeSessionId} turns={snap.turnDeltas ?? []} />
+            ) : null}
           </>
         )}
       </aside>

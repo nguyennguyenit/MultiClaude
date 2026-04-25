@@ -210,6 +210,10 @@ export interface ElectronAPI {
   context: {
     getSnapshot: (sessionId: string) => Promise<ContextSnapshot | null>
     onSnapshot: (callback: (snap: ContextSnapshot) => void) => () => void
+    getTurnDetail: (
+      sessionId: string,
+      turnId: number
+    ) => Promise<import('@shared/types/context-window').TurnDeltaDetail | null>
   }
 }
 
@@ -471,7 +475,9 @@ const api: ElectronAPI = {
       const listener = (_: IpcRendererEvent, snap: ContextSnapshot) => callback(snap)
       ipcRenderer.on(IPC_CHANNELS.CONTEXT_SNAPSHOT, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_SNAPSHOT, listener)
-    }
+    },
+    getTurnDetail: (sessionId, turnId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_TURN_DETAIL, sessionId, turnId)
   }
 }
 

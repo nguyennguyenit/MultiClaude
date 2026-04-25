@@ -149,6 +149,7 @@ export const IPC_CHANNELS = {
   // Context window analyzer channels
   CONTEXT_GET: 'context:get',
   CONTEXT_SNAPSHOT: 'context:snapshot',
+  CONTEXT_GET_TURN_DETAIL: 'context:get-turn-detail',
 
   // Windows channels
   WINDOW_GET_STATE: 'window:get-state',

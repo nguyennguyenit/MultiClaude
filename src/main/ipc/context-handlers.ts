@@ -15,6 +15,13 @@ export function registerContextHandlers(analyzer: ContextWindowAnalyzer): () => 
     return analyzer.getSnapshot(sessionId)
   })
 
+  ipcMain.removeHandler(IPC_CHANNELS.CONTEXT_GET_TURN_DETAIL)
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_GET_TURN_DETAIL, (_event, sessionId: string, turnId: number) => {
+    if (typeof sessionId !== 'string' || !sessionId) return null
+    if (!Number.isFinite(turnId)) return null
+    return analyzer.getTurnDetail(sessionId, turnId)
+  })
+
   const onSnapshot = (snap: ContextSnapshot) => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) {
@@ -27,5 +34,6 @@ export function registerContextHandlers(analyzer: ContextWindowAnalyzer): () => 
   return () => {
     analyzer.off('snapshot', onSnapshot)
     ipcMain.removeHandler(IPC_CHANNELS.CONTEXT_GET)
+    ipcMain.removeHandler(IPC_CHANNELS.CONTEXT_GET_TURN_DETAIL)
   }
 }

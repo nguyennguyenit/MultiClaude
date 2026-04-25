@@ -37,6 +37,42 @@ export interface ContextSnapshot {
   buckets: Record<ContextCategory, CategoryBucket>
   total: number
   updatedAt: number
+  /**
+   * Last N=50 per-turn delta summaries. Populated only when the analyzer's
+   * turn tracker is enabled (i.e. user has the advanced flag ON). Undefined
+   * means feature disabled / no turns observed yet.
+   */
+  turnDeltas?: TurnDeltaSummary[]
+}
+
+/** Lightweight per-turn summary streamed on the hot IPC channel (~300ms debounce). */
+export interface TurnDeltaSummary {
+  turnId: number
+  /** Wall-clock when the turn closed (ms since epoch). */
+  timestamp: number
+  /** Sum of perCategoryTokens; convenience field for renderer. */
+  totalDelta: number
+  perCategoryTokens: Record<ContextCategory, number>
+}
+
+/** One newly-injected item within a category for a turn. */
+export interface CategoryDeltaItem {
+  label: string
+  tokens: number
+  path?: string
+  /** 16-char hex digest of content for dedup. FNV-1a 64-bit. */
+  contentHash: string
+}
+
+export interface CategoryDelta {
+  tokens: number
+  items: CategoryDeltaItem[]
+}
+
+/** Detailed payload requested via cold IPC channel on row expand. */
+export interface TurnDeltaDetail {
+  turnId: number
+  byCategory: Record<ContextCategory, CategoryDelta>
 }
 
 export function emptyBuckets(): Record<ContextCategory, CategoryBucket> {

@@ -1,10 +1,15 @@
 import { EventEmitter } from 'events'
-import type { ContextSnapshot, CategoryBucket } from '@shared/types/context-window'
+import type {
+  ContextSnapshot,
+  CategoryBucket,
+  TurnDeltaDetail
+} from '@shared/types/context-window'
 import { emptyBuckets } from '@shared/types/context-window'
 import { estimateTokens } from '@shared/utils/estimate-tokens'
 import { categorizeLine, createToolUseRegistry, type ToolUseRegistry } from './context-line-categorizer'
 import { ContextMentionDetector } from './context-mention-detector'
 import { ClaudeMdReader } from './claude-md-reader'
+import { TurnDeltaTracker } from './turn-delta-tracker'
 
 const DEBOUNCE_MS = 300
 const TTL_MS = 60 * 60 * 1000 // 1h idle → drop
@@ -26,6 +31,33 @@ interface SessionState {
   mdLoaded: boolean
   /** True after emitting an error for this session (prevents log spam). */
   errorReported: boolean
+  tracker: TurnDeltaTracker
+  /** Monotonic counter; bumped each time a fresh user-text turn starts. */
+  currentTurnId: number
+}
+
+/**
+ * Detects a "fresh user turn" — a `user` line carrying authored user text,
+ * not a tool_result-only payload. tool_result entries are continuations of
+ * the assistant's previous turn and must NOT bump the turn counter.
+ */
+function isUserTextLine(line: unknown): boolean {
+  if (!line || typeof line !== 'object') return false
+  const l = line as { type?: string; message?: { content?: unknown } }
+  if (l.type !== 'user') return false
+  const c = l.message?.content
+  if (typeof c === 'string') {
+    return c.length > 0 && !c.includes('<system-reminder>')
+  }
+  if (Array.isArray(c)) {
+    for (const block of c as Array<Record<string, unknown>>) {
+      if (block.type === 'text') {
+        const text = String(block.text ?? '')
+        if (text.length > 0 && !text.includes('<system-reminder>')) return true
+      }
+    }
+  }
+  return false
 }
 
 /** Minimal EventEmitter-shaped source the analyzer subscribes to. */
@@ -56,6 +88,10 @@ export class ContextWindowAnalyzer extends EventEmitter {
     return this.sessions.get(sessionId)?.snapshot ?? null
   }
 
+  getTurnDetail(sessionId: string, turnId: number): TurnDeltaDetail | null {
+    return this.sessions.get(sessionId)?.tracker.getDetail(turnId) ?? null
+  }
+
   destroy(): void {
     this.source.off?.('jsonlLine', this.onLineBound)
     if (this.sweepTimer) clearInterval(this.sweepTimer)
@@ -79,6 +115,14 @@ export class ContextWindowAnalyzer extends EventEmitter {
     state.lastActivity = Date.now()
     try {
       const shapedLine = line as Parameters<typeof categorizeLine>[0]
+      // Turn boundary: a `user` line carrying user-authored text (not a
+      // tool_result-only payload) opens a new turn. Close the previous one.
+      if (isUserTextLine(shapedLine)) {
+        if (state.currentTurnId > 0) {
+          state.tracker.closeTurn(state.currentTurnId, Date.now())
+        }
+        state.currentTurnId += 1
+      }
       const hits = categorizeLine(shapedLine, state.detector, state.registry)
       if (hits.length === 0) return
       for (const h of hits) {
@@ -87,8 +131,18 @@ export class ContextWindowAnalyzer extends EventEmitter {
         bucket.chars += h.chars
         bucket.itemCount += 1
         state.snapshot.total += h.tokens
+        if (state.currentTurnId > 0) {
+          state.tracker.recordItem(state.currentTurnId, h.category, {
+            label: h.label ?? h.category,
+            tokens: h.tokens,
+            content: h.text
+          })
+        }
       }
       state.snapshot.updatedAt = Date.now()
+      // Refresh turnDeltas pointer (cheap: same array reference, but include
+      // a defensive copy of the latest summary into snapshot for IPC clone)
+      state.snapshot.turnDeltas = state.tracker.getSummaries().slice()
       this.scheduleEmit(state)
     } catch (err) {
       this.reportError(state, err)
@@ -115,7 +169,9 @@ export class ContextWindowAnalyzer extends EventEmitter {
       debounceTimer: null,
       lastActivity: Date.now(),
       mdLoaded: false,
-      errorReported: false
+      errorReported: false,
+      tracker: new TurnDeltaTracker(),
+      currentTurnId: 0
     }
   }
 

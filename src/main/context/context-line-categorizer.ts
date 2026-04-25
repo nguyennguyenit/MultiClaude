@@ -25,6 +25,8 @@ export interface CategoryHit {
   text: string
   chars: number
   tokens: number
+  /** Short, user-facing label for the item (e.g. tool name, "user", file path). */
+  label?: string
 }
 
 export interface ToolUseRegistry {
@@ -60,12 +62,13 @@ function stringify(content: unknown): string {
   }
 }
 
-function hit(category: ContextCategory, text: string): CategoryHit {
+function hit(category: ContextCategory, text: string, label?: string): CategoryHit {
   return {
     category,
     text,
     chars: text.length,
-    tokens: estimateTokens(text)
+    tokens: estimateTokens(text),
+    ...(label ? { label } : {})
   }
 }
 
@@ -86,7 +89,10 @@ export function categorizeLine(
     // bucket into claude-md per red-team M1.
     const a = line.attachment ?? {}
     const text = stringify(a.content) + stringify(a.stdout)
-    if (text) out.push(hit('claude-md', text))
+    if (text) {
+      const hookName = (a as { hookName?: string }).hookName
+      out.push(hit('claude-md', text, hookName ?? 'attachment'))
+    }
     return out
   }
 
@@ -94,10 +100,10 @@ export function categorizeLine(
     const content = line.message?.content
     if (typeof content === 'string') {
       if (content.includes('<system-reminder>')) {
-        out.push(hit('claude-md', content))
+        out.push(hit('claude-md', content, 'system-reminder'))
       } else {
         detector.recordUserText(content)
-        out.push(hit('user-messages', content))
+        out.push(hit('user-messages', content, 'user'))
       }
       return out
     }
@@ -107,21 +113,22 @@ export function categorizeLine(
         if (btype === 'text') {
           const text = String(block.text ?? '')
           if (text.includes('<system-reminder>')) {
-            out.push(hit('claude-md', text))
+            out.push(hit('claude-md', text, 'system-reminder'))
           } else {
             detector.recordUserText(text)
-            out.push(hit('user-messages', text))
+            out.push(hit('user-messages', text, 'user'))
           }
         } else if (btype === 'tool_result') {
           const text = stringify(block.content)
           const toolId = String(block.tool_use_id ?? '')
           const toolName = registry.get(toolId)
+          const label = toolName ? `${toolName}:result` : 'tool_result'
           if (toolName && COORD_TOOLS.has(toolName)) {
-            out.push(hit('task-coordination', text))
+            out.push(hit('task-coordination', text, label))
           } else if (toolName === 'Read' && detector.resolveToolResult(toolId) === 'mentioned') {
-            out.push(hit('mentioned-file', text))
+            out.push(hit('mentioned-file', text, label))
           } else {
-            out.push(hit('tool-output', text))
+            out.push(hit('tool-output', text, label))
           }
         }
       }
@@ -136,10 +143,10 @@ export function categorizeLine(
       const btype = block.type
       if (btype === 'thinking') {
         const text = String(block.thinking ?? block.text ?? '')
-        if (text) out.push(hit('thinking-text', text))
+        if (text) out.push(hit('thinking-text', text, 'thinking'))
       } else if (btype === 'text') {
         const text = String(block.text ?? '')
-        if (text) out.push(hit('thinking-text', text))
+        if (text) out.push(hit('thinking-text', text, 'assistant text'))
       } else if (btype === 'tool_use') {
         const id = String(block.id ?? '')
         const name = String(block.name ?? '')
@@ -147,7 +154,7 @@ export function categorizeLine(
         detector.recordToolUse(id, name, block.input)
         const inputText = stringify(block.input)
         if (COORD_TOOLS.has(name) && inputText) {
-          out.push(hit('task-coordination', inputText))
+          out.push(hit('task-coordination', inputText, name))
         }
       }
     }
