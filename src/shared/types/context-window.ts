@@ -45,6 +45,23 @@ export interface ContextSnapshot {
   turnDeltas?: TurnDeltaSummary[]
   /** Last 10 auto-compaction events for this session. */
   compactionEvents?: CompactionEvent[]
+  /** Last 30 turns containing extended-thinking blocks. */
+  thinkingBlocks?: ThinkingBlock[]
+}
+
+/**
+ * Per-turn extended-thinking summary. Claude Code v2.1+ persists thinking
+ * blocks signature-only (`thinking: ""` + `signature: <base64>`); we
+ * report counts and a redacted signature prefix until CLI exposes text.
+ */
+export interface ThinkingBlock {
+  turnId: number
+  timestamp: number
+  count: number
+  /** First 16 chars of each block's signature, for traceability. */
+  signatures: string[]
+  /** Coarse token estimate derived from signature payload size. */
+  approxTokens: number
 }
 
 /**

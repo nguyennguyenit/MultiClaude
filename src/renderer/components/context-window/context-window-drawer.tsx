@@ -9,6 +9,7 @@ import { PaneSwitcherHeader } from './pane-switcher-header'
 import { TurnInjectionDiff } from './turn-injection-diff'
 import { ExecutionTrace } from './execution-trace'
 import { CompactionTimeline } from './compaction-timeline'
+import { ThinkingViewer } from './thinking-viewer'
 import type { ContextCategory } from '@shared/types'
 
 const ORDERED_CATEGORIES: ContextCategory[] = (Object.keys(CATEGORY_META) as ContextCategory[])
@@ -92,6 +93,7 @@ export function ContextWindowDrawer() {
                   nodes={snap.turnDeltas?.[snap.turnDeltas.length - 1]?.trace ?? []}
                 />
                 <CompactionTimeline events={snap.compactionEvents ?? []} />
+                <ThinkingViewer blocks={snap.thinkingBlocks ?? []} />
               </>
             ) : null}
           </>

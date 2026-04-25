@@ -12,6 +12,7 @@ import { ClaudeMdReader } from './claude-md-reader'
 import { TurnDeltaTracker } from './turn-delta-tracker'
 import { ExecutionTraceBuilder } from './execution-trace-builder'
 import { CompactionDetector } from './compaction-detector'
+import { ThinkingExtractor } from './thinking-extractor'
 
 const DEBOUNCE_MS = 300
 const TTL_MS = 60 * 60 * 1000 // 1h idle → drop
@@ -39,6 +40,7 @@ interface SessionState {
   /** Trace builder for the currently open turn. Null between turns. */
   traceBuilder: ExecutionTraceBuilder | null
   compactionDetector: CompactionDetector
+  thinkingExtractor: ThinkingExtractor
 }
 
 /**
@@ -157,6 +159,7 @@ export class ContextWindowAnalyzer extends EventEmitter {
       // Sudden-drop heuristic; explicit markers were already recorded above.
       state.compactionDetector.recordTotalTokens(state.snapshot.total, state.snapshot.updatedAt)
       state.snapshot.compactionEvents = state.compactionDetector.getEvents().slice()
+      state.snapshot.thinkingBlocks = state.thinkingExtractor.getBlocks().slice()
 
       this.scheduleEmit(state)
     } catch (err) {
@@ -167,6 +170,7 @@ export class ContextWindowAnalyzer extends EventEmitter {
   private closeTurn(state: SessionState): void {
     if (state.currentTurnId <= 0) return
     state.tracker.closeTurn(state.currentTurnId, Date.now())
+    state.thinkingExtractor.flushTurn()
     if (state.traceBuilder) {
       const trace = state.traceBuilder.snapshot()
       if (trace.length > 0) {
@@ -181,12 +185,15 @@ export class ContextWindowAnalyzer extends EventEmitter {
   }
 
   private feedTraceBuilder(state: SessionState, line: { type?: string; message?: { content?: unknown } }): void {
-    if (!state.traceBuilder) return
     const content = line.message?.content
     if (!Array.isArray(content)) return
     if (line.type === 'assistant') {
-      state.traceBuilder.recordAssistantBlocks(content as unknown[])
+      if (state.traceBuilder) state.traceBuilder.recordAssistantBlocks(content as unknown[])
+      if (state.currentTurnId > 0) {
+        state.thinkingExtractor.recordAssistantBlocks(state.currentTurnId, content as unknown[], Date.now())
+      }
     } else if (line.type === 'user') {
+      if (!state.traceBuilder) return
       const tr = (content as Array<Record<string, unknown>>).filter((b) => b.type === 'tool_result')
       if (tr.length > 0) state.traceBuilder.recordToolResults(tr as unknown[])
     }
@@ -216,7 +223,8 @@ export class ContextWindowAnalyzer extends EventEmitter {
       tracker: new TurnDeltaTracker(),
       currentTurnId: 0,
       traceBuilder: null,
-      compactionDetector: new CompactionDetector()
+      compactionDetector: new CompactionDetector(),
+      thinkingExtractor: new ThinkingExtractor()
     }
   }
 

@@ -111,6 +111,33 @@ describe('ContextWindowAnalyzer', () => {
     a.destroy()
   })
 
+  it('extracts extended-thinking signatures per turn', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'hi' } } })
+    emit({
+      sessionId: 's', filePath: 'f',
+      line: {
+        type: 'assistant',
+        message: { content: [
+          { type: 'thinking', thinking: '', signature: 'EpECClkIDBgCKkBJsig1' },
+          { type: 'thinking', thinking: '', signature: 'XYZAClkIDBgCKkBJsig2' }
+        ] }
+      }
+    })
+    // Force close
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'next' } } })
+
+    const snap = a.getSnapshot('s')
+    expect(snap?.thinkingBlocks).toBeDefined()
+    expect(snap!.thinkingBlocks!.length).toBe(1)
+    expect(snap!.thinkingBlocks![0].count).toBe(2)
+    expect(snap!.thinkingBlocks![0].signatures.length).toBe(2)
+    a.destroy()
+  })
+
   it('records explicit compaction event from a summary line', () => {
     const { source, emit } = makeSource()
     const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader

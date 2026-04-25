@@ -3261,3 +3261,89 @@ button, input, select, textarea, optgroup, option {
 .compaction-detail p { margin: 0 0 4px 0; }
 .compaction-detail p:last-child { margin: 0; }
 .compaction-note { font-style: italic; opacity: 0.8; }
+
+/* Thinking viewer (Phase 6 — summary-only, signed) */
+.thinking-viewer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.thinking-title {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-fg-muted, #999);
+}
+
+.thinking-empty {
+  margin-top: 16px;
+  padding: 12px;
+  color: var(--color-fg-muted, #888);
+  font-size: 11px;
+  text-align: center;
+  font-style: italic;
+}
+
+.thinking-truncated {
+  font-size: 10px;
+  color: var(--color-fg-muted, #888);
+  margin-bottom: 6px;
+}
+
+.thinking-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.thinking-row {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-fg, #ccc);
+}
+
+.thinking-row:hover { background: var(--color-bg-hover, rgba(255, 255, 255, 0.05)); }
+.thinking-row.is-open { background: var(--color-bg-active, rgba(100, 150, 255, 0.08)); }
+
+.thinking-turn { font-variant-numeric: tabular-nums; opacity: 0.6; min-width: 32px; }
+.thinking-count, .thinking-tokens { font-size: 11px; }
+.thinking-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(180, 180, 180, 0.15);
+  color: #ccc;
+  justify-self: end;
+}
+
+.thinking-detail {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--color-fg-muted, #aaa);
+}
+
+.thinking-note { margin: 0 0 6px 0; font-style: italic; }
+.thinking-sig-list { list-style: none; margin: 0; padding: 0; }
+.thinking-sig code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
