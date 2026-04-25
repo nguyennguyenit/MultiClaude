@@ -11,6 +11,7 @@ import { ContextMentionDetector } from './context-mention-detector'
 import { ClaudeMdReader } from './claude-md-reader'
 import { TurnDeltaTracker } from './turn-delta-tracker'
 import { ExecutionTraceBuilder } from './execution-trace-builder'
+import { CompactionDetector } from './compaction-detector'
 
 const DEBOUNCE_MS = 300
 const TTL_MS = 60 * 60 * 1000 // 1h idle → drop
@@ -37,6 +38,7 @@ interface SessionState {
   currentTurnId: number
   /** Trace builder for the currently open turn. Null between turns. */
   traceBuilder: ExecutionTraceBuilder | null
+  compactionDetector: CompactionDetector
 }
 
 /**
@@ -128,8 +130,11 @@ export class ContextWindowAnalyzer extends EventEmitter {
         state.traceBuilder = new ExecutionTraceBuilder()
       }
       this.feedTraceBuilder(state, shapedLine)
+      // Compaction signals run on every line, even when no category hits
+      // (summary lines carry zero hits but ARE the explicit signal).
+      const compactEvent = state.compactionDetector.recordLine(shapedLine as object)
       const hits = categorizeLine(shapedLine, state.detector, state.registry)
-      if (hits.length === 0) return
+      if (hits.length === 0 && !compactEvent) return
       for (const h of hits) {
         const bucket = state.snapshot.buckets[h.category]
         bucket.tokens += h.tokens
@@ -148,6 +153,11 @@ export class ContextWindowAnalyzer extends EventEmitter {
       // Refresh turnDeltas pointer (cheap: same array reference, but include
       // a defensive copy of the latest summary into snapshot for IPC clone)
       state.snapshot.turnDeltas = state.tracker.getSummaries().slice()
+
+      // Sudden-drop heuristic; explicit markers were already recorded above.
+      state.compactionDetector.recordTotalTokens(state.snapshot.total, state.snapshot.updatedAt)
+      state.snapshot.compactionEvents = state.compactionDetector.getEvents().slice()
+
       this.scheduleEmit(state)
     } catch (err) {
       this.reportError(state, err)
@@ -205,7 +215,8 @@ export class ContextWindowAnalyzer extends EventEmitter {
       errorReported: false,
       tracker: new TurnDeltaTracker(),
       currentTurnId: 0,
-      traceBuilder: null
+      traceBuilder: null,
+      compactionDetector: new CompactionDetector()
     }
   }
 

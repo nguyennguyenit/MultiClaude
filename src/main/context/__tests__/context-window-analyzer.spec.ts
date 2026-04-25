@@ -111,6 +111,21 @@ describe('ContextWindowAnalyzer', () => {
     a.destroy()
   })
 
+  it('records explicit compaction event from a summary line', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'lots of context' } } })
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'summary', summary: 'compact summary text', timestamp: Date.now() } })
+
+    const snap = a.getSnapshot('s')
+    expect(snap?.compactionEvents).toBeDefined()
+    expect(snap!.compactionEvents!.length).toBe(1)
+    expect(snap!.compactionEvents![0].confidence).toBe('high')
+    a.destroy()
+  })
+
   it('attaches execution trace to closed-turn summary', () => {
     const { source, emit } = makeSource()
     const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader

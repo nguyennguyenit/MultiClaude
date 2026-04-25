@@ -8,6 +8,7 @@ import { ContextWindowHeader } from './context-window-header'
 import { PaneSwitcherHeader } from './pane-switcher-header'
 import { TurnInjectionDiff } from './turn-injection-diff'
 import { ExecutionTrace } from './execution-trace'
+import { CompactionTimeline } from './compaction-timeline'
 import type { ContextCategory } from '@shared/types'
 
 const ORDERED_CATEGORIES: ContextCategory[] = (Object.keys(CATEGORY_META) as ContextCategory[])
@@ -90,6 +91,7 @@ export function ContextWindowDrawer() {
                 <ExecutionTrace
                   nodes={snap.turnDeltas?.[snap.turnDeltas.length - 1]?.trace ?? []}
                 />
+                <CompactionTimeline events={snap.compactionEvents ?? []} />
               </>
             ) : null}
           </>

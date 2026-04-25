@@ -43,6 +43,25 @@ export interface ContextSnapshot {
    * means feature disabled / no turns observed yet.
    */
   turnDeltas?: TurnDeltaSummary[]
+  /** Last 10 auto-compaction events for this session. */
+  compactionEvents?: CompactionEvent[]
+}
+
+/**
+ * Auto-compaction event. `confidence: high` means we saw an explicit
+ * summary marker in JSONL; `low` means we inferred it from a sudden
+ * token drop and the user did not issue /clear.
+ */
+export interface CompactionEvent {
+  id: string
+  timestamp: number
+  beforeTokens: number
+  afterTokens: number
+  /** Number of turns folded into the compact summary, when knowable. */
+  compactedTurnCount?: number
+  /** First N chars of the compact summary content. */
+  summary?: string
+  confidence: 'high' | 'low'
 }
 
 /**

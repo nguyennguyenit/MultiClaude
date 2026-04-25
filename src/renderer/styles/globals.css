@@ -3166,3 +3166,98 @@ button, input, select, textarea, optgroup, option {
   padding: 1px 4px;
   border-radius: 3px;
 }
+
+/* Compaction timeline (Phase 5) */
+.compaction-timeline {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.compaction-title {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-fg-muted, #999);
+}
+
+.compaction-empty {
+  margin-top: 16px;
+  padding: 12px;
+  color: var(--color-fg-muted, #888);
+  font-size: 12px;
+  text-align: center;
+}
+
+.compaction-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  border-left: 2px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  padding-left: 12px;
+}
+
+.compaction-event {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  position: relative;
+  color: var(--color-fg, #ccc);
+}
+
+.compaction-event:hover { background: var(--color-bg-hover, rgba(255, 255, 255, 0.05)); }
+
+.compaction-marker {
+  position: absolute;
+  left: -19px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f87171;
+}
+
+.compaction-event.conf-low .compaction-marker {
+  background: transparent;
+  border: 2px dashed #f87171;
+  width: 8px;
+  height: 8px;
+  left: -18px;
+}
+
+.compaction-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.compaction-delta {
+  font-variant-numeric: tabular-nums;
+}
+
+.compaction-drop {
+  font-variant-numeric: tabular-nums;
+  color: #f87171;
+  font-weight: 600;
+}
+
+.compaction-detail {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--color-fg-muted, #aaa);
+}
+
+.compaction-detail p { margin: 0 0 4px 0; }
+.compaction-detail p:last-child { margin: 0; }
+.compaction-note { font-style: italic; opacity: 0.8; }
