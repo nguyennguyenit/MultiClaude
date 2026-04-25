@@ -23,6 +23,18 @@ describe('useAppStore terminal output buffering', () => {
     useAppStore.setState(initialState, true)
   })
 
+  it('updateTerminalTaskStatus sets taskStatus on the matching terminal only', () => {
+    useAppStore.getState().addTerminal(makeTerminal('term-a'))
+    useAppStore.getState().addTerminal(makeTerminal('term-b'))
+
+    useAppStore.getState().updateTerminalTaskStatus('term-a', 'running')
+    expect(useAppStore.getState().terminals.find((t) => t.id === 'term-a')?.taskStatus).toBe('running')
+    expect(useAppStore.getState().terminals.find((t) => t.id === 'term-b')?.taskStatus).toBeUndefined()
+
+    useAppStore.getState().updateTerminalTaskStatus('term-a', 'failed')
+    expect(useAppStore.getState().terminals.find((t) => t.id === 'term-a')?.taskStatus).toBe('failed')
+  })
+
   it('keeps terminal metadata stable when appending output', () => {
     useAppStore.getState().addTerminal(makeTerminal())
 

@@ -19,9 +19,18 @@ import { pendingPermissionStore } from './pending-permission-store'
 import { ClaudeLogWatcher } from './claude-log-watcher'
 import { MobileControlManager, type MobileControlStatus } from './mobile-control-manager'
 import { generateTaskEventId } from './parser-utils'
-import type { RemoteControlStatus } from '@shared/types'
+import type { RemoteControlStatus, TerminalTaskStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
+
+function paneStatusForEvent(type: NotificationEventType): TerminalTaskStatus | null {
+  switch (type) {
+    case 'taskComplete': return 'done'
+    case 'taskFailed': return 'failed'
+    case 'reviewNeeded': return 'review'
+    default: return null
+  }
+}
 
 // Keys to persist (exclude computed fields like telegramConfigured/discordConfigured)
 type PersistableKey = 'onTaskComplete' | 'onTaskFailed' | 'onReviewNeeded' |
@@ -343,6 +352,16 @@ export class NotificationManager extends EventEmitter {
     this.emitRemoteControlStatus('disconnected')
   }
 
+  private emitPaneStatus(event: TaskEvent): void {
+    const status = paneStatusForEvent(event.type)
+    if (!status) return
+    if (!this.window || this.window.isDestroyed()) return
+    this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_PANE_STATUS_CHANGED, {
+      terminalId: event.terminalId,
+      status
+    })
+  }
+
   private emitRemoteControlStatus(status: RemoteControlStatus): void {
     if (this.window && !this.window.isDestroyed()) {
       this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, status)
@@ -502,6 +521,11 @@ export class NotificationManager extends EventEmitter {
   }
 
   private handleTaskEvent(event: TaskEvent): void {
+    // Pane-status broadcast runs independently of notification gating
+    // so the context-window switcher reflects lifecycle regardless of
+    // user's notification preferences.
+    this.emitPaneStatus(event)
+
     const settings = this.getSettings()
 
     // Check if event type is enabled

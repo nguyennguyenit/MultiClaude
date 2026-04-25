@@ -99,6 +99,7 @@ export const IPC_CHANNELS = {
   NOTIFICATION_EVENT: 'notification:event',
   NOTIFICATION_SET_ACTIVE_TERMINAL: 'notification:set-active-terminal',
   NOTIFICATION_REMOTE_CONTROL_STATUS: 'notification:remote-control-status',
+  NOTIFICATION_PANE_STATUS_CHANGED: 'notification:pane-status-changed',
 
   // Mobile control (Claude Code hook receiver + UUID response store)
   MOBILE_CONTROL_GET_STATUS: 'mobile-control:get-status',

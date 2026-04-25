@@ -2862,3 +2862,82 @@ button, input, select, textarea, optgroup, option {
   border-radius: inherit;
   transition: width 180ms ease-out;
 }
+
+/* Context drawer pane switcher header (Phase 2) */
+.pane-switcher-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  outline: none;
+}
+
+.pane-switcher-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-fg, #ccc);
+  outline: none;
+}
+
+.pane-switcher-row:hover,
+.pane-switcher-row:focus-visible {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.pane-switcher-row.is-active {
+  background: var(--color-bg-active, rgba(100, 150, 255, 0.12));
+  color: var(--color-fg-active, #fff);
+}
+
+.pane-switcher-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-badge-bg, rgba(255, 255, 255, 0.08));
+  color: var(--color-badge-fg, #bbb);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pane-switcher-badge.agent-claude { background: rgba(217, 119, 87, 0.2); color: #e8a98e; }
+.pane-switcher-badge.agent-codex { background: rgba(87, 170, 217, 0.2); color: #8ec9e8; }
+.pane-switcher-badge.agent-gemini { background: rgba(155, 217, 87, 0.2); color: #b6e88e; }
+.pane-switcher-badge.agent-aider { background: rgba(180, 87, 217, 0.2); color: #d18ee8; }
+
+.pane-switcher-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-switcher-pct {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.pane-switcher-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-idle, #666);
+}
+
+.pane-switcher-status[data-status="running"] { background: #5aa7ff; animation: pane-pulse 1.4s ease-in-out infinite; }
+.pane-switcher-status[data-status="done"] { background: #4ade80; }
+.pane-switcher-status[data-status="failed"] { background: #f87171; }
+.pane-switcher-status[data-status="review"] { background: #fbbf24; }
+.pane-switcher-status[data-status="idle"] { background: #555; }
+
+@keyframes pane-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

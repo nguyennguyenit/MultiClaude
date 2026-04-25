@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState, AgentType } from '@shared/types'
+import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState, AgentType, TerminalTaskStatus } from '@shared/types'
 import { DEFAULT_ACTIVITY_BAR_STATE } from '@shared/constants'
 import type { TerminalKeyboardEnhancementState } from '../utils/keyboard-enhancement-utils'
 import {
@@ -35,6 +35,7 @@ interface AppState {
   updateTerminalClaudeMode: (id: string, isClaudeMode: boolean) => void
   updateTerminalAgentType: (id: string, agentType: AgentType) => void
   updateTerminalClaudeSessionId: (id: string, claudeSessionId: string) => void
+  updateTerminalTaskStatus: (id: string, taskStatus: TerminalTaskStatus) => void
   getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void
   getTerminalKeyboardEnhancement: (id: string) => TerminalKeyboardEnhancementState | null
@@ -178,6 +179,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       terminals: state.terminals.map((t) =>
         t.id === id ? { ...t, claudeSessionId } : t
+      )
+    })),
+
+  updateTerminalTaskStatus: (id, taskStatus) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, taskStatus } : t
       )
     })),
 

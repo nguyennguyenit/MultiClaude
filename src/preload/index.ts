@@ -133,6 +133,9 @@ export interface ElectronAPI {
     setActiveTerminal: (terminalId: string | null) => void
     onRemoteControlStatus: (callback: (status: RemoteControlStatus) => void) => () => void
     getRemoteControlStatus: () => Promise<RemoteControlStatus>
+    onPaneStatusChanged: (
+      callback: (payload: { terminalId: string; status: import('@shared/types').TerminalTaskStatus }) => void
+    ) => () => void
   }
   telegram: {
     startPairing: (botToken: string) => Promise<{
@@ -360,7 +363,17 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
     },
-    getRemoteControlStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS)
+    getRemoteControlStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS),
+    onPaneStatusChanged: (
+      callback: (payload: { terminalId: string; status: import('@shared/types').TerminalTaskStatus }) => void
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        payload: { terminalId: string; status: import('@shared/types').TerminalTaskStatus }
+      ) => callback(payload)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_PANE_STATUS_CHANGED, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_PANE_STATUS_CHANGED, handler)
+    }
   },
   telegram: {
     startPairing: (botToken: string) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_START_PAIRING, { botToken }),

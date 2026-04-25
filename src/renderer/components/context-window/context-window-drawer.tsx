@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
 import { SlidePanel } from '../slide-panel'
-import { useAppStore, useContextWindowStore } from '../../stores'
+import { useAppStore, useContextWindowStore, useSettingsStore } from '../../stores'
 import { useContextSnapshot } from '../../hooks/use-context-snapshot'
 import { CATEGORY_META } from './context-category-meta'
 import { ContextCategoryRow } from './context-category-row'
 import { ContextWindowHeader } from './context-window-header'
+import { PaneSwitcherHeader } from './pane-switcher-header'
 import type { ContextCategory } from '@shared/types'
 
 const ORDERED_CATEGORIES: ContextCategory[] = (Object.keys(CATEGORY_META) as ContextCategory[])
@@ -13,6 +14,7 @@ const ORDERED_CATEGORIES: ContextCategory[] = (Object.keys(CATEGORY_META) as Con
 export function ContextWindowDrawer() {
   const isOpen = useContextWindowStore((s) => s.isOpen)
   const setOpen = useContextWindowStore((s) => s.setOpen)
+  const advancedEnabled = useSettingsStore((s) => s.settings.enableContextWindowAdvanced ?? false)
 
   const activeSessionId = useAppStore((s) => {
     const t = s.terminals.find((x) => x.id === s.activeTerminalId)
@@ -60,6 +62,7 @@ export function ContextWindowDrawer() {
         className="context-window-body"
         data-testid="context-window-body"
       >
+        {advancedEnabled ? <PaneSwitcherHeader /> : null}
         {!activeSessionId || !snap ? (
           <div className="context-empty" data-testid="context-empty">
             No Claude session in the active pane yet.

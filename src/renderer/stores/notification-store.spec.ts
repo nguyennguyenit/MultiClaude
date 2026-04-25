@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { NotificationSettings } from '@shared/types'
+import type { NotificationSettings, TerminalTaskStatus } from '@shared/types'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '@shared/constants'
-import { useNotificationStore } from './notification-store'
+import { setupNotificationListener, useNotificationStore } from './notification-store'
+import { useAppStore } from './app-store'
 
 function cloneDefaultSettings(): NotificationSettings {
   return structuredClone(DEFAULT_NOTIFICATION_SETTINGS)
@@ -44,6 +45,41 @@ describe('useNotificationStore', () => {
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ soundEnabled: false }))
     expect(useNotificationStore.getState().savedSettings.soundEnabled).toBe(false)
     expect(useNotificationStore.getState().hasUnsavedChanges).toBe(false)
+  })
+
+  it('setupNotificationListener routes pane-status events into app-store taskStatus', () => {
+    let paneStatusCb: ((p: { terminalId: string; status: TerminalTaskStatus }) => void) | null = null
+    vi.stubGlobal('window', {
+      electron: {
+        notification: {
+          onEvent: vi.fn(() => () => {}),
+          onRemoteControlStatus: vi.fn(() => () => {}),
+          getRemoteControlStatus: vi.fn(() => Promise.resolve('disconnected')),
+          onPaneStatusChanged: vi.fn((cb: (p: { terminalId: string; status: TerminalTaskStatus }) => void) => {
+            paneStatusCb = cb
+            return () => {}
+          })
+        }
+      }
+    })
+
+    useAppStore.setState({
+      terminals: [
+        { id: 't1', title: 't1', cwd: '/', isClaudeMode: true, createdAt: new Date().toISOString() }
+      ],
+      activeTerminalId: 't1'
+    })
+
+    const cleanup = setupNotificationListener()
+    expect(paneStatusCb).not.toBeNull()
+
+    paneStatusCb?.({ terminalId: 't1', status: 'done' })
+    expect(useAppStore.getState().terminals[0].taskStatus).toBe('done')
+
+    paneStatusCb?.({ terminalId: 't1', status: 'failed' })
+    expect(useAppStore.getState().terminals[0].taskStatus).toBe('failed')
+
+    cleanup()
   })
 
   it('cancelSettings restores the saved notification state', async () => {

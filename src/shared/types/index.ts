@@ -3,6 +3,9 @@ import type { PaneTree } from './pane-tree'
 // Agent type detected from terminal command input
 export type AgentType = 'claude' | 'codex' | 'gemini' | 'aider' | 'generic'
 
+/** Per-terminal task lifecycle state derived from notification events. */
+export type TerminalTaskStatus = 'idle' | 'running' | 'review' | 'done' | 'failed'
+
 // Terminal types
 export interface Terminal {
   id: string
@@ -16,6 +19,8 @@ export interface Terminal {
   allowTitleUpdate?: boolean
   /** Detected CLI agent type running in this terminal */
   agentType?: AgentType
+  /** Task lifecycle derived from notification events; undefined ≡ 'idle'. */
+  taskStatus?: TerminalTaskStatus
 }
 
 export interface TerminalState {

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { NotificationSettings, NotificationEvent, SoundPreset, RemoteControlStatus } from '@shared/types'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '@shared/constants'
+import { useAppStore } from './app-store'
 
 interface NotificationState {
   savedSettings: NotificationSettings
@@ -178,6 +179,11 @@ export function setupNotificationListener(): () => void {
     useNotificationStore.setState({ remoteControlStatus: status })
   })
 
+  // Listen for per-pane task status updates (Phase 2: Context Drawer switcher)
+  const cleanupPaneStatus = window.electron.notification.onPaneStatusChanged(({ terminalId, status }) => {
+    useAppStore.getState().updateTerminalTaskStatus(terminalId, status)
+  })
+
   // Load initial remote control status
   window.electron.notification.getRemoteControlStatus().then((status) => {
     useNotificationStore.setState({ remoteControlStatus: status })
@@ -186,5 +192,6 @@ export function setupNotificationListener(): () => void {
   return () => {
     cleanupEvent()
     cleanupRemoteStatus()
+    cleanupPaneStatus()
   }
 }
