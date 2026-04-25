@@ -54,7 +54,13 @@ src/renderer/
 ├── App.tsx                               # Root component and shared terminal-output listener
 ├── components/
 │   ├── context-menu/                     # Themed Portal context menu (theme-aware via CSS vars)
-│   ├── context-window/                   # Context analyzer drawer (ContextWindowDrawer, useContextSnapshot)
+│   ├── context-window/                   # Context analyzer drawer + extended sections (gated by enableContextWindowAdvanced)
+│   │   ├── context-window-drawer.tsx     # Shell, mounts advanced sections behind flag
+│   │   ├── pane-switcher-header.tsx      # Per-pane row list (agent badge, ctx %, task-status dot)
+│   │   ├── turn-injection-diff.tsx       # Per-turn delta with content-hash dedup, spike highlight
+│   │   ├── execution-trace.tsx           # Subagent + main-tool trace per turn (fallback mode)
+│   │   ├── compaction-timeline.tsx       # Auto-compaction events (high/low confidence)
+│   │   └── thinking-viewer.tsx           # Extended-thinking summary (signed-only in CLI v2.1+)
 │   └── terminal/
 │       ├── terminal-grid.tsx             # Multi-project host; renders pane trees
 │       ├── pane-tree-node.tsx            # Recursive flex renderer + resize handles with rAF-coalesce
@@ -189,8 +195,16 @@ The legacy `terminal:show-context-menu` channel has been removed; right-click is
 
 ### Context Window Channel
 
-- `context:get` — invoke: return snapshot for sessionId (main: `ContextWindowAnalyzer.getSnapshot(sessionId)`) with 6 category breakdown
-- `context:snapshot` — broadcast: push real-time snapshot on 300ms debounce per session (main emits on state change)
+- `context:get` — invoke: return snapshot for sessionId (main: `ContextWindowAnalyzer.getSnapshot(sessionId)`) with 6-category breakdown plus optional `turnDeltas`, `compactionEvents`, `thinkingBlocks` (advanced flag)
+- `context:snapshot` — broadcast: push real-time snapshot on 300ms debounce per session (main emits on state change). Hot payload p95 ≤ 64KB enforced by integration test
+- `context:get-turn-detail` — invoke: cold-channel lookup of `TurnDeltaDetail` (per-item breakdown for one turn, fetched on row expand)
+- `notification:pane-status-changed` — broadcast: per-terminal task lifecycle (`running|review|done|failed`) for the drawer's pane switcher header. Emitted from `notification-manager.handleTaskEvent` BEFORE notification settings/dedup gates so drawer reflects state regardless of user preferences
+
+Per-session main-side modules (one instance each, owned by `ContextWindowAnalyzer`):
+- `TurnDeltaTracker` — per-turn token deltas with FNV-1a 64-bit content-hash dedup, FIFO 50
+- `ExecutionTraceBuilder` — fallback-mode tree (1 main node + N subagent nodes), tool_use_id keyed
+- `CompactionDetector` — explicit summary markers (high) + >30% sudden-drop heuristic (low), 2s dedup, /clear-suppression, FIFO 10
+- `ThinkingExtractor` — signature-only thinking block aggregation per turn, FIFO 30
 
 ### Media Channel
 
