@@ -111,6 +111,53 @@ describe('ContextWindowAnalyzer', () => {
     a.destroy()
   })
 
+  it('attaches execution trace to closed-turn summary', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+
+    // Turn 1 with Agent + main tool
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'turn one' } } })
+    emit({
+      sessionId: 's', filePath: 'f',
+      line: {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'tu_r', name: 'Read', input: { path: '/x' } },
+            { type: 'tool_use', id: 'tu_a', name: 'Agent', input: { subagent_type: 'tester', description: 'run tests' } }
+          ]
+        }
+      }
+    })
+    emit({
+      sessionId: 's', filePath: 'f',
+      line: {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'tu_r', content: 'file' },
+            { type: 'tool_result', tool_use_id: 'tu_a', content: 'tests passed' }
+          ]
+        }
+      }
+    })
+
+    // Force close via new turn
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'turn two' } } })
+
+    const snap = a.getSnapshot('s')
+    const turn1 = snap?.turnDeltas?.find((t) => t.turnId === 1)
+    expect(turn1?.trace).toBeDefined()
+    expect(turn1!.trace!.length).toBe(2)
+    const main = turn1!.trace!.find((n) => n.agentType === 'main')
+    const sub = turn1!.trace!.find((n) => n.agentType === 'subagent')
+    expect(main?.toolCalls.length).toBe(1)
+    expect(main?.toolCalls[0].name).toBe('Read')
+    expect(sub?.agentName).toBe('tester')
+    a.destroy()
+  })
+
   it('does not bump turn counter on system-reminder user lines', () => {
     const { source, emit } = makeSource()
     const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader

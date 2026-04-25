@@ -10,6 +10,7 @@ import { categorizeLine, createToolUseRegistry, type ToolUseRegistry } from './c
 import { ContextMentionDetector } from './context-mention-detector'
 import { ClaudeMdReader } from './claude-md-reader'
 import { TurnDeltaTracker } from './turn-delta-tracker'
+import { ExecutionTraceBuilder } from './execution-trace-builder'
 
 const DEBOUNCE_MS = 300
 const TTL_MS = 60 * 60 * 1000 // 1h idle → drop
@@ -34,6 +35,8 @@ interface SessionState {
   tracker: TurnDeltaTracker
   /** Monotonic counter; bumped each time a fresh user-text turn starts. */
   currentTurnId: number
+  /** Trace builder for the currently open turn. Null between turns. */
+  traceBuilder: ExecutionTraceBuilder | null
 }
 
 /**
@@ -119,10 +122,12 @@ export class ContextWindowAnalyzer extends EventEmitter {
       // tool_result-only payload) opens a new turn. Close the previous one.
       if (isUserTextLine(shapedLine)) {
         if (state.currentTurnId > 0) {
-          state.tracker.closeTurn(state.currentTurnId, Date.now())
+          this.closeTurn(state)
         }
         state.currentTurnId += 1
+        state.traceBuilder = new ExecutionTraceBuilder()
       }
+      this.feedTraceBuilder(state, shapedLine)
       const hits = categorizeLine(shapedLine, state.detector, state.registry)
       if (hits.length === 0) return
       for (const h of hits) {
@@ -149,6 +154,34 @@ export class ContextWindowAnalyzer extends EventEmitter {
     }
   }
 
+  private closeTurn(state: SessionState): void {
+    if (state.currentTurnId <= 0) return
+    state.tracker.closeTurn(state.currentTurnId, Date.now())
+    if (state.traceBuilder) {
+      const trace = state.traceBuilder.snapshot()
+      if (trace.length > 0) {
+        const summaries = state.tracker.getSummaries()
+        const last = summaries[summaries.length - 1]
+        if (last && last.turnId === state.currentTurnId) {
+          last.trace = trace
+        }
+      }
+      state.traceBuilder = null
+    }
+  }
+
+  private feedTraceBuilder(state: SessionState, line: { type?: string; message?: { content?: unknown } }): void {
+    if (!state.traceBuilder) return
+    const content = line.message?.content
+    if (!Array.isArray(content)) return
+    if (line.type === 'assistant') {
+      state.traceBuilder.recordAssistantBlocks(content as unknown[])
+    } else if (line.type === 'user') {
+      const tr = (content as Array<Record<string, unknown>>).filter((b) => b.type === 'tool_result')
+      if (tr.length > 0) state.traceBuilder.recordToolResults(tr as unknown[])
+    }
+  }
+
   private reportError(state: SessionState, err: unknown): void {
     if (state.errorReported) return
     state.errorReported = true
@@ -171,7 +204,8 @@ export class ContextWindowAnalyzer extends EventEmitter {
       mdLoaded: false,
       errorReported: false,
       tracker: new TurnDeltaTracker(),
-      currentTurnId: 0
+      currentTurnId: 0,
+      traceBuilder: null
     }
   }
 

@@ -45,6 +45,35 @@ export interface ContextSnapshot {
   turnDeltas?: TurnDeltaSummary[]
 }
 
+/**
+ * One inner tool call grouped under a TraceNode (Read/Edit/Bash/etc).
+ * Token count attributes the matching `tool_result` payload back to its
+ * `tool_use_id`.
+ */
+export interface TraceToolCall {
+  id: string
+  name: string
+  tokens: number
+}
+
+/**
+ * Tree node for the execution-trace section. Fallback mode (no subagent
+ * log co-watching) emits a single 'main' node aggregating all non-Agent
+ * tool calls plus one 'subagent' node per `Agent` tool_use.
+ */
+export interface TraceNode {
+  id: string
+  agentType: 'main' | 'subagent'
+  agentName?: string
+  description?: string
+  tokens: number
+  durationMs?: number
+  toolCalls: TraceToolCall[]
+  children: TraceNode[]
+  depthCapped?: boolean
+  deeperCount?: number
+}
+
 /** Lightweight per-turn summary streamed on the hot IPC channel (~300ms debounce). */
 export interface TurnDeltaSummary {
   turnId: number
@@ -53,6 +82,11 @@ export interface TurnDeltaSummary {
   /** Sum of perCategoryTokens; convenience field for renderer. */
   totalDelta: number
   perCategoryTokens: Record<ContextCategory, number>
+  /**
+   * Execution trace for this turn. Empty when no Agent or non-Agent tool
+   * calls were observed. Populated only when the analyzer's tracker is on.
+   */
+  trace?: TraceNode[]
 }
 
 /** One newly-injected item within a category for a turn. */

@@ -3062,3 +3062,107 @@ button, input, select, textarea, optgroup, option {
   font-variant-numeric: tabular-nums;
   opacity: 0.7;
 }
+
+/* Execution trace (Phase 4) */
+.exec-trace {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.exec-trace-title {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-fg-muted, #999);
+}
+
+.exec-trace-empty {
+  margin-top: 16px;
+  padding: 12px;
+  color: var(--color-fg-muted, #888);
+  font-size: 12px;
+  text-align: center;
+}
+
+.exec-trace-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exec-trace-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-fg, #ccc);
+  text-align: left;
+}
+
+.exec-trace-row:hover { background: var(--color-bg-hover, rgba(255, 255, 255, 0.05)); }
+.exec-trace-row.is-open { background: var(--color-bg-active, rgba(100, 150, 255, 0.08)); }
+
+.exec-trace-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.exec-trace-badge.agent-main { background: rgba(120, 180, 255, 0.2); color: #a8c8ff; }
+.exec-trace-badge.agent-subagent { background: rgba(200, 130, 255, 0.2); color: #d8a8ff; }
+
+.exec-trace-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exec-trace-tokens, .exec-trace-duration {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.exec-trace-tools {
+  list-style: none;
+  margin: 4px 0 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exec-trace-tool, .exec-trace-more {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-fg-muted, #aaa);
+}
+
+.exec-trace-more { font-style: italic; }
+
+.exec-trace-subnote {
+  margin: 4px 0 0 24px;
+  font-size: 11px;
+  color: var(--color-fg-muted, #888);
+  font-style: italic;
+}
+
+.exec-trace-subnote code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
