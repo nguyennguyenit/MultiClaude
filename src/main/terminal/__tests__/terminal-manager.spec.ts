@@ -564,4 +564,59 @@ describe('TerminalManager', () => {
       freshManager.destroyAll()
     })
   })
+
+  describe('claude session ownership transfer', () => {
+    it('does NOT re-parse keystrokes once an agent is detected (avoids TUI false positives)', () => {
+      const t = manager.create({ cwd: '/work/app' })
+      manager.write(t.id, 'claude --resume sess-K\r')
+      expect(manager.get(t.id)?.claudeSessionId).toBe('sess-K')
+
+      // Inside claude TUI, user types prompts that happen to start with "claude".
+      // These must NOT clobber the live session binding.
+      manager.write(t.id, 'claude is great\r')
+      manager.write(t.id, 'claude\r')
+      expect(manager.get(t.id)?.claudeSessionId).toBe('sess-K')
+    })
+
+    it('transfers session id when invokeClaudeCode resumes the same SID on another terminal', () => {
+      const t1 = manager.create({ cwd: '/work/app' })
+      manager.write(t1.id, 'claude --resume sess-X\r')
+      expect(manager.get(t1.id)?.claudeSessionId).toBe('sess-X')
+
+      const t2 = manager.create({ cwd: '/work/app' })
+      const events: Array<{ terminalId: string; sessionId: string | undefined }> = []
+      manager.on('claudeSessionIdChanged', (e: { terminalId: string; sessionId: string | undefined }) => events.push(e))
+
+      // invokeClaudeCode is the IPC path for programmatic resume; it sets the SID directly.
+      manager.invokeClaudeCode(t2.id, 'sess-X')
+
+      expect(manager.get(t1.id)?.claudeSessionId).toBeUndefined()
+      expect(manager.get(t2.id)?.claudeSessionId).toBe('sess-X')
+      expect(manager.findByClaudeSessionId('sess-X')).toEqual({ id: t2.id })
+      expect(events).toEqual([
+        { terminalId: t1.id, sessionId: undefined },
+        { terminalId: t2.id, sessionId: 'sess-X' }
+      ])
+    })
+
+    it('attachClaudeSession rebinds when prior holder exited claude mode', () => {
+      const t1 = manager.create({ cwd: '/work/app' })
+      manager.write(t1.id, 'claude --resume sess-Z\r')
+      expect(manager.get(t1.id)?.claudeSessionId).toBe('sess-Z')
+
+      // Simulate t1 leaving claude mode (claude subprocess exited inside the terminal).
+      const t1Meta = manager.get(t1.id)!
+      t1Meta.isClaudeMode = false
+      t1Meta.agentType = undefined
+
+      const t2 = manager.create({ cwd: '/work/app' })
+      manager.write(t2.id, 'claude\r')
+      mockPty._dataCallback?.('hello')
+
+      const result = manager.attachClaudeSession('sess-Z', '/work/app')
+      expect(result).toEqual({ id: t2.id })
+      expect(manager.get(t1.id)?.claudeSessionId).toBeUndefined()
+      expect(manager.get(t2.id)?.claudeSessionId).toBe('sess-Z')
+    })
+  })
 })

@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import * as fs from 'fs'
 import type {
   ContextSnapshot,
   CategoryBucket,
