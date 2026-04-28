@@ -34,7 +34,7 @@ interface AppState {
   updateTerminalTitle: (id: string, title: string) => void
   updateTerminalClaudeMode: (id: string, isClaudeMode: boolean) => void
   updateTerminalAgentType: (id: string, agentType: AgentType) => void
-  updateTerminalClaudeSessionId: (id: string, claudeSessionId: string) => void
+  updateTerminalClaudeSessionId: (id: string, claudeSessionId: string | undefined) => void
   updateTerminalTaskStatus: (id: string, taskStatus: TerminalTaskStatus) => void
   getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void

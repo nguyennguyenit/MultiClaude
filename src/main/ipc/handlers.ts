@@ -110,7 +110,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Forward Claude session id changes (for context-window drawer binding)
-  terminalManager.on('claudeSessionIdChanged', ({ terminalId, sessionId }: { terminalId: string; sessionId: string }) => {
+  terminalManager.on('claudeSessionIdChanged', ({ terminalId, sessionId }: { terminalId: string; sessionId: string | undefined }) => {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, { terminalId, sessionId })
     }

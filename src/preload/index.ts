@@ -49,7 +49,7 @@ export interface ElectronAPI {
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
     onCreated: (callback: (terminal: Terminal) => void) => () => void
     onAgentDetected: (callback: (data: { terminalId: string; agentType: string }) => void) => () => void
-    onClaudeSessionIdChanged: (callback: (data: { terminalId: string; sessionId: string }) => void) => () => void
+    onClaudeSessionIdChanged: (callback: (data: { terminalId: string; sessionId: string | undefined }) => void) => () => void
     /** Phase 4: subscribe to system-resume IPC events. Returns unsubscribe closure. */
     onSystemResumed: (callback: () => void) => () => void
   }

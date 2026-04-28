@@ -121,7 +121,9 @@ export class NotificationManager extends EventEmitter {
     // recently active Claude terminal when no cwd match is available.
     this.logWatcher.on('jsonlLine', (ev: { sessionId?: string; cwd?: string }) => {
       if (!ev.sessionId) return
-      if (this.terminalManagerRef?.findByClaudeSessionId(ev.sessionId)) return
+      // Always call attachClaudeSession — it idempotently returns the current
+      // holder when binding is healthy, but rebinds when the holder is stale
+      // (e.g. claude exited there and was resumed in a different terminal).
       this.terminalManagerRef?.attachClaudeSession(ev.sessionId, ev.cwd ?? '')
     })
 

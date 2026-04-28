@@ -333,6 +333,16 @@ export class TerminalManager extends EventEmitter {
 
   private setClaudeSessionId(term: PTYProcess, sessionId: string): void {
     if (term.metadata.claudeSessionId === sessionId) return
+    // Transfer ownership: a Claude session id is 1:1 with a live terminal. If
+    // another terminal still holds this id (e.g. it ran the session previously
+    // and `claude --resume <id>` was invoked elsewhere), clear the stale binding
+    // so context-window / notification routing follow the new owner.
+    for (const other of this.terminals.values()) {
+      if (other.metadata.id !== term.metadata.id && other.metadata.claudeSessionId === sessionId) {
+        other.metadata.claudeSessionId = undefined
+        this.emit('claudeSessionIdChanged', { terminalId: other.metadata.id, sessionId: undefined })
+      }
+    }
     term.metadata.claudeSessionId = sessionId
     this.emit('claudeSessionIdChanged', { terminalId: term.metadata.id, sessionId })
   }
@@ -353,7 +363,11 @@ export class TerminalManager extends EventEmitter {
    * For claude: also sets isClaudeMode for backward compatibility.
    */
   private processInputForAgentDetection(term: PTYProcess, data: string): void {
-    // Skip if agent already detected for this terminal
+    // Skip if agent already detected for this terminal. Re-parsing while a TUI
+    // (e.g. Claude itself) is consuming keystrokes would mistake the user's
+    // conversation lines that begin with "claude …" for shell-level invocations
+    // and thrash the session binding. Manual `claude --resume <id>` rebind is
+    // handled at the JSONL layer via attachClaudeSession's stale-holder rebind.
     if (term.metadata.agentType) return
 
     for (const char of data) {
@@ -765,10 +779,30 @@ export class TerminalManager extends EventEmitter {
    * This is used when JSONL transcript events arrive before the terminal knows its session ID.
    */
   attachClaudeSession(sessionId: string, cwd: string): { id: string } | undefined {
-    const existing = this.findByClaudeSessionId(sessionId)
-    if (existing) return existing
-
     const allTerminals = Array.from(this.terminals.values())
+    const existing = this.findByClaudeSessionId(sessionId)
+    if (existing) {
+      // If a *live* claude terminal still holds this id, accept it.
+      const liveHolder = this.terminals.get(existing.id)
+      const holderIsActive = !!(liveHolder
+        && (liveHolder.metadata.isClaudeMode || liveHolder.metadata.agentType === 'claude'))
+
+      // Prefer rebinding when there is a strictly better candidate: another live
+      // claude terminal whose CWD matches and which has been active more recently
+      // than the current holder. This handles `claude --resume <id>` invoked in a
+      // new terminal while the original holder has exited claude.
+      const betterCandidate = allTerminals.find(t =>
+        t.metadata.id !== existing.id
+        && (t.metadata.agentType === 'claude' || t.metadata.isClaudeMode)
+        && (!cwd || t.metadata.cwd === cwd)
+        && (!liveHolder || t.lastOutputAt > liveHolder.lastOutputAt)
+      )
+
+      if (holderIsActive && !betterCandidate) return existing
+      // Stale or surpassed binding: fall through to candidate selection below,
+      // which will transfer ownership via setClaudeSessionId.
+    }
+
     const claudeTerminals = allTerminals
       .filter(term => term.metadata.agentType === 'claude' || term.metadata.isClaudeMode)
 
