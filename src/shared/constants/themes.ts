@@ -343,5 +343,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // (beta/rc/alpha → true, stable → false). Typed false here so renderer
   // snapshots before first main sync do not falsely enable advanced paths.
   enableContextWindowAdvanced: false,
-  enableThinkingSyntaxHighlight: false
+  enableThinkingSyntaxHighlight: false,
+  // Part D: off by default — opt-in to reflow-safe scrollback (uses ~3× more memory)
+  reflowSafeScrollback: false
 }

@@ -93,6 +93,8 @@ export function useTerminal({
 
   const { performFit, cancelScheduledFit, fit } = useTerminalFit({
     terminalRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
+    // Part D: silent snapshot replay when cols change (reflow-safe scrollback setting gates this)
+    onColsChanged: () => refreshTerminal(false),
   })
   // Wire the ref so WebGL hook can call performFit
   performFitRef.current = performFit

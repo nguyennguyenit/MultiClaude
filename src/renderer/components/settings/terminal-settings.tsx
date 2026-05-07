@@ -80,6 +80,7 @@ export function TerminalSettings() {
     setEnableContextWindow,
     setEnableContextWindowAdvanced,
     setEnableThinkingSyntaxHighlight,
+    setReflowSafeScrollback,
     setWindowsShell
   } = useSettingsStore()
   const { terminalLimit } = pendingSettings
@@ -390,6 +391,36 @@ export function TerminalSettings() {
             />
           </div>
         )}
+      </div>
+
+      {/* Auto-rebuild scrollback on resize (Part D) */}
+      <div className="settings-card rounded-2xl flex flex-col gap-3 p-5">
+        <div>
+          <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
+            Auto-rebuild Scrollback on Resize
+          </p>
+          <p className="text-xs text-[var(--mc-text-muted)] mt-1">
+            The Refresh button always rebuilds scrollback from the raw PTY transcript
+            to eliminate blank gaps from xterm reflow. Enable this option to also do
+            it automatically every time the terminal width changes (split, resize,
+            project switch). Adds ~100-300ms CPU per resize.
+          </p>
+        </div>
+        <div className="flex items-start gap-3 pt-1">
+          <ToggleSwitch
+            checked={Boolean(pendingSettings.reflowSafeScrollback)}
+            onChange={setReflowSafeScrollback}
+          />
+          <div>
+            <p className="text-sm font-medium text-[var(--mc-text-primary)]">
+              Enable auto-rebuild on width change
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
+              Off by default. Useful for split-heavy workflows; causes a brief CPU
+              spike on each resize.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Context Window Breakdown */}

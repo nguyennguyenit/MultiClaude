@@ -565,6 +565,132 @@ describe('TerminalManager', () => {
     })
   })
 
+  describe('rebuildHeadless', () => {
+    it('rebuilds headless from outputBuffer so getSnapshot reflects raw content', async () => {
+      const term = manager.create()
+
+      // Emit some output via the PTY data callback (populates both headless + outputBuffer)
+      mockPty._dataCallback?.('hello reflow world\r\n')
+
+      // Force-resize headless to a different width to simulate the reflow scenario
+      manager.resize(term.id, 40, 24)
+
+      // Rebuild from raw at current cols
+      await manager.rebuildHeadless(term.id)
+
+      const snap = await manager.getSnapshot(term.id)
+      // Snapshot should still contain the text that was in outputBuffer
+      expect(snap.data).toContain('hello reflow world')
+    })
+
+    it('is idempotent — multiple consecutive calls do not duplicate content', async () => {
+      const term = manager.create()
+      mockPty._dataCallback?.('idempotent test\r\n')
+
+      await manager.rebuildHeadless(term.id)
+      const snap1 = await manager.getSnapshot(term.id)
+
+      await manager.rebuildHeadless(term.id)
+      const snap2 = await manager.getSnapshot(term.id)
+
+      await manager.rebuildHeadless(term.id)
+      const snap3 = await manager.getSnapshot(term.id)
+
+      // Each call must NOT duplicate content
+      const count1 = (snap1.data.match(/idempotent test/g) || []).length
+      const count2 = (snap2.data.match(/idempotent test/g) || []).length
+      const count3 = (snap3.data.match(/idempotent test/g) || []).length
+
+      expect(count1).toBe(1)
+      expect(count2).toBe(1)
+      expect(count3).toBe(1)
+    })
+
+    it('does not duplicate live PTY data that arrives during rebuild', async () => {
+      const term = manager.create()
+
+      // Initial output before rebuild
+      mockPty._dataCallback?.('initial-marker\r\n')
+
+      // Start rebuild (don't await yet — simulate concurrent PTY data during rebuild)
+      const rebuildPromise = manager.rebuildHeadless(term.id)
+
+      // Simulate concurrent PTY data arriving while rebuild is in progress
+      mockPty._dataCallback?.('concurrent-marker\r\n')
+
+      await rebuildPromise
+
+      const snap = await manager.getSnapshot(term.id)
+
+      // Each marker should appear EXACTLY ONCE — no duplication from live write + replay
+      const initialCount = (snap.data.match(/initial-marker/g) || []).length
+      const concurrentCount = (snap.data.match(/concurrent-marker/g) || []).length
+
+      expect(initialCount).toBe(1)
+      expect(concurrentCount).toBe(1)
+    })
+
+    it('is a no-op and does not throw when terminal is destroying', async () => {
+      const term = manager.create()
+      mockPty._dataCallback?.('some output\r\n')
+
+      // Start async destroy (sets destroying = true but doesn't resolve until onExit)
+      void manager.destroyAsync(term.id)
+
+      // Should not throw even though the terminal is in a destroying state
+      await expect(manager.rebuildHeadless(term.id)).resolves.toBeUndefined()
+
+      // Finalize destroy so afterEach cleanup doesn't warn
+      mockPty._exitCallback?.({ exitCode: 0 })
+    })
+
+    it('is a no-op and does not throw for a non-existent terminal id', async () => {
+      await expect(manager.rebuildHeadless('does-not-exist')).resolves.toBeUndefined()
+    })
+
+    it('serializes overlapping calls (C1) — second call returns immediately, no duplication', async () => {
+      const term = manager.create()
+      mockPty._dataCallback?.('serialize-marker\r\n')
+
+      // Start two overlapping rebuilds. Without serialization, the second would
+      // dispose the freshTerm of the first mid-flight and corrupt content.
+      const a = manager.rebuildHeadless(term.id)
+      const b = manager.rebuildHeadless(term.id)
+
+      await Promise.all([a, b])
+
+      const snap = await manager.getSnapshot(term.id)
+      const count = (snap.data.match(/serialize-marker/g) || []).length
+      expect(count).toBe(1)
+    })
+
+    it('survives outputBuffer trim during replay (C2) — no duplication or content loss', async () => {
+      const term = manager.create()
+
+      // Seed with the marker we're going to verify after the rebuild settles.
+      mockPty._dataCallback?.('pre-replay-marker\r\n')
+
+      // Kick off rebuild — this captures replayPayload + replayEndByte synchronously.
+      const rebuildPromise = manager.rebuildHeadless(term.id)
+
+      // While rebuild's freshTerm.write is awaiting the resolve callback, push
+      // enough data through onData to overflow the buffer cap and force a trim.
+      // The trim shifts bufferStartOffset; the rebuild must use absolute byte
+      // positions (not raw indices) to compute the tail correctly.
+      const overflow = 'X'.repeat(TERMINAL_OUTPUT_BUFFER_MAX - TERMINAL_OUTPUT_BUFFER_TRIM_TO + 1024)
+      mockPty._dataCallback?.(overflow)
+      mockPty._dataCallback?.('post-trim-marker\r\n')
+
+      await rebuildPromise
+
+      const snap = await manager.getSnapshot(term.id)
+      // The post-trim marker must appear exactly once — neither lost (buggy slice
+      // returning empty) nor duplicated (buggy slice repeating replayed content).
+      const postCount = (snap.data.match(/post-trim-marker/g) || []).length
+      expect(postCount).toBe(1)
+    })
+  })
+
   describe('claude session ownership transfer', () => {
     it('does NOT re-parse keystrokes once an agent is detected (avoids TUI false positives)', () => {
       const t = manager.create({ cwd: '/work/app' })

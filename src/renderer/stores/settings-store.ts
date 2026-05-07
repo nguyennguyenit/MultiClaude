@@ -57,6 +57,7 @@ interface SettingsState {
   setEnableContextWindow: (enabled: boolean) => void
   setEnableContextWindowAdvanced: (enabled: boolean) => void
   setEnableThinkingSyntaxHighlight: (enabled: boolean) => void
+  setReflowSafeScrollback: (enabled: boolean) => void
   setWindowsShell: (shell: WindowsShell) => void
   setDefaultShell: (shell: ShellInfo | null) => Promise<void>
   setUiStyle: (style: UiStyle) => void
@@ -96,6 +97,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.enableContextWindow !== b.enableContextWindow) return false
   if (a.enableContextWindowAdvanced !== b.enableContextWindowAdvanced) return false
   if (a.enableThinkingSyntaxHighlight !== b.enableThinkingSyntaxHighlight) return false
+  if (a.reflowSafeScrollback !== b.reflowSafeScrollback) return false
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
   const bLimit = b.terminalLimit
@@ -222,6 +224,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setEnableThinkingSyntaxHighlight: (enabled) => {
     const pending = { ...get().pendingSettings, enableThinkingSyntaxHighlight: enabled }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setReflowSafeScrollback: (enabled) => {
+    const pending = { ...get().pendingSettings, reflowSafeScrollback: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)

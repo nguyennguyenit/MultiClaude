@@ -43,6 +43,13 @@ export interface ElectronAPI {
     loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
     savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
     getSnapshot: (terminalId: string) => Promise<{ data: string; cols: number; rows: number }>
+    /**
+     * Part F: Rebuild the headless mirror from the raw PTY transcript at current dimensions.
+     * Call this before getSnapshot to ensure the snapshot is free of xterm reflow artifacts
+     * (blank gaps caused by ANSI erase sequences running at a different column width than
+     * the one at which output was originally produced).
+     */
+    rebuildHeadless: (terminalId: string) => Promise<void>
     onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
@@ -232,6 +239,8 @@ const api: ElectronAPI = {
     getSnapshot: (terminalId) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, terminalId) as
         Promise<{ data: string; cols: number; rows: number }>,
+    rebuildHeadless: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_REBUILD_HEADLESS, terminalId) as Promise<void>,
     onOutput: (callback) => {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)

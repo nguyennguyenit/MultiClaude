@@ -242,6 +242,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   safeHandle(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, (_e, terminalId: string) =>
     terminalManager.getSnapshot(terminalId))
 
+  // Part F: rebuild headless from raw PTY transcript before snapshot to eliminate reflow gaps
+  safeHandle(IPC_CHANNELS.TERMINAL_REBUILD_HEADLESS, (_e, terminalId: string) =>
+    terminalManager.rebuildHeadless(terminalId))
+
   // Project handlers
   safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {
     const projects = projectStore.getProjects()

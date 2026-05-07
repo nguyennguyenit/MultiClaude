@@ -16,6 +16,10 @@ import type { FitAddon } from '@xterm/addon-fit'
 import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { resolveFitViewportRestoreTarget } from '../utils/terminal-scroll-utils'
 import { isPaneDragging, subscribePaneDragging } from '../utils/pane-drag-state'
+import { useSettingsStore } from '../stores'
+
+// Part D: debounce before triggering silent snapshot replay on cols change
+const REFLOW_SAFE_COLS_CHANGE_DEBOUNCE = 300 // ms
 
 const RESIZE_REFIT_SETTLE_DELAY = 120  // ms second fit after layout settles
 const FIT_RETRY_WHEN_HIDDEN_DELAY = 120  // ms retry when container briefly has 0 size
@@ -34,6 +38,12 @@ interface UseTerminalFitParams {
   disposedRef: RefObject<boolean>
   scrollMachineRef: RefObject<TerminalScrollMachine>
   refreshVisibleRows: () => void
+  /**
+   * Part D (opt-in): Called (debounced) when terminal cols change after a fit, if the
+   * reflowSafeScrollback setting is enabled. Caller triggers a silent snapshot replay
+   * to rebuild the display from the raw PTY transcript at the new width.
+   */
+  onColsChanged?: () => void
 }
 
 interface UseTerminalFitResult {
@@ -50,10 +60,16 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     disposedRef,
     scrollMachineRef,
     refreshVisibleRows,
+    onColsChanged,
   } = params
 
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Part D: debounce timer for reflow-safe scrollback rebuild on cols change
+  const reflowSafeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stable ref so performFit callback always sees the latest onColsChanged without stale closure
+  const onColsChangedRef = useRef(onColsChanged)
+  onColsChangedRef.current = onColsChanged
 
   const lastFitDimsRef = useRef<{ cols: number; rows: number } | null>(null)
 
@@ -66,6 +82,12 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
 
     const savedViewportY = terminal.buffer.active.viewportY
     const wasAtBottom = scrollMachineRef.current.isAtBottom
+    // Capture cols BEFORE fit to detect if cols actually changed (Part D)
+    const prevCols = terminal.cols
+    // I3: Track whether this is the very first fit call. On first mount, lastFitDimsRef
+    // is null and prevCols defaults to xterm's 80-col initial value; comparing against
+    // that would always fire onColsChanged even when the terminal hasn't been resized.
+    const isFirstFit = lastFitDimsRef.current === null
 
     // Skip fit when proposed cols would corrupt xterm reflow.
     const proposed = fitAddon.proposeDimensions()
@@ -78,6 +100,28 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     }
 
     lastFitDimsRef.current = { cols: terminal.cols, rows: terminal.rows }
+
+    // Part D: if cols changed and reflowSafeScrollback is enabled, debounce a silent
+    // snapshot replay so the caller can rebuild headless from raw at the new width.
+    // The debounce resets on every performFit call while the user is still dragging —
+    // the actual replay only fires when the width stabilises.
+    // I3: Skip on first fit (mount) — prevCols is the xterm default, not a real resize.
+    if (!isFirstFit && terminal.cols !== prevCols && onColsChangedRef.current) {
+      // Read savedSettings (persisted source of truth) so toggling the switch
+      // in the modal doesn't activate the behaviour until the user clicks Save.
+      const reflowEnabled =
+        useSettingsStore.getState().savedSettings.reflowSafeScrollback === true
+      if (reflowEnabled) {
+        if (reflowSafeDebounceRef.current) clearTimeout(reflowSafeDebounceRef.current)
+        reflowSafeDebounceRef.current = setTimeout(() => {
+          reflowSafeDebounceRef.current = null
+          // Re-check at fire time — user may have disabled it during debounce window.
+          if (useSettingsStore.getState().savedSettings.reflowSafeScrollback === true) {
+            onColsChangedRef.current?.()
+          }
+        }, REFLOW_SAFE_COLS_CHANGE_DEBOUNCE)
+      }
+    }
 
     refreshVisibleRows()
 
@@ -210,6 +254,16 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
       fit()
     })
   }, [cancelScheduledFit, fit])
+
+  // Part D: clean up reflow-safe debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (reflowSafeDebounceRef.current) {
+        clearTimeout(reflowSafeDebounceRef.current)
+        reflowSafeDebounceRef.current = null
+      }
+    }
+  }, [])
 
   return { performFit, cancelScheduledFit, fit }
 }

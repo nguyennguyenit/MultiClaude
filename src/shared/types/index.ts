@@ -310,6 +310,19 @@ export interface AppSettings {
    * Ignored when enableContextWindowAdvanced is false.
    */
   enableThinkingSyntaxHighlight?: boolean
+  /**
+   * Part D (opt-in): When true, automatically rebuilds terminal scrollback from the raw
+   * PTY transcript whenever the terminal width changes (split, resize, project switch).
+   * Eliminates blank gaps in old output caused by xterm's internal reflow.
+   *
+   * Memory note: the raw transcript buffer (TERMINAL_OUTPUT_BUFFER_MAX = 3 MB/terminal)
+   * is allocated regardless of this setting — it powers the always-on Refresh-button
+   * rebuild (Part F). This toggle only gates auto-rebuild on resize; the CPU cost
+   * (~100-300 ms per resize) is what you opt into here.
+   *
+   * Default: false — Refresh button still rebuilds; no automatic rebuild on resize.
+   */
+  reflowSafeScrollback?: boolean
 }
 
 // GitHub Issues/PRs types

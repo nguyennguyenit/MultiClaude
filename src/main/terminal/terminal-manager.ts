@@ -28,11 +28,19 @@ interface PTYProcess {
   // Raw-ANSI buffer kept ONLY for Telegram's text-only notification path.
   // Visual terminal state = headless snapshot (see getSnapshot). Do not grow this for UI use.
   outputBuffer: string
+  // Monotonic count of total bytes ever appended to outputBuffer (survives trim).
+  // Paired with bufferStartOffset, gives absolute positions used by rebuildHeadless
+  // to compute the tail correctly even if a trim runs concurrently with replay.
+  bytesWritten: number
+  // Absolute byte position of outputBuffer[0] in the monotonic stream.
+  // Invariant: bufferStartOffset + outputBuffer.length === bytesWritten
+  bufferStartOffset: number
   inputBuffer: string
   lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
   destroying?: boolean // Guard flag to prevent duplicate destroyAsync calls
   suspended?: boolean // True when system is suspended, prevents PTY operations
+  rebuildingHeadless?: boolean // Guard flag: suppress live headless writes during rebuildHeadless replay
   // Phase 1: headless terminal mirror for snapshot/restore
   headlessTerm?: HeadlessTerminal
   serializeAddon?: SerializeAddon
@@ -451,6 +459,8 @@ export class TerminalManager extends EventEmitter {
       pty: ptyProcess,
       metadata: terminal,
       outputBuffer: '',
+      bytesWritten: 0,
+      bufferStartOffset: 0,
       inputBuffer: '',
       lastOutputAt: 0,
       oscBuffer: ''
@@ -483,14 +493,27 @@ export class TerminalManager extends EventEmitter {
       if (termProcess.suspended || this.systemSuspended) return
 
       // Phase 1: mirror PTY output to headless terminal BEFORE IPC emit.
-      // Nullish guard covers startup race where headless init failed.
-      termProcess.headlessTerm?.write(data)
+      // Skip headless write during rebuild — outputBuffer accumulates the data,
+      // and the replay in rebuildHeadless() covers it. Writing here AND replaying
+      // would duplicate content (C1 concurrent-write race fix).
+      if (!termProcess.rebuildingHeadless) {
+        termProcess.headlessTerm?.write(data)
+      }
 
       // Raw-ANSI buffer — Telegram text-only path only. Visual source of truth = headless snapshot (getSnapshot).
       termProcess.outputBuffer += data
+      termProcess.bytesWritten += data.length
       termProcess.lastOutputAt = Date.now()
       if (termProcess.outputBuffer.length > TERMINAL_OUTPUT_BUFFER_MAX) {
-        termProcess.outputBuffer = termProcess.outputBuffer.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+        const beforeLen = termProcess.outputBuffer.length
+        const sliced = termProcess.outputBuffer.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+        // Trim to the next \n boundary so we don't start mid-ANSI sequence.
+        const newlineIdx = sliced.indexOf('\n')
+        const trimmed = newlineIdx >= 0 ? sliced.slice(newlineIdx + 1) : sliced
+        // Track absolute byte position of buffer[0] (C2) so rebuildHeadless can
+        // map captured offsets through trims that happen during replay.
+        termProcess.bufferStartOffset += beforeLen - trimmed.length
+        termProcess.outputBuffer = trimmed
       }
       this.emit('output', { terminalId: id, data })
 
@@ -574,8 +597,11 @@ export class TerminalManager extends EventEmitter {
     try {
       term.pty.resize(cols, rows)
       // Phase 1: resize headless mirror inside same try block (validation V1).
-      // Wrapping ensures a post-dispose throw doesn't crash uncaught.
-      term.headlessTerm?.resize(cols, rows)
+      // Skip resize during rebuild — freshTerm is created at the current cols, a
+      // concurrent resize here would re-introduce the wrong-width artifact (C1).
+      if (!term.rebuildingHeadless) {
+        term.headlessTerm?.resize(cols, rows)
+      }
       return true
     } catch (error) {
       // PTY may be invalid after system resume - log but don't crash
@@ -622,6 +648,117 @@ export class TerminalManager extends EventEmitter {
     } catch (err) {
       console.warn('[terminal-manager] getSnapshot failed', { id, err: (err as Error).message })
       return empty
+    }
+  }
+
+  /**
+   * Rebuild the headless mirror from the raw PTY transcript at current dimensions.
+   *
+   * Replays `outputBuffer` into a fresh headless terminal so subsequent getSnapshot()
+   * calls produce artifact-free output — ANSI erase sequences execute at the correct
+   * column width and no reflow gaps are left in the scrollback.
+   *
+   * Called by the renderer before every snapshot replay (Part F) so the refresh button
+   * always produces a clean snapshot regardless of prior resize history.
+   *
+   * Guards:
+   *   - PTY already destroyed / destroying → no-op (idempotent)
+   *   - headlessTerm not yet created → no-op
+   *   - Multiple consecutive calls are safe (each call replaces the previous headless)
+   */
+  async rebuildHeadless(id: string): Promise<void> {
+    const proc = this.terminals.get(id)
+    // Guard: terminal gone or being torn down
+    if (!proc || proc.destroying) return
+    // Guard: headless was never initialised (init failure at create time)
+    if (!proc.headlessTerm) return
+    // C1: serialize concurrent rebuilds. A second call while one is in flight
+    // would dispose the in-flight freshTerm and corrupt the tail-flush window.
+    if (proc.rebuildingHeadless) return
+
+    // Raise rebuild flag so pty.onData and resize() skip live headless writes.
+    // outputBuffer keeps accumulating; replay+tail-flush below cover all bytes.
+    proc.rebuildingHeadless = true
+
+    // Capture current dimensions before disposing
+    const cols = proc.headlessTerm.cols || 80
+    const rows = proc.headlessTerm.rows || 24
+
+    // Dispose existing headless + addon to free memory before allocating new ones
+    try { proc.serializeAddon?.dispose() } catch { /* ignore */ }
+    try { proc.headlessTerm.dispose() } catch { /* ignore */ }
+    proc.headlessTerm = undefined
+    proc.serializeAddon = undefined
+
+    try {
+      // Guard: PTY may have exited during the dispose calls above
+      if (proc.destroying || !this.terminals.has(id)) return
+
+      const freshTerm = new HeadlessTerminalCtor({
+        cols,
+        rows,
+        scrollback: HEADLESS_SCROLLBACK_LINES,
+        allowProposedApi: true,
+      })
+      const freshAddon = new SerializeAddon()
+      freshTerm.loadAddon(freshAddon as unknown as Parameters<typeof freshTerm.loadAddon>[0])
+
+      // C2: snapshot the replay payload + absolute end-byte synchronously, so the
+      // tail-flush window survives any trim that runs during the await below.
+      const replayPayload = proc.outputBuffer
+      const replayEndByte = proc.bytesWritten
+
+      // Replay raw transcript at the current column width BEFORE attaching to proc.
+      // Race with a 5 s timeout in case freshTerm is disposed mid-write and the
+      // callback never fires; 5 s far exceeds the ~100-300 ms cost of 3 MB replay.
+      let replayTimedOut = false
+      if (replayPayload) {
+        await Promise.race([
+          new Promise<void>(resolve => freshTerm.write(replayPayload, resolve)),
+          new Promise<void>(resolve => setTimeout(() => { replayTimedOut = true; resolve() }, 5000)),
+        ])
+        if (replayTimedOut) {
+          console.warn('[terminal-manager] rebuildHeadless: replay write timed out at 5s', { id, payloadBytes: replayPayload.length })
+        }
+      }
+
+      // Re-check liveness after the await — PTY may have exited during write.
+      if (proc.destroying || !this.terminals.has(id)) {
+        try { freshAddon.dispose() } catch { /* ignore */ }
+        try { freshTerm.dispose() } catch { /* ignore */ }
+        return
+      }
+
+      // Attach only after replay completes — pty.onData resumes writing here once
+      // rebuildingHeadless is cleared in finally.
+      proc.headlessTerm = freshTerm
+      proc.serializeAddon = freshAddon
+
+      // Flush any bytes that arrived after the replay snapshot (C2).
+      // Use absolute byte positions so a concurrent trim cannot corrupt the offset.
+      // bytes still resident in outputBuffer occupy [bufferStartOffset, bytesWritten).
+      const tailStartByte = Math.max(replayEndByte, proc.bufferStartOffset)
+      const tailStartIdx = tailStartByte - proc.bufferStartOffset
+      const tail = tailStartIdx < proc.outputBuffer.length
+        ? proc.outputBuffer.slice(tailStartIdx)
+        : ''
+      if (tail) {
+        let tailTimedOut = false
+        await Promise.race([
+          new Promise<void>(resolve => freshTerm.write(tail, resolve)),
+          new Promise<void>(resolve => setTimeout(() => { tailTimedOut = true; resolve() }, 5000)),
+        ])
+        if (tailTimedOut) {
+          console.warn('[terminal-manager] rebuildHeadless: tail write timed out at 5s', { id, tailBytes: tail.length })
+        }
+      }
+    } catch (err) {
+      // Non-fatal: headless rebuild failed — next getSnapshot will return stale/empty data,
+      // which is the same behaviour as before this feature was added.
+      console.warn('[terminal-manager] rebuildHeadless failed', { id, err: (err as Error).message })
+      // Leave headlessTerm/serializeAddon as undefined — getSnapshot returns empty payload
+    } finally {
+      proc.rebuildingHeadless = false
     }
   }
 

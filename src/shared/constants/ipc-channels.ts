@@ -18,6 +18,8 @@ export const IPC_CHANNELS = {
   TERMINAL_LOAD_PANE_TREE: 'terminal:load-pane-tree',
   TERMINAL_SAVE_PANE_TREE: 'terminal:save-pane-tree',
   TERMINAL_GET_SNAPSHOT: 'terminal:get-snapshot',
+  // Part F: rebuild headless mirror from raw PTY transcript before snapshot
+  TERMINAL_REBUILD_HEADLESS: 'terminal:rebuild-headless',
   // Phase 4: forwarded to renderer when system resumes from sleep/suspend
   TERMINAL_SYSTEM_RESUMED: 'terminal:system-resumed',
 

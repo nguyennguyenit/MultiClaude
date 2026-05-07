@@ -98,6 +98,13 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
       : defaults.enableThinkingSyntaxHighlight
   }
 
+  // Validate reflowSafeScrollback (Part D)
+  if (settings.reflowSafeScrollback !== undefined) {
+    validated.reflowSafeScrollback = typeof settings.reflowSafeScrollback === 'boolean'
+      ? settings.reflowSafeScrollback
+      : defaults.reflowSafeScrollback
+  }
+
   // Validate glassmorphismEnabled
   if (settings.glassmorphismEnabled !== undefined) {
     validated.glassmorphismEnabled = typeof settings.glassmorphismEnabled === 'boolean'

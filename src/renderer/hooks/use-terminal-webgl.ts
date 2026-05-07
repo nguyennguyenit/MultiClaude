@@ -130,6 +130,16 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     // H4: buffer live output chunks while we reset+replay
     pauseAndBuffer(terminalId)
 
+    // Part F: rebuild headless from raw PTY transcript at current cols before serializing.
+    // This ensures ANSI erase sequences execute at the correct width so the snapshot
+    // contains no reflow gaps (blank lines left by xterm's internal logical-line splitter).
+    // Failure is silenced — a stale snapshot is still better than no refresh at all.
+    try {
+      await window.electron.terminal.rebuildHeadless(terminalId)
+    } catch (e) {
+      console.warn('[snapshot-replay] rebuildHeadless failed (non-fatal):', e)
+    }
+
     const snap = await window.electron.terminal.getSnapshot(terminalId)
 
     // M8: terminal destroyed while IPC was in flight
