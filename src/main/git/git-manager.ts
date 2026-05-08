@@ -134,7 +134,8 @@ export class GitManager {
       if (!path) continue
 
       if (code === '??') {
-        files.push({ path, status: 'untracked', staged: false })
+        const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path
+        files.push({ path: normalizedPath, status: 'untracked', staged: false })
         continue
       }
 
@@ -497,7 +498,7 @@ export class GitManager {
   async getFileStatus(cwd: string): Promise<GitFileStatus[]> {
     const git = this.getGit(cwd)
     try {
-      const porcelain = await git.raw(['status', '--porcelain', '-z'])
+      const porcelain = await git.raw(['status', '--porcelain', '-z', '--untracked-files=all'])
       const files = this.parsePorcelainFileStatus(porcelain)
 
       // Enrich with line stats via --numstat
