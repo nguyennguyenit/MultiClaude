@@ -157,6 +157,30 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }, 200)
   })
 
+  // ── DEBUG ONLY: simulate suspend/resume cycle without real lockscreen ────
+  // Toggles systemSuspended on TerminalManager for `durationMs`, then emits
+  // resume + sends 'system-resumed' to renderer (mirrors real powerMonitor flow).
+  // Used to repro "missing chars after lockscreen" bug in seconds.
+  // Call from renderer DevTools:
+  //   await window.electron.debug.simulateSuspend(5000)
+  // During the 5s window, run a command in the pane (e.g. `seq 1 5000`); if the
+  // bug repros, the output that arrived during the window will be missing.
+  safeHandle('debug:simulate-suspend', async (_, durationMs: number) => {
+    const ms = Math.max(500, Math.min(60_000, Number(durationMs) || 5000))
+    console.log(`[debug] simulate-suspend: ${ms}ms window`)
+    terminalManager.emit('system-suspend')
+    await new Promise(resolve => setTimeout(resolve, ms))
+    terminalManager.emit('system-resume')
+    setTimeout(() => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED)
+        }
+      }
+    }, 200)
+    return { ok: true, windowMs: ms }
+  })
+
   // Forward terminal created events (e.g. from Telegram /new command) to renderer
   terminalManager.on('created', ({ terminal }: { terminal: import('@shared/types').Terminal }) => {
     if (terminal.cwd) {

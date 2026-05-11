@@ -222,6 +222,10 @@ export interface ElectronAPI {
       turnId: number
     ) => Promise<import('@shared/types/context-window').TurnDeltaDetail | null>
   }
+  /** DEBUG ONLY — manually fake suspend/resume for repro testing */
+  debug: {
+    simulateSuspend: (durationMs: number) => Promise<{ ok: boolean; windowMs: number }>
+  }
 }
 
 const api: ElectronAPI = {
@@ -487,6 +491,9 @@ const api: ElectronAPI = {
     },
     getTurnDetail: (sessionId, turnId) =>
       ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_TURN_DETAIL, sessionId, turnId)
+  },
+  debug: {
+    simulateSuspend: (durationMs) => ipcRenderer.invoke('debug:simulate-suspend', durationMs)
   }
 }
 
