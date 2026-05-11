@@ -29,7 +29,7 @@ import {
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
 import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
-import { pauseAndBuffer, discardAndResume } from '../utils/terminal-output-dispatcher'
+import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
@@ -321,10 +321,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       // no-op or a small trailing delta — not a full replay.
       const finishInit = () => {
         if (disposedRef.current) return
-        // EXPERIMENT: drop buffered chunks instead of flushing onto snapshot.
-        // Snapshot already reflects all bytes the headless mirror received up to
-        // serialize time; flushing the same bytes again duplicates ANSI escapes.
-        discardAndResume(terminalId)
+        resumeAndFlush(terminalId)
       }
 
       if (initialOutputRef.current) {

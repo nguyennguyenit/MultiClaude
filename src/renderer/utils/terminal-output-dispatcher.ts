@@ -40,16 +40,6 @@ export function resumeAndFlush(id: string): void {
     }
   }
 }
-
-/**
- * EXPERIMENTAL: Drop buffered chunks and resume normal dispatch without flushing.
- * Used to test whether the buffered-flush after snapshot causes duplication
- * (snapshot already reflects those bytes via the headless mirror).
- */
-export function discardAndResume(id: string): void {
-  pausedBuffers.delete(id)
-}
-
 export function registerTerminalOutputHandler(id: string, handler: TerminalOutputHandler): () => void {
   terminalOutputHandlers.set(id, handler)
 
