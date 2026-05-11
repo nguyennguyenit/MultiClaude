@@ -246,13 +246,14 @@ export const TerminalView = memo(function TerminalView({
     }
   }, [terminalRef, terminalId])
 
-  // Handle click on terminal - force show cursor in case it was hidden by CLI
+  // Handle click on terminal - force show cursor in case it was hidden by CLI.
+  // Focus unconditionally: click implies user intent to interact with this pane.
+  // Gating on isActive used stale prop from previous render, so clicks switching
+  // panes left DOM focus on the old textarea — Cmd+V then routed pastes to the
+  // wrong pane.
   const handleTerminalClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isActive) {
-      focus()
-      showCursor()
-    }
-    // Check if clicked on media path
+    focus()
+    showCursor()
     handleMediaClick(e)
   }
 
