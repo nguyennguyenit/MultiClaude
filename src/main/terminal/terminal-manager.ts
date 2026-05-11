@@ -489,8 +489,11 @@ export class TerminalManager extends EventEmitter {
 
     // Handle terminal output
     ptyProcess.onData((data) => {
-      // Skip processing during system suspend to prevent issues with invalid FDs
-      if (termProcess.suspended || this.systemSuspended) return
+      // Read path is safe during suspend: all operations below are in-memory
+      // (headless xterm write, string concat, event emit, OSC parse) — no PTY
+      // syscalls. Dropping here caused permanent data loss when shell emitted
+      // during the suspend→resume window (snapshot replay missing content).
+      // SIGTRAP risk lives in pty.write/pty.resize — guards there are kept.
 
       // Phase 1: mirror PTY output to headless terminal BEFORE IPC emit.
       // Skip headless write during rebuild — outputBuffer accumulates the data,
