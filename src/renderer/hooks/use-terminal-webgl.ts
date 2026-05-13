@@ -94,6 +94,13 @@ interface SnapshotReplayParams {
   reconcileWebGL: () => void
   performFit: (restoreViewport?: boolean) => boolean
   silent: boolean
+  /**
+   * Phase 02: When true, skip the `\x1b[?1049l` alt-buffer-exit write at line 162.
+   * Use for resize-end replays where the user is still mid-vim/Claude-TUI session
+   * and should remain in alt-buffer. Default false (current behavior — system-resume
+   * replay kicks out of alt-buffer so user sees shell prompt after lid-wake).
+   */
+  preserveAltBuffer?: boolean
 }
 
 /**
@@ -119,6 +126,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     reconcileWebGL,
     performFit,
     silent,
+    preserveAltBuffer,
   } = params
 
   // H6: concurrent refresh + auto-resync guard
@@ -161,7 +169,11 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
 
     // B1: force exit alt-buffer before replaying snapshot — ensures shell prompt
     // is visible even if terminal was inside vim/less when refresh was triggered.
-    t.write('\x1b[?1049l', undefined)
+    // Phase 02: skip when caller passes preserveAltBuffer (resize-end replay path
+    // should keep user inside vim/Claude TUI).
+    if (!preserveAltBuffer) {
+      t.write('\x1b[?1049l', undefined)
+    }
 
     // Apply snapshot dimensions if valid
     if (snap.cols > 0 && snap.rows > 0) {
@@ -417,6 +429,9 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         reconcileWebGL,
         performFit,
         silent: true,
+        // Phase 02: don't kick user out of alt-buffer on lid-wake (vim/Claude TUI).
+        // Refresh button path stays default (false) — explicit user action implies reset intent.
+        preserveAltBuffer: true,
       })
     })
     return () => unsubscribeFromSystemResume(terminalId)
