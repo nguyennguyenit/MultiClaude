@@ -18,6 +18,8 @@ import type { Terminal as XTerm } from '@xterm/xterm'
 import { useSettingsStore, useAppStore, useToastStore } from '../stores'
 import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
 import { subscribeToSystemResume, unsubscribeFromSystemResume } from '../utils/terminal-lifecycle-dispatcher'
+import { subscribeToResizeEnd, unsubscribeFromResizeEnd } from '../utils/terminal-resize-end-dispatcher'
+import { triggerAltBufferRepaint, isResizeRepaintEnabled } from '../utils/trigger-alt-buffer-repaint'
 
 // ── Per-terminal mutex ───────────────────────────────────────────────────────
 // Prevents concurrent snapshot replays (e.g. refresh + phase-4 auto-resync).
@@ -429,6 +431,19 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
     reconcileWebGL,
     performFit,
   ])
+
+  // Phase 01: subscribe to resize-end events (drag-end, window-resize-end, split-end).
+  // Forces alt-screen TUIs to fully repaint after layout settles. Skips if a snapshot
+  // replay is already in flight (system-resume race) — that replay fires its own SIGWINCH.
+  useEffect(() => {
+    if (!isResizeRepaintEnabled()) return
+    subscribeToResizeEnd(terminalId, () => {
+      if (disposedRef.current || !terminalRef.current) return
+      if (snapshotReplayMutex.has(terminalId)) return  // R3: skip during replay
+      triggerAltBufferRepaint(terminalId, terminalRef.current)
+    })
+    return () => unsubscribeFromResizeEnd(terminalId)
+  }, [terminalId, terminalRef, disposedRef])
 
   return { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal }
 }

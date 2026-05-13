@@ -12,6 +12,7 @@ import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { resumeAndFlush as resumeTerminalOutput } from '../utils/terminal-output-dispatcher'
+import { publishResizeEnd } from '../utils/terminal-resize-end-dispatcher'
 import { useTerminalWebGL } from './use-terminal-webgl'
 import { useTerminalFontTheme } from './use-terminal-font-theme'
 import { useTerminalKeyboard } from './use-terminal-keyboard'
@@ -95,6 +96,8 @@ export function useTerminal({
     terminalRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
     // Part D: silent snapshot replay when cols change (reflow-safe scrollback setting gates this)
     onColsChanged: () => refreshTerminal(false),
+    // Phase 01 alt-buffer repaint: publish resize-end for subscribers
+    onResizeEnd: () => publishResizeEnd(terminalId),
   })
   // Wire the ref so WebGL hook can call performFit
   performFitRef.current = performFit

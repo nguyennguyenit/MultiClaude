@@ -44,6 +44,11 @@ interface UseTerminalFitParams {
    * to rebuild the display from the raw PTY transcript at the new width.
    */
   onColsChanged?: () => void
+  /**
+   * Fired on the trailing edge of a resize gesture (drag-end / window-resize-end).
+   * Used to trigger alt-buffer repaint after layout settles.
+   */
+  onResizeEnd?: () => void
 }
 
 interface UseTerminalFitResult {
@@ -61,7 +66,12 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     scrollMachineRef,
     refreshVisibleRows,
     onColsChanged,
+    onResizeEnd,
   } = params
+
+  // Stable ref so handlers always see the latest onResizeEnd without stale closure
+  const onResizeEndRef = useRef(onResizeEnd)
+  onResizeEndRef.current = onResizeEnd
 
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -235,9 +245,21 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
   }, [containerRef, fit])
 
   useEffect(() => {
-    const h = () => fit()
+    let trailingTimer: ReturnType<typeof setTimeout> | null = null
+    const h = () => {
+      fit()
+      // Trailing-edge resize-end: fires once window stops resizing for 250ms
+      if (trailingTimer) clearTimeout(trailingTimer)
+      trailingTimer = setTimeout(() => {
+        trailingTimer = null
+        onResizeEndRef.current?.()
+      }, 250)
+    }
     window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
+    return () => {
+      window.removeEventListener('resize', h)
+      if (trailingTimer) clearTimeout(trailingTimer)
+    }
   }, [fit])
 
   // When drag starts, cancel any already-scheduled fit so it can't fire
@@ -252,6 +274,8 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
       if (!fitPendingDuringDragRef.current) return
       fitPendingDuringDragRef.current = false
       fit()
+      // Fire resize-end after fit settle (RESIZE_REFIT_SETTLE_DELAY=120ms + margin)
+      setTimeout(() => onResizeEndRef.current?.(), RESIZE_REFIT_SETTLE_DELAY + 80)
     })
   }, [cancelScheduledFit, fit])
 

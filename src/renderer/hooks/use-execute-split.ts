@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import type { PaneSplitDirection, ShellInfo, Terminal, WindowsShell } from '@shared/types'
 import { beginRendererCreate } from '../utils/renderer-create-tracker'
+import { publishResizeEnd } from '../utils/terminal-resize-end-dispatcher'
 import { closeLeafAndCollapse, findLeaf, splitLeaf } from '@shared/utils/pane-tree'
 import { usePaneTreeStore } from '../stores/pane-tree-store'
 
@@ -183,6 +184,12 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       // sees us as in-flight if it fires between the IPC return and our
       // setTree call (the very race this counter exists to defend against).
       releaseRendererCreate()
+
+      // Phase 01 alt-buffer repaint: split shrinks the source pane via React
+      // re-render → ResizeObserver → fit. Wait for layout/SIGWINCH to settle
+      // (~250ms), then publish so the source pane's alt-screen TUI repaints
+      // at the new width. New pane has nothing to repaint yet (PTY just spawned).
+      setTimeout(() => publishResizeEnd(sourceTerminalId), 300)
     },
     [
       activeTerminalId,
