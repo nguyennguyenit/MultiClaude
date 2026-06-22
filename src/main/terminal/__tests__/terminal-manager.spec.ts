@@ -102,6 +102,28 @@ describe('TerminalManager', () => {
       const term = manager.create()
       expect(term.allowTitleUpdate).toBe(false)
     })
+
+    it('emits output stream offsets for snapshot/live dedupe', () => {
+      const term = manager.create()
+      const outputListener = vi.fn()
+      manager.on('output', outputListener)
+
+      mockPty._dataCallback?.('hello')
+      mockPty._dataCallback?.(' world')
+
+      expect(outputListener).toHaveBeenNthCalledWith(1, {
+        terminalId: term.id,
+        data: 'hello',
+        startOffset: 0,
+        endOffset: 5,
+      })
+      expect(outputListener).toHaveBeenNthCalledWith(2, {
+        terminalId: term.id,
+        data: ' world',
+        startOffset: 5,
+        endOffset: 11,
+      })
+    })
   })
 
   describe('write', () => {
@@ -157,6 +179,20 @@ describe('TerminalManager', () => {
 
     it('returns false for non-existent terminal', () => {
       expect(manager.resize('invalid', 80, 24)).toBe(false)
+    })
+  })
+
+  describe('resizeHeadless', () => {
+    it('resizes the headless mirror without sending SIGWINCH to the PTY', () => {
+      const term = manager.create()
+      const result = manager.resizeHeadless(term.id, 92, 28)
+
+      expect(result).toBe(true)
+      expect(mockPty.resize).not.toHaveBeenCalledWith(92, 28)
+    })
+
+    it('returns false for non-existent terminal', () => {
+      expect(manager.resizeHeadless('invalid', 80, 24)).toBe(false)
     })
   })
 
@@ -606,6 +642,21 @@ describe('TerminalManager', () => {
       expect(count3).toBe(1)
     })
 
+    it('replays raw transcript with resize history so old redraw lines are not baked in', async () => {
+      const term = manager.create()
+
+      manager.resize(term.id, 20, 8)
+      mockPty._dataCallback?.('12345678901234567890')
+      mockPty._dataCallback?.('\r\x1b[Kshort\r\n')
+      manager.resize(term.id, 8, 8)
+
+      await manager.rebuildHeadless(term.id)
+      const snap = await manager.getSnapshot(term.id)
+
+      expect(snap.data).toContain('short')
+      expect(snap.data).not.toContain('1234567890123456')
+    })
+
     it('does not duplicate live PTY data that arrives during rebuild', async () => {
       const term = manager.create()
 
@@ -628,6 +679,44 @@ describe('TerminalManager', () => {
 
       expect(initialCount).toBe(1)
       expect(concurrentCount).toBe(1)
+    })
+
+    it('preserves a resize that arrives while headless is rebuilding', async () => {
+      const term = manager.create()
+      mockPty._dataCallback?.('before-resize\r\n')
+
+      const rebuildPromise = manager.rebuildHeadless(term.id)
+      manager.resize(term.id, 40, 12)
+      await rebuildPromise
+
+      const snap = await manager.getSnapshot(term.id)
+      expect(snap.cols).toBe(40)
+      expect(snap.rows).toBe(12)
+    })
+
+    it('applies a resize that arrives while replaying rebuild tail bytes', async () => {
+      const term = manager.create()
+      mockPty._dataCallback?.('before-tail\r\n')
+
+      const replayTarget = manager as unknown as {
+        replayPayloadWithResizeHistory: (...args: unknown[]) => Promise<boolean>
+      }
+      const originalReplay = replayTarget.replayPayloadWithResizeHistory.bind(replayTarget)
+      const replaySpy = vi.spyOn(replayTarget, 'replayPayloadWithResizeHistory')
+      replaySpy.mockImplementation(async (...args: unknown[]) => {
+        if (replaySpy.mock.calls.length === 2) {
+          manager.resize(term.id, 52, 13)
+        }
+        return originalReplay(...args)
+      })
+
+      const rebuildPromise = manager.rebuildHeadless(term.id)
+      mockPty._dataCallback?.('tail-bytes\r\n')
+      await rebuildPromise
+
+      const snap = await manager.getSnapshot(term.id)
+      expect(snap.cols).toBe(52)
+      expect(snap.rows).toBe(13)
     })
 
     it('is a no-op and does not throw when terminal is destroying', async () => {

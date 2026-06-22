@@ -31,10 +31,14 @@ import {
 import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
 import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
+import { isClaudeLikeTerminalId } from '../stores/app-store'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
 import { getCurrentTerminalTheme } from './use-terminal-font-theme'
+import { logResize } from '../utils/terminal-resize-debug'
+import { sendPtyResize } from '../utils/pty-resize-coordinator'
+import { fitTerminalSafely } from './use-terminal-fit'
 
 const TERMINAL_INIT_DELAY = 50         // ms after terminal.open() before loading addons
 const TERMINAL_MIN_CONTRAST_RATIO = 2.0
@@ -47,7 +51,6 @@ export function clampScrollback(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return SCROLLBACK_DEFAULT
   return Math.min(SCROLLBACK_MAX, Math.max(SCROLLBACK_MIN, Math.floor(value)))
 }
-
 
 interface ViewportEventListener {
   target: EventTarget
@@ -157,7 +160,10 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       allowProposedApi: true,
       convertEol: false,
       scrollback: clampScrollback(useSettingsStore.getState().pendingSettings.scrollbackLines),
-      reflowCursorLine: true,   // v6: include cursor line in reflow on resize
+      // Claude draws an inline input frame in the normal buffer. Since
+      // normal-buffer SIGWINCH is suppressed to avoid duplicate frames, xterm
+      // must not reflow Claude's active cursor line on its own.
+      reflowCursorLine: !isClaudeLikeTerminalId(terminalId),
       // OSC 8 hyperlinks: CLIs (e.g. Claude Code) emit explicit hyperlink metadata
       // that survives line-wrapping. Without this handler, clicks fall back to
       // WebLinksAddon regex scanning wrapped buffer text — which can miss the tail
@@ -179,19 +185,25 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
 
     terminal.open(container)
 
-    // Sync fit + PTY resize BEFORE any shell output is written. Moving this out
-    // of the deferred setTimeout eliminates the new-pane jump: without it, the
-    // shell prints its first prompt at xterm's default 80×24, then we fit +
-    // SIGWINCH 50ms later and the shell redraws the prompt at the real size
-    // (visible 1–2 line dip). Doing it synchronously means the SIGWINCH fires
-    // while the shell is still spawning, so the first prompt is rendered once
-    // at the final cols/rows. Snapshot fetch below then reflects post-SIGWINCH
-    // state, avoiding a second redraw cycle when we paint into xterm.
+    // Fit xterm synchronously before snapshot paint. Normal-buffer panes sync
+    // only the headless mirror; shells/agents must not redraw already-captured
+    // prompt or frame content into scrollback.
     try {
-      fitAddon.fit()
-      window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+      if (fitTerminalSafely(terminal, fitAddon)) {
+        logResize('ipc', terminalId, {
+          phase: 'sync-initial-size',
+          cols: terminal.cols, rows: terminal.rows,
+        })
+        sendPtyResize({
+          terminalId,
+          xtermCols: terminal.cols,
+          rows: terminal.rows,
+          isAlt: terminal.buffer.active.type === 'alternate',
+          isClaudeMode: isClaudeLikeTerminalId(terminalId),
+        })
+      }
     } catch {
-      // Container briefly 0×0 — deferred setTimeout path will retry via fitAddon.fit()
+      // Container briefly 0×0 — deferred setTimeout path will retry via safe fit.
     }
 
     // xterm v6 removed the v5 auto-sync of .xterm-viewport background-color.
@@ -299,7 +311,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       reconcileWebGL()
 
       try {
-        fitAddon.fit()
+        fitTerminalSafely(terminal, fitAddon)
       } catch {
         // Ignore fit errors during early init
       }
@@ -338,13 +350,13 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
           if (snap.data) {
             terminal.write(snap.data, () => {
               requestAnimationFrame(restoreInitialViewport)
-              finishInit()
+              resumeAndFlush(terminalId, { afterOffset: snap.byteOffset })
             })
           } else {
             // Empty snapshot (fresh terminal) — restore viewport; SIGWINCH
             // already sent by the sync resize IPC at open() time.
             requestAnimationFrame(restoreInitialViewport)
-            finishInit()
+            resumeAndFlush(terminalId, { afterOffset: snap.byteOffset })
           }
         }).catch(() => {
           // Snapshot fetch failed — fall back to viewport restore.
@@ -436,9 +448,29 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       if (!pendingResize) return
       const { cols, rows } = pendingResize
       pendingResize = null
-      if (lastSent && lastSent.cols === cols && lastSent.rows === rows) return
-      lastSent = { cols, rows }
-      window.electron.terminal.resize(terminalId, cols, rows)
+
+      if (lastSent && lastSent.cols === cols && lastSent.rows === rows) {
+        logResize('ipc', terminalId, { phase: 'dedup', cols, rows })
+        return
+      }
+      const isAlt = terminal.buffer.active.type === 'alternate'
+      const prevSent = lastSent
+      const { sentCols, decoupled, skipped } = sendPtyResize({
+        terminalId,
+        xtermCols: cols,
+        rows,
+        isAlt,
+        isClaudeMode: isClaudeLikeTerminalId(terminalId),
+      })
+      if (!skipped) lastSent = { cols: sentCols, rows }
+      logResize('ipc', terminalId, {
+        phase: skipped ? 'sync-headless-normal-buffer' : 'send-sigwinch',
+        cols: sentCols, rows,
+        xtermCols: cols,
+        isAlt,
+        decoupled,
+        prev: prevSent ? `${prevSent.cols}x${prevSent.rows}` : 'none',
+      })
       onResize?.(cols, rows)
     }
     terminal.onResize(({ cols, rows }) => {

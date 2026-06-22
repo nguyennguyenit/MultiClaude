@@ -128,6 +128,40 @@ describe('terminal-output-dispatcher', () => {
       expect(handler.mock.calls[2][0]).toBe('third')
     })
 
+    it('drops buffered chunks already covered by a snapshot offset', () => {
+      const handler = vi.fn()
+      registerTerminalOutputHandler('term-1', handler)
+      pauseAndBuffer('term-1')
+
+      attachTerminalOutputDispatcher((callback) => {
+        callback({ terminalId: 'term-1', data: 'first', startOffset: 0, endOffset: 5 })
+        callback({ terminalId: 'term-1', data: 'second', startOffset: 5, endOffset: 11 })
+        return vi.fn()
+      })
+
+      resumeAndFlush('term-1', { afterOffset: 11 })
+
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('flushes only the suffix of a chunk that extends beyond the snapshot offset', () => {
+      const handler = vi.fn()
+      registerTerminalOutputHandler('term-1', handler)
+      pauseAndBuffer('term-1')
+
+      attachTerminalOutputDispatcher((callback) => {
+        callback({ terminalId: 'term-1', data: 'abcdef', startOffset: 10, endOffset: 16 })
+        callback({ terminalId: 'term-1', data: 'ghi', startOffset: 16, endOffset: 19 })
+        return vi.fn()
+      })
+
+      resumeAndFlush('term-1', { afterOffset: 13 })
+
+      expect(handler).toHaveBeenCalledTimes(2)
+      expect(handler.mock.calls[0][0]).toBe('def')
+      expect(handler.mock.calls[1][0]).toBe('ghi')
+    })
+
     it('resumes normal dispatch after resumeAndFlush', () => {
       const handler = vi.fn()
       registerTerminalOutputHandler('term-1', handler)

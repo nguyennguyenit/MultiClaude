@@ -13,6 +13,7 @@ import { useCallback, useRef } from 'react'
 import type { RefObject } from 'react'
 import type { Terminal as XTerm } from '@xterm/xterm'
 import { useAppStore } from '../stores'
+import { isClaudeLikeTerminalId } from '../stores/app-store'
 import {
   INITIAL_KEYBOARD_ENHANCEMENT_STATE,
   isTerminalKeyboardEnhancementEnabled,
@@ -73,9 +74,7 @@ export function useTerminalKeyboard(params: UseTerminalKeyboardParams): UseTermi
   const shouldSendEnhancedEnter = useCallback(() => {
     if (isTerminalKeyboardEnhancementEnabled(keyboardEnhancementStateRef.current)) return true
 
-    return useAppStore.getState().terminals.some(
-      terminal => terminal.id === terminalId && terminal.isClaudeMode
-    )
+    return isClaudeLikeTerminalId(terminalId)
   }, [terminalId])
 
   return { processKeyboardEnhancementOutput, shouldSendEnhancedEnter, keyboardEnhancementStateRef }

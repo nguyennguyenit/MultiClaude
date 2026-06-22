@@ -27,6 +27,7 @@ import { shellInfoToWindowsShell } from './utils'
 import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
 import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
 import { attachTerminalLifecycleDispatcher } from './utils/terminal-lifecycle-dispatcher'
+import { suppressAutoResizeRefreshForTerminals } from './utils/terminal-resize-end-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { ShellInfo, Project } from '@shared/types'
 
@@ -229,6 +230,15 @@ function App() {
     const idToClose = terminalId ?? activeTerminalId
     if (!idToClose) return
     await window.electron.terminal.destroy(idToClose)
+    const terminalIdsToSuppress = useAppStore
+      .getState()
+      .terminals
+      .filter((terminal) =>
+        terminal.id !== idToClose &&
+        (!activeProjectId || terminal.projectId === activeProjectId)
+      )
+      .map((terminal) => terminal.id)
+    suppressAutoResizeRefreshForTerminals(terminalIdsToSuppress)
     removeTerminal(idToClose)
     // Collapse the pane tree node for this terminal so parents reflow.
     if (activeProjectId) {

@@ -1,4 +1,5 @@
-import { useAppStore, useImageStore } from '../stores'
+import { useImageStore } from '../stores'
+import { isClaudeLikeTerminalId } from '../stores/app-store'
 import { classifyMediaFile } from './media-classifier'
 import { formatPathForTerminal, joinPathsForClaudeTerminal } from './terminal-path-utils'
 
@@ -23,7 +24,7 @@ import { formatPathForTerminal, joinPathsForClaudeTerminal } from './terminal-pa
  *      write still avoids the multi-paste drop-all-but-first bug the
  *      d888103 commit originally tried to fix. */
 export function insertFilePathsIntoTerminal(terminalId: string, paths: string[]): void {
-  const isClaudeMode = useAppStore.getState().terminals.find((t) => t.id === terminalId)?.isClaudeMode ?? false
+  const isClaudeMode = isClaudeLikeTerminalId(terminalId)
 
   if (isClaudeMode) {
     for (const filePath of paths) {

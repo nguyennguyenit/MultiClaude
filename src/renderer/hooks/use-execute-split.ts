@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import type { PaneSplitDirection, ShellInfo, Terminal, WindowsShell } from '@shared/types'
 import { beginRendererCreate } from '../utils/renderer-create-tracker'
-import { publishResizeEnd } from '../utils/terminal-resize-end-dispatcher'
+import { publishResizeEnd, suppressAutoResizeRefresh } from '../utils/terminal-resize-end-dispatcher'
 import { closeLeafAndCollapse, findLeaf, splitLeaf } from '@shared/utils/pane-tree'
 import { usePaneTreeStore } from '../stores/pane-tree-store'
 
@@ -152,6 +152,8 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
 
       addTerminal(terminal)
 
+      let resizedSourceTerminalId = sourceTerminalId
+
       if (projectId) {
         const currentTree = usePaneTreeStore.getState().getTree(projectId)
         if (currentTree) {
@@ -172,6 +174,7 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
             // preserve user's direction intent by splitting the active pane
             // and tell them the source is gone.
             notifyError('Source pane was closed — splitting active pane instead')
+            resizedSourceTerminalId = activeTerminalId
             usePaneTreeStore
               .getState()
               .setTree(projectId, splitLeaf(cleaned, activeTerminalId, direction, terminal.id))
@@ -185,11 +188,13 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       // setTree call (the very race this counter exists to defend against).
       releaseRendererCreate()
 
-      // Phase 01 alt-buffer repaint: split shrinks the source pane via React
+      suppressAutoResizeRefresh(resizedSourceTerminalId)
+
+      // Split resize repaint: split shrinks the source pane via React
       // re-render → ResizeObserver → fit. Wait for layout/SIGWINCH to settle
       // (~250ms), then publish so the source pane's alt-screen TUI repaints
       // at the new width. New pane has nothing to repaint yet (PTY just spawned).
-      setTimeout(() => publishResizeEnd(sourceTerminalId), 300)
+      setTimeout(() => publishResizeEnd(resizedSourceTerminalId, 'split'), 300)
     },
     [
       activeTerminalId,

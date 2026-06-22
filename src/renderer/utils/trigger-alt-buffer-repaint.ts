@@ -8,9 +8,10 @@
  *
  *   1. If alt-buffer active → write `\x1b[2J\x1b[H` (clear screen + home).
  *      The app's next paint becomes a full repaint at the new dimensions.
- *   2. Always: call IPC resize directly (bypasses lastSent dedup at
- *      use-terminal-init.ts:439) so a fresh SIGWINCH reaches the PTY even
- *      when (cols, rows) didn't change at renderer level.
+ *   2. If alt-buffer active → call IPC resize directly so a fresh SIGWINCH
+ *      reaches the PTY even when (cols, rows) didn't change at renderer level.
+ *      Normal-buffer panes skip this because the regular onResize path already
+ *      keeps PTY dimensions synced to the visible grid.
  *
  * Caller (use-terminal-webgl.ts subscriber) is responsible for:
  *   - feature flag gate (VITE_MULTICLAUDE_RESIZE_REPAINT)
@@ -19,19 +20,28 @@
  */
 
 import type { Terminal as XTerm } from '@xterm/xterm'
+import { logResize } from './terminal-resize-debug'
+import { sendPtyResize } from './pty-resize-coordinator'
 
-export function triggerAltBufferRepaint(terminalId: string, term: XTerm): void {
-  // Clear stale alt-buffer grid so app's next render is a full repaint
-  if (term.buffer.active.type === 'alternate') {
+export function triggerAltBufferRepaint(
+  terminalId: string,
+  term: XTerm
+): void {
+  const bufferType = term.buffer.active.type
+  if (bufferType === 'alternate') {
+    // Alt-screen TUIs (vim, htop, less) clear-and-redraw on SIGWINCH. We
+    // pre-clear the grid so the next full-frame paint isn't layered on top of
+    // a stale frame at the old dimensions.
     term.write('\x1b[2J\x1b[H')
+    logResize('ipc', terminalId, { phase: 'send-sigwinch-bypass', cols: term.cols, rows: term.rows })
+    sendPtyResize({ terminalId, xtermCols: term.cols, rows: term.rows, isAlt: true })
+    return
   }
 
-  // Force SIGWINCH by calling IPC directly (bypasses renderer debounce/dedup)
-  try {
-    window.electron.terminal.resize(terminalId, term.cols, term.rows)
-  } catch {
-    // ignore — non-fatal (main may have torn down during pane close)
-  }
+  // Normal buffer: the debounced onResize path has already sent the visible
+  // dimensions. Avoid a duplicate SIGWINCH at resize-end; fish and inline TUIs
+  // can redraw prompts noisily when they receive redundant resize events.
+  void terminalId
 }
 
 /** Feature flag — default ON. Set VITE_MULTICLAUDE_RESIZE_REPAINT=0 to disable. */

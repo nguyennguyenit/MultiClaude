@@ -156,8 +156,10 @@ export function usePaneResize({
         } catch {
           // ignore
         }
-        setPaneDragging(false)
         cleanupRef.current = null
+        requestAnimationFrame(() => {
+          if (cleanupRef.current === null) setPaneDragging(false)
+        })
       }
 
       const onEnd = (): void => cleanup()

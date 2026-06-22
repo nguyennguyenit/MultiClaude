@@ -88,6 +88,7 @@ describe('TerminalManager.getSnapshot', () => {
     // dims must reflect actual terminal size (default 80x24)
     expect(snap.cols).toBeGreaterThan(0)
     expect(snap.rows).toBeGreaterThan(0)
+    expect(snap.byteOffset).toBe('line1\r\nline2\r\n'.length)
   })
 
   it('(a) includes timing: snapshot serialize latency <60ms for typical scrollback', async () => {

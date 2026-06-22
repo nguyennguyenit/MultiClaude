@@ -230,6 +230,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     terminalManager.resize(terminalId, cols, rows)
   })
 
+  safeOn(IPC_CHANNELS.TERMINAL_RESIZE_HEADLESS, (_, { terminalId, cols, rows }) => {
+    terminalManager.resizeHeadless(terminalId, cols, rows)
+  })
+
   safeHandle(IPC_CHANNELS.TERMINAL_LIST, async () => {
     return terminalManager.list()
   })
