@@ -8,6 +8,7 @@ beforeEach(() => {
     terminal: {
       input: vi.fn(),
       resize: vi.fn(),
+      resizeHeadless: vi.fn(),
     },
     clipboard: { writeText: vi.fn() },
     shell: { openPath: vi.fn(), openExternal: vi.fn() },

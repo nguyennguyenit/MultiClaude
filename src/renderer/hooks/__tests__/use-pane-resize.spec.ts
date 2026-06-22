@@ -186,6 +186,28 @@ describe('usePaneResize', () => {
     expect(setRatio).toHaveBeenLastCalledWith(0.6)
   })
 
+  it('defaults to the ratio clamp when the pixel minimum is looser', () => {
+    Object.defineProperty(container, 'getBoundingClientRect', {
+      value: () => ({ width: 1000, height: 100, top: 0, left: 0, right: 1000, bottom: 100, x: 0, y: 0, toJSON: () => ({}) }),
+      configurable: true,
+      writable: true
+    })
+
+    const { result } = renderHook(() =>
+      usePaneResize({
+        orientation: 'row',
+        startRatio: 0.5,
+        containerRef: { current: container },
+        onRatioChange: setRatio
+      })
+    )
+
+    act(() => result.current.beginDrag(fakePointerDown(handle, 500, 0)))
+    act(() => dispatchMove(handle, 0, 0))
+
+    expect(setRatio).toHaveBeenLastCalledWith(0.1)
+  })
+
   it('unmount mid-drag cleans up listeners (no onRatioChange after unmount)', () => {
     const { result, unmount } = mount('row', 0.5)
     act(() => result.current.beginDrag(fakePointerDown(handle, 100, 0)))

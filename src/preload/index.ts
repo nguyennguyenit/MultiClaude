@@ -36,13 +36,14 @@ export interface ElectronAPI {
     destroy: (id: string) => Promise<boolean>
     write: (terminalId: string, data: string) => void
     resize: (terminalId: string, cols: number, rows: number) => void
+    resizeHeadless: (terminalId: string, cols: number, rows: number) => void
     list: () => Promise<Terminal[]>
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     detectWsl: () => Promise<WslInfo>
     getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
     loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
     savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
-    getSnapshot: (terminalId: string) => Promise<{ data: string; cols: number; rows: number }>
+    getSnapshot: (terminalId: string) => Promise<{ data: string; cols: number; rows: number; byteOffset?: number }>
     /**
      * Part F: Rebuild the headless mirror from the raw PTY transcript at current dimensions.
      * Call this before getSnapshot to ensure the snapshot is free of xterm reflow artifacts
@@ -50,7 +51,7 @@ export interface ElectronAPI {
      * the one at which output was originally produced).
      */
     rebuildHeadless: (terminalId: string) => Promise<void>
-    onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
+    onOutput: (callback: (data: { terminalId: string; data: string; startOffset?: number; endOffset?: number }) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
@@ -234,6 +235,8 @@ const api: ElectronAPI = {
     destroy: (id) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DESTROY, id),
     write: (terminalId, data) => ipcRenderer.send(IPC_CHANNELS.TERMINAL_INPUT, { terminalId, data }),
     resize: (terminalId, cols, rows) => ipcRenderer.send(IPC_CHANNELS.TERMINAL_RESIZE, { terminalId, cols, rows }),
+    resizeHeadless: (terminalId, cols, rows) =>
+      ipcRenderer.send(IPC_CHANNELS.TERMINAL_RESIZE_HEADLESS, { terminalId, cols, rows }),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST),
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
     detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
@@ -242,7 +245,7 @@ const api: ElectronAPI = {
     savePaneTree: (projectId, tree) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, { projectId, tree }),
     getSnapshot: (terminalId) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, terminalId) as
-        Promise<{ data: string; cols: number; rows: number }>,
+        Promise<{ data: string; cols: number; rows: number; byteOffset?: number }>,
     rebuildHeadless: (terminalId) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_REBUILD_HEADLESS, terminalId) as Promise<void>,
     onOutput: (callback) => {

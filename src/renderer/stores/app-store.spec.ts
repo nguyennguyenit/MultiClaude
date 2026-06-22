@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
 import type { Terminal } from '@shared/types'
-import { useAppStore } from './app-store'
+import { isClaudeLikeTerminalId, useAppStore } from './app-store'
 import { resetBufferedTerminalOutputForTests } from './terminal-output-buffer'
 
 const initialState = useAppStore.getState()
@@ -120,5 +120,38 @@ describe('useAppStore terminal output buffering', () => {
     state.updateTerminalClaudeMode?.('term-1', true)
 
     expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
+    expect(useAppStore.getState().terminals[0]?.agentType).toBe('claude')
+  })
+
+  it('treats a detected claude agent as Claude mode for renderer guards', () => {
+    useAppStore.getState().addTerminal(makeTerminal())
+
+    useAppStore.getState().updateTerminalAgentType('term-1', 'claude')
+
+    expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
+    expect(isClaudeLikeTerminalId('term-1')).toBe(true)
+  })
+
+  it('clears Claude-like metadata when Claude mode is explicitly disabled', () => {
+    useAppStore.getState().addTerminal(makeTerminal())
+
+    useAppStore.getState().updateTerminalClaudeSessionId('term-1', 'session-123')
+    useAppStore.getState().updateTerminalClaudeMode('term-1', false)
+
+    const terminal = useAppStore.getState().terminals[0]
+    expect(terminal?.isClaudeMode).toBe(false)
+    expect(terminal?.agentType).toBeUndefined()
+    expect(terminal?.claudeSessionId).toBeUndefined()
+    expect(isClaudeLikeTerminalId('term-1')).toBe(false)
+  })
+
+  it('treats a bound Claude session id as Claude mode for restored terminals', () => {
+    useAppStore.getState().addTerminal(makeTerminal())
+
+    useAppStore.getState().updateTerminalClaudeSessionId('term-1', 'session-123')
+
+    expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
+    expect(useAppStore.getState().terminals[0]?.agentType).toBe('claude')
+    expect(isClaudeLikeTerminalId('term-1')).toBe(true)
   })
 })

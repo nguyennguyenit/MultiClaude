@@ -17,21 +17,50 @@ import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { resolveFitViewportRestoreTarget } from '../utils/terminal-scroll-utils'
 import { isPaneDragging, subscribePaneDragging } from '../utils/pane-drag-state'
 import { useSettingsStore } from '../stores'
+import { isAutoResizeRefreshSuppressed } from '../utils/terminal-resize-end-dispatcher'
 
 // Part D: debounce before triggering silent snapshot replay on cols change
 const REFLOW_SAFE_COLS_CHANGE_DEBOUNCE = 300 // ms
 
 const RESIZE_REFIT_SETTLE_DELAY = 120  // ms second fit after layout settles
 const FIT_RETRY_WHEN_HIDDEN_DELAY = 120  // ms retry when container briefly has 0 size
+const PANE_RESIZE_END_DEBOUNCE = 320 // ms after the last post-drag fit
 
-// xterm's buffer reflow corrupts at very narrow widths — rows get split into
-// character-per-line stretched blocks that orphan in scrollback after the
-// user drags the pane back wider. Skip fit if proposed cols would go below
-// this floor; the pane stays visually narrow but the terminal keeps its
-// previous cols (content clips on the right, but re-opens intact).
-const MIN_SAFE_COLS = 20
+// xterm's normal-buffer reflow becomes unreadable at very narrow widths,
+// especially with prompts that include right-aligned segments or table-like
+// output. Below this floor we clip the pane instead of letting xterm rewrite
+// the active line into scattered one-character wraps.
+export const MIN_SAFE_COLS = 20
+
+export type ResizeColsDirection = 'none' | 'narrower' | 'wider'
+export interface ResizeColsChange {
+  changed: boolean
+  direction: ResizeColsDirection
+}
+
+const NO_COLS_CHANGE: ResizeColsChange = { changed: false, direction: 'none' }
+
+export function fitTerminalSafely(terminal: XTerm, fitAddon: FitAddon): boolean {
+  const proposed = fitAddon.proposeDimensions()
+  if (proposed && proposed.cols < MIN_SAFE_COLS) {
+    try {
+      terminal.resize(MIN_SAFE_COLS, Math.max(1, proposed.rows))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  try {
+    fitAddon.fit()
+    return true
+  } catch {
+    return false
+  }
+}
 
 interface UseTerminalFitParams {
+  terminalId: string
   terminalRef: RefObject<XTerm | null>
   fitAddonRef: RefObject<FitAddon | null>
   containerRef: RefObject<HTMLDivElement | null>
@@ -44,6 +73,11 @@ interface UseTerminalFitParams {
    * to rebuild the display from the raw PTY transcript at the new width.
    */
   onColsChanged?: () => void
+  /**
+   * Fired on the trailing edge of a resize gesture (drag-end / window-resize-end).
+   * Used to trigger alt-buffer repaint after layout settles.
+   */
+  onResizeEnd?: (source: 'pane-drag' | 'window', colsChange: ResizeColsChange) => void
 }
 
 interface UseTerminalFitResult {
@@ -54,6 +88,7 @@ interface UseTerminalFitResult {
 
 export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResult {
   const {
+    terminalId,
     terminalRef,
     fitAddonRef,
     containerRef,
@@ -61,7 +96,12 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     scrollMachineRef,
     refreshVisibleRows,
     onColsChanged,
+    onResizeEnd,
   } = params
+
+  // Stable ref so handlers always see the latest onResizeEnd without stale closure
+  const onResizeEndRef = useRef(onResizeEnd)
+  onResizeEndRef.current = onResizeEnd
 
   const fitAnimationFrameRef = useRef<number | null>(null)
   const fitSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,6 +112,20 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
   onColsChangedRef.current = onColsChanged
 
   const lastFitDimsRef = useRef<{ cols: number; rows: number } | null>(null)
+  const colsChangeSinceResizeEndRef = useRef<ResizeColsChange>(NO_COLS_CHANGE)
+  const paneResizeEndPendingRef = useRef(false)
+  const paneResizeEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const schedulePaneResizeEnd = useCallback(() => {
+    if (paneResizeEndTimerRef.current) clearTimeout(paneResizeEndTimerRef.current)
+    paneResizeEndTimerRef.current = setTimeout(() => {
+      paneResizeEndTimerRef.current = null
+      paneResizeEndPendingRef.current = false
+      const colsChange = colsChangeSinceResizeEndRef.current
+      colsChangeSinceResizeEndRef.current = NO_COLS_CHANGE
+      onResizeEndRef.current?.('pane-drag', colsChange)
+    }, PANE_RESIZE_END_DEBOUNCE)
+  }, [])
 
   const performFit = useCallback((restoreViewport = true) => {
     const terminal = terminalRef.current
@@ -89,16 +143,11 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     // that would always fire onColsChanged even when the terminal hasn't been resized.
     const isFirstFit = lastFitDimsRef.current === null
 
-    // Skip fit when proposed cols would corrupt xterm reflow.
-    const proposed = fitAddon.proposeDimensions()
-    if (proposed && proposed.cols < MIN_SAFE_COLS) return false
-
-    try {
-      fitAddon.fit()
-    } catch {
-      return false
-    }
-
+    // Clamp fits that would corrupt xterm reflow. Calling terminal.resize()
+    // still emits xterm's resize event, so the debounced PTY resize path can
+    // sync $COLUMNS to the safe floor instead of leaving it at a stale wide
+    // value from before the pane was narrowed.
+    if (!fitTerminalSafely(terminal, fitAddon)) return false
     lastFitDimsRef.current = { cols: terminal.cols, rows: terminal.rows }
 
     // Part D: if cols changed and reflowSafeScrollback is enabled, debounce a silent
@@ -106,17 +155,31 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     // The debounce resets on every performFit call while the user is still dragging —
     // the actual replay only fires when the width stabilises.
     // I3: Skip on first fit (mount) — prevCols is the xterm default, not a real resize.
-    if (!isFirstFit && terminal.cols !== prevCols && onColsChangedRef.current) {
+    const colsChanged = !isFirstFit && terminal.cols !== prevCols
+    const colsDirection: ResizeColsDirection = colsChanged
+      ? terminal.cols > prevCols ? 'wider' : 'narrower'
+      : 'none'
+    if (colsChanged) {
+      colsChangeSinceResizeEndRef.current = { changed: true, direction: colsDirection }
+    }
+    if (paneResizeEndPendingRef.current) schedulePaneResizeEnd()
+    const paneDragResizeSettling = paneResizeEndPendingRef.current || isPaneDragging()
+    if (colsChanged && !paneDragResizeSettling && onColsChangedRef.current) {
       // Read savedSettings (persisted source of truth) so toggling the switch
       // in the modal doesn't activate the behaviour until the user clicks Save.
       const reflowEnabled =
         useSettingsStore.getState().savedSettings.reflowSafeScrollback === true
       if (reflowEnabled) {
+        const wasSuppressedWhenScheduled = isAutoResizeRefreshSuppressed(terminalId)
         if (reflowSafeDebounceRef.current) clearTimeout(reflowSafeDebounceRef.current)
         reflowSafeDebounceRef.current = setTimeout(() => {
           reflowSafeDebounceRef.current = null
           // Re-check at fire time — user may have disabled it during debounce window.
-          if (useSettingsStore.getState().savedSettings.reflowSafeScrollback === true) {
+          if (
+            useSettingsStore.getState().savedSettings.reflowSafeScrollback === true &&
+            !wasSuppressedWhenScheduled &&
+            !isAutoResizeRefreshSuppressed(terminalId)
+          ) {
             onColsChangedRef.current?.()
           }
         }, REFLOW_SAFE_COLS_CHANGE_DEBOUNCE)
@@ -136,7 +199,7 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     else if (typeof restoreTarget === 'number') terminalRef.current?.scrollToLine(restoreTarget)
 
     return true
-  }, [containerRef, disposedRef, fitAddonRef, refreshVisibleRows, scrollMachineRef, terminalRef])
+  }, [containerRef, disposedRef, fitAddonRef, refreshVisibleRows, schedulePaneResizeEnd, scrollMachineRef, terminalId, terminalRef])
 
   const cancelScheduledFit = useCallback(() => {
     if (fitAnimationFrameRef.current !== null) {
@@ -149,24 +212,34 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
     }
   }, [])
 
-  // Defer fit() while a pane divider is being dragged. xterm's internal
-  // reflow at rapidly-changing cols leaves wrapped rows orphaned in
-  // scrollback — duplicated banners, character-per-line stretched blocks.
-  // Gate fit on drag state: mark pending, flush on drag end.
+  // Keep xterm responsive while dragging, but leave PTY SIGWINCH gating to
+  // pty-resize-coordinator. This gives Warp-like live pane sizing without
+  // asking normal-buffer shells/agents to redraw into scrollback.
   const fitPendingDuringDragRef = useRef(false)
 
   const fit = useCallback(() => {
     if (disposedRef.current) return
     if (isPaneDragging()) {
       fitPendingDuringDragRef.current = true
+      cancelScheduledFit()
+      fitAnimationFrameRef.current = requestAnimationFrame(() => {
+        fitAnimationFrameRef.current = null
+        if (!isPaneDragging()) {
+          performFit(false)
+          return
+        }
+        performFit(false)
+      })
       return
     }
     cancelScheduledFit()
     fitAnimationFrameRef.current = requestAnimationFrame(() => {
       fitAnimationFrameRef.current = null
-      // Drag may have started between fit() call and rAF firing — defer.
+      // Drag may have started between fit() call and rAF firing — switch to
+      // responsive drag fit instead of running the normal settle path.
       if (isPaneDragging()) {
         fitPendingDuringDragRef.current = true
+        performFit(false)
         return
       }
       // If performFit returned false because the container was 0×0 (pane
@@ -235,9 +308,23 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
   }, [containerRef, fit])
 
   useEffect(() => {
-    const h = () => fit()
+    let trailingTimer: ReturnType<typeof setTimeout> | null = null
+    const h = () => {
+      fit()
+      // Trailing-edge resize-end: fires once window stops resizing for 250ms
+      if (trailingTimer) clearTimeout(trailingTimer)
+      trailingTimer = setTimeout(() => {
+        trailingTimer = null
+        const colsChange = colsChangeSinceResizeEndRef.current
+        colsChangeSinceResizeEndRef.current = NO_COLS_CHANGE
+        onResizeEndRef.current?.('window', colsChange)
+      }, 250)
+    }
     window.addEventListener('resize', h)
-    return () => window.removeEventListener('resize', h)
+    return () => {
+      window.removeEventListener('resize', h)
+      if (trailingTimer) clearTimeout(trailingTimer)
+    }
   }, [fit])
 
   // When drag starts, cancel any already-scheduled fit so it can't fire
@@ -251,9 +338,11 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
       }
       if (!fitPendingDuringDragRef.current) return
       fitPendingDuringDragRef.current = false
+      paneResizeEndPendingRef.current = true
       fit()
+      schedulePaneResizeEnd()
     })
-  }, [cancelScheduledFit, fit])
+  }, [cancelScheduledFit, fit, schedulePaneResizeEnd])
 
   // Part D: clean up reflow-safe debounce timer on unmount
   useEffect(() => {
@@ -262,6 +351,11 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
         clearTimeout(reflowSafeDebounceRef.current)
         reflowSafeDebounceRef.current = null
       }
+      if (paneResizeEndTimerRef.current) {
+        clearTimeout(paneResizeEndTimerRef.current)
+        paneResizeEndTimerRef.current = null
+      }
+      paneResizeEndPendingRef.current = false
     }
   }, [])
 

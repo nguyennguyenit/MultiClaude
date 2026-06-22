@@ -26,7 +26,8 @@ vi.mock('@xterm/addon-web-links')
 
 import { useTerminalWebGL } from '../use-terminal-webgl'
 import { pauseAndBuffer, resumeAndFlush, resetTerminalOutputDispatcherForTests } from '../../utils/terminal-output-dispatcher'
-import { useToastStore } from '../../stores'
+import { publishResizeEnd, resetResizeEndDispatcherForTests } from '../../utils/terminal-resize-end-dispatcher'
+import { useAppStore, useToastStore } from '../../stores'
 
 // ── xterm mock helpers ──────────────────────────────────────────────────────
 
@@ -41,17 +42,25 @@ const extendedMock = mockTerminalInstance as typeof mockTerminalInstance & {
   refresh: ReturnType<typeof vi.fn>
 }
 
+function setMockBufferType(type: 'normal' | 'alternate'): void {
+  ;(extendedMock.buffer.active as typeof extendedMock.buffer.active & { type: 'normal' | 'alternate' }).type = type
+}
+
 // ── window.electron helpers ─────────────────────────────────────────────────
 
 type ElectronTerminalMock = {
   getSnapshot: ReturnType<typeof vi.fn>
+  rebuildHeadless: ReturnType<typeof vi.fn>
   resize: ReturnType<typeof vi.fn>
+  resizeHeadless: ReturnType<typeof vi.fn>
 }
 
 function stubElectronTerminal(overrides: Partial<ElectronTerminalMock> = {}) {
   const mock: ElectronTerminalMock = {
     getSnapshot: vi.fn().mockResolvedValue({ data: '\x1b[2Jhello', cols: 80, rows: 24 }),
+    rebuildHeadless: vi.fn().mockResolvedValue(undefined),
     resize: vi.fn(),
+    resizeHeadless: vi.fn(),
     ...overrides,
   }
   vi.stubGlobal('electron', {
@@ -97,15 +106,19 @@ beforeEach(() => {
   extendedMock.resize = extendedMock.resize ?? vi.fn()
   extendedMock.clearTextureAtlas = extendedMock.clearTextureAtlas ?? vi.fn()
   extendedMock.refresh = extendedMock.refresh ?? vi.fn()
+  setMockBufferType('normal')
 
   // Reset all mock call counts
   vi.clearAllMocks()
   resetTerminalOutputDispatcherForTests()
+  resetResizeEndDispatcherForTests()
+  useAppStore.setState({ terminals: [] })
 
   stubElectronTerminal()
 })
 
 afterEach(() => {
+  resetResizeEndDispatcherForTests()
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
@@ -176,7 +189,63 @@ describe('refreshTerminal with snapshot replay', () => {
     expect(altBufIdx).toBeLessThan(snapIdx)
   })
 
-  it('sends SIGWINCH (electron resize) after snapshot write', async () => {
+  it('preserves alt-buffer when requested by automatic resize refresh', async () => {
+    const mockSnap = { data: 'snap-content', cols: 80, rows: 24 }
+    stubElectronTerminal({ getSnapshot: vi.fn().mockResolvedValue(mockSnap) })
+
+    const { refreshTerminal } = renderWebGL()
+
+    await act(async () => {
+      refreshTerminal(false, true)
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const writeCalls = (extendedMock.write as ReturnType<typeof vi.fn>).mock.calls
+      .map((c: unknown[]) => c[0] as string)
+
+    expect(writeCalls).not.toContain('\x1b[?1049l')
+    expect(writeCalls).toContain('snap-content')
+  })
+
+  it('does not run snapshot replay for non-Claude split resize-end events', () => {
+    const electronMock = stubElectronTerminal()
+
+    renderWebGL()
+
+    act(() => {
+      publishResizeEnd('test-term', 'split')
+    })
+
+    expect(electronMock.rebuildHeadless).not.toHaveBeenCalled()
+    expect(electronMock.getSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('snapshot-replays Claude normal-buffer after split resize-end', async () => {
+    const electronMock = stubElectronTerminal()
+    useAppStore.setState({
+      terminals: [{ id: 'test-term', title: 'Claude', cwd: '/', isClaudeMode: true, createdAt: new Date().toISOString() }] as never,
+    })
+    setMockBufferType('normal')
+
+    renderWebGL()
+
+    await act(async () => {
+      publishResizeEnd('test-term', 'split')
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(electronMock.rebuildHeadless).toHaveBeenCalledWith('test-term')
+    expect(electronMock.getSnapshot).toHaveBeenCalledWith('test-term')
+    expect(electronMock.resize).not.toHaveBeenCalled()
+    expect(electronMock.resizeHeadless).toHaveBeenCalledWith('test-term', expect.any(Number), expect.any(Number))
+  })
+
+  it('syncs only headless size after normal-buffer snapshot write', async () => {
     const electronMock = stubElectronTerminal()
 
     const { refreshTerminal } = renderWebGL()
@@ -189,7 +258,57 @@ describe('refreshTerminal with snapshot replay', () => {
       await Promise.resolve()
     })
 
-    expect(electronMock.resize).toHaveBeenCalledWith('test-term', expect.any(Number), expect.any(Number))
+    expect(electronMock.resize).not.toHaveBeenCalled()
+    expect(electronMock.resizeHeadless).toHaveBeenCalledWith('test-term', expect.any(Number), expect.any(Number))
+  })
+
+  it('does not send SIGWINCH after snapshot replay for Claude normal-buffer', async () => {
+    const electronMock = stubElectronTerminal()
+    useAppStore.setState({
+      terminals: [{ id: 'test-term', title: 'Claude', cwd: '/', isClaudeMode: true, createdAt: new Date().toISOString() }] as never,
+    })
+    setMockBufferType('normal')
+
+    const { refreshTerminal } = renderWebGL()
+
+    await act(async () => {
+      refreshTerminal(false, true)
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(electronMock.resize).not.toHaveBeenCalled()
+    expect(electronMock.resizeHeadless).toHaveBeenCalledWith('test-term', expect.any(Number), expect.any(Number))
+  })
+
+  it('does not send SIGWINCH after snapshot replay when only agentType identifies Claude', async () => {
+    const electronMock = stubElectronTerminal()
+    useAppStore.setState({
+      terminals: [{
+        id: 'test-term',
+        title: 'Claude',
+        cwd: '/',
+        isClaudeMode: false,
+        agentType: 'claude',
+        createdAt: new Date().toISOString()
+      }] as never,
+    })
+    setMockBufferType('normal')
+
+    const { refreshTerminal } = renderWebGL()
+
+    await act(async () => {
+      refreshTerminal(false, true)
+      vi.runAllTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(electronMock.resize).not.toHaveBeenCalled()
+    expect(electronMock.resizeHeadless).toHaveBeenCalledWith('test-term', expect.any(Number), expect.any(Number))
   })
 
   it('shows success toast on normal refresh', async () => {
@@ -245,7 +364,7 @@ describe('refreshTerminal with snapshot replay', () => {
     expect(addToastSpy).toHaveBeenCalledWith(expect.stringContaining('error'), 'error')
   })
 
-  it('handles empty snapshot gracefully — no reset crash, still SIGWINCH', async () => {
+  it('handles empty snapshot gracefully and still syncs headless size', async () => {
     const electronMock = stubElectronTerminal({
       getSnapshot: vi.fn().mockResolvedValue({ data: '', cols: 0, rows: 0 }),
     })
@@ -263,8 +382,8 @@ describe('refreshTerminal with snapshot replay', () => {
       }).not.toThrow()
     })
 
-    // SIGWINCH still expected even with empty snapshot
-    expect(electronMock.resize).toHaveBeenCalled()
+    expect(electronMock.resize).not.toHaveBeenCalled()
+    expect(electronMock.resizeHeadless).toHaveBeenCalled()
   })
 
   it('mutex: rapid double-trigger → only one replay executes', async () => {

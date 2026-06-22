@@ -35,6 +35,10 @@ interface PTYProcess {
   // Absolute byte position of outputBuffer[0] in the monotonic stream.
   // Invariant: bufferStartOffset + outputBuffer.length === bytesWritten
   bufferStartOffset: number
+  // Resize history keyed by output byte offset. Raw transcript replay must
+  // preserve historical widths because inline redraw sequences depend on the
+  // width at the time they were emitted.
+  resizeMarkers: ResizeMarker[]
   inputBuffer: string
   lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
@@ -44,6 +48,12 @@ interface PTYProcess {
   // Phase 1: headless terminal mirror for snapshot/restore
   headlessTerm?: HeadlessTerminal
   serializeAddon?: SerializeAddon
+}
+
+interface ResizeMarker {
+  offset: number
+  cols: number
+  rows: number
 }
 
 export class TerminalManager extends EventEmitter {
@@ -461,6 +471,7 @@ export class TerminalManager extends EventEmitter {
       outputBuffer: '',
       bytesWritten: 0,
       bufferStartOffset: 0,
+      resizeMarkers: [{ offset: 0, cols: 80, rows: 24 }],
       inputBuffer: '',
       lastOutputAt: 0,
       oscBuffer: ''
@@ -499,6 +510,7 @@ export class TerminalManager extends EventEmitter {
       // Skip headless write during rebuild — outputBuffer accumulates the data,
       // and the replay in rebuildHeadless() covers it. Writing here AND replaying
       // would duplicate content (C1 concurrent-write race fix).
+      const outputStartOffset = termProcess.bytesWritten
       if (!termProcess.rebuildingHeadless) {
         termProcess.headlessTerm?.write(data)
       }
@@ -506,6 +518,7 @@ export class TerminalManager extends EventEmitter {
       // Raw-ANSI buffer — Telegram text-only path only. Visual source of truth = headless snapshot (getSnapshot).
       termProcess.outputBuffer += data
       termProcess.bytesWritten += data.length
+      const outputEndOffset = termProcess.bytesWritten
       termProcess.lastOutputAt = Date.now()
       if (termProcess.outputBuffer.length > TERMINAL_OUTPUT_BUFFER_MAX) {
         const beforeLen = termProcess.outputBuffer.length
@@ -517,8 +530,14 @@ export class TerminalManager extends EventEmitter {
         // map captured offsets through trims that happen during replay.
         termProcess.bufferStartOffset += beforeLen - trimmed.length
         termProcess.outputBuffer = trimmed
+        this.trimResizeMarkers(termProcess)
       }
-      this.emit('output', { terminalId: id, data })
+      this.emit('output', {
+        terminalId: id,
+        data,
+        startOffset: outputStartOffset,
+        endOffset: outputEndOffset
+      })
 
       // Parse OSC sequences for title changes
       this.parseOscTitle(termProcess, data)
@@ -599,6 +618,7 @@ export class TerminalManager extends EventEmitter {
     }
     try {
       term.pty.resize(cols, rows)
+      this.recordResizeMarker(term, cols, rows)
       // Phase 1: resize headless mirror inside same try block (validation V1).
       // Skip resize during rebuild — freshTerm is created at the current cols, a
       // concurrent resize here would re-introduce the wrong-width artifact (C1).
@@ -611,6 +631,95 @@ export class TerminalManager extends EventEmitter {
       console.error(`[terminal-manager] Resize failed for ${id}:`, (error as Error).message)
       return false
     }
+  }
+
+  resizeHeadless(id: string, cols: number, rows: number): boolean {
+    const term = this.terminals.get(id)
+    if (!term || term.destroying) return false
+    try {
+      this.recordResizeMarker(term, cols, rows)
+      if (!term.rebuildingHeadless) {
+        term.headlessTerm?.resize(cols, rows)
+      }
+      return true
+    } catch (error) {
+      console.error(`[terminal-manager] Headless resize failed for ${id}:`, (error as Error).message)
+      return false
+    }
+  }
+
+  private recordResizeMarker(term: PTYProcess, cols: number, rows: number): void {
+    const offset = term.bytesWritten
+    const last = term.resizeMarkers[term.resizeMarkers.length - 1]
+    if (last?.cols === cols && last.rows === rows) return
+    if (last?.offset === offset) {
+      last.cols = cols
+      last.rows = rows
+    } else {
+      term.resizeMarkers.push({ offset, cols, rows })
+    }
+    this.trimResizeMarkers(term)
+  }
+
+  private trimResizeMarkers(term: PTYProcess): void {
+    const start = term.bufferStartOffset
+    const markers = term.resizeMarkers
+    if (markers.length <= 1) return
+
+    let keepFrom = 0
+    for (let i = 0; i < markers.length; i++) {
+      if (markers[i].offset <= start) keepFrom = i
+      else break
+    }
+
+    if (keepFrom > 0) {
+      term.resizeMarkers = markers.slice(keepFrom)
+    }
+  }
+
+  private getReplayResizeMarkers(term: PTYProcess, startByte: number, endByte: number): ResizeMarker[] {
+    const markers = term.resizeMarkers
+    let initial = markers[0] ?? { offset: startByte, cols: 80, rows: 24 }
+
+    for (const marker of markers) {
+      if (marker.offset <= startByte) initial = marker
+      else break
+    }
+
+    return [
+      { ...initial, offset: startByte },
+      ...markers
+        .filter(marker => marker.offset > startByte && marker.offset <= endByte)
+        .map(marker => ({ ...marker })),
+    ]
+  }
+
+  private async replayPayloadWithResizeHistory(
+    terminal: HeadlessTerminal,
+    payload: string,
+    startByte: number,
+    markers: ResizeMarker[]
+  ): Promise<boolean> {
+    let timedOut = false
+    let cursor = 0
+
+    const writeSegment = async (segment: string): Promise<void> => {
+      if (!segment) return
+      await Promise.race([
+        new Promise<void>(resolve => terminal.write(segment, resolve)),
+        new Promise<void>(resolve => setTimeout(() => { timedOut = true; resolve() }, 5000)),
+      ])
+    }
+
+    for (const marker of markers.slice(1)) {
+      const nextCursor = Math.max(0, Math.min(payload.length, marker.offset - startByte))
+      await writeSegment(payload.slice(cursor, nextCursor))
+      terminal.resize(marker.cols, marker.rows)
+      cursor = nextCursor
+    }
+
+    await writeSegment(payload.slice(cursor))
+    return timedOut
   }
 
   /**
@@ -633,7 +742,7 @@ export class TerminalManager extends EventEmitter {
    *
    * Re-checks process existence after await to guard against PTY exit during serialize.
    */
-  async getSnapshot(id: string): Promise<{ data: string; cols: number; rows: number }> {
+  async getSnapshot(id: string): Promise<{ data: string; cols: number; rows: number; byteOffset?: number }> {
     const empty = { data: '', cols: 0, rows: 0 }
     const proc = this.terminals.get(id)
     if (!proc?.headlessTerm || !proc.serializeAddon) return empty
@@ -647,6 +756,7 @@ export class TerminalManager extends EventEmitter {
         data: current.serializeAddon.serialize({ scrollback: HEADLESS_SCROLLBACK_LINES }),
         cols: current.headlessTerm.cols,
         rows: current.headlessTerm.rows,
+        byteOffset: current.bytesWritten,
       }
     } catch (err) {
       console.warn('[terminal-manager] getSnapshot failed', { id, err: (err as Error).message })
@@ -683,10 +793,6 @@ export class TerminalManager extends EventEmitter {
     // outputBuffer keeps accumulating; replay+tail-flush below cover all bytes.
     proc.rebuildingHeadless = true
 
-    // Capture current dimensions before disposing
-    const cols = proc.headlessTerm.cols || 80
-    const rows = proc.headlessTerm.rows || 24
-
     // Dispose existing headless + addon to free memory before allocating new ones
     try { proc.serializeAddon?.dispose() } catch { /* ignore */ }
     try { proc.headlessTerm.dispose() } catch { /* ignore */ }
@@ -697,29 +803,34 @@ export class TerminalManager extends EventEmitter {
       // Guard: PTY may have exited during the dispose calls above
       if (proc.destroying || !this.terminals.has(id)) return
 
+      // C2: snapshot the replay payload + absolute end-byte synchronously, so the
+      // tail-flush window survives any trim that runs during the await below.
+      const replayStartByte = proc.bufferStartOffset
+      const replayPayload = proc.outputBuffer
+      const replayEndByte = proc.bytesWritten
+      const replayMarkers = this.getReplayResizeMarkers(proc, replayStartByte, replayEndByte)
+      const initialSize = replayMarkers[0] ?? { cols: 80, rows: 24 }
+
       const freshTerm = new HeadlessTerminalCtor({
-        cols,
-        rows,
+        cols: initialSize.cols,
+        rows: initialSize.rows,
         scrollback: HEADLESS_SCROLLBACK_LINES,
         allowProposedApi: true,
       })
       const freshAddon = new SerializeAddon()
       freshTerm.loadAddon(freshAddon as unknown as Parameters<typeof freshTerm.loadAddon>[0])
 
-      // C2: snapshot the replay payload + absolute end-byte synchronously, so the
-      // tail-flush window survives any trim that runs during the await below.
-      const replayPayload = proc.outputBuffer
-      const replayEndByte = proc.bytesWritten
-
       // Replay raw transcript at the current column width BEFORE attaching to proc.
       // Race with a 5 s timeout in case freshTerm is disposed mid-write and the
       // callback never fires; 5 s far exceeds the ~100-300 ms cost of 3 MB replay.
       let replayTimedOut = false
       if (replayPayload) {
-        await Promise.race([
-          new Promise<void>(resolve => freshTerm.write(replayPayload, resolve)),
-          new Promise<void>(resolve => setTimeout(() => { replayTimedOut = true; resolve() }, 5000)),
-        ])
+        replayTimedOut = await this.replayPayloadWithResizeHistory(
+          freshTerm,
+          replayPayload,
+          replayStartByte,
+          replayMarkers
+        )
         if (replayTimedOut) {
           console.warn('[terminal-manager] rebuildHeadless: replay write timed out at 5s', { id, payloadBytes: replayPayload.length })
         }
@@ -745,15 +856,27 @@ export class TerminalManager extends EventEmitter {
       const tail = tailStartIdx < proc.outputBuffer.length
         ? proc.outputBuffer.slice(tailStartIdx)
         : ''
+      const tailEndByte = proc.bytesWritten
+      const tailMarkers = this.getReplayResizeMarkers(proc, tailStartByte, tailEndByte)
+      const tailInitialSize = tailMarkers[0]
+      if (tailInitialSize) {
+        freshTerm.resize(tailInitialSize.cols, tailInitialSize.rows)
+      }
       if (tail) {
-        let tailTimedOut = false
-        await Promise.race([
-          new Promise<void>(resolve => freshTerm.write(tail, resolve)),
-          new Promise<void>(resolve => setTimeout(() => { tailTimedOut = true; resolve() }, 5000)),
-        ])
+        const tailTimedOut = await this.replayPayloadWithResizeHistory(
+          freshTerm,
+          tail,
+          tailStartByte,
+          tailMarkers
+        )
         if (tailTimedOut) {
           console.warn('[terminal-manager] rebuildHeadless: tail write timed out at 5s', { id, tailBytes: tail.length })
         }
+      }
+
+      const latestMarker = proc.resizeMarkers[proc.resizeMarkers.length - 1]
+      if (latestMarker) {
+        freshTerm.resize(latestMarker.cols, latestMarker.rows)
       }
     } catch (err) {
       // Non-fatal: headless rebuild failed — next getSnapshot will return stale/empty data,

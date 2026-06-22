@@ -6,6 +6,7 @@ export const IPC_CHANNELS = {
   TERMINAL_INPUT: 'terminal:input',
   TERMINAL_OUTPUT: 'terminal:output',
   TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_RESIZE_HEADLESS: 'terminal:resize-headless',
   TERMINAL_LIST: 'terminal:list',
   TERMINAL_INVOKE_CLAUDE: 'terminal:invoke-claude',
   TERMINAL_TITLE_CHANGE: 'terminal:title-change',

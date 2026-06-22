@@ -12,6 +12,9 @@ import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import { resumeAndFlush as resumeTerminalOutput } from '../utils/terminal-output-dispatcher'
+import { publishResizeEnd } from '../utils/terminal-resize-end-dispatcher'
+import { clearPtyMaxCols, sendPtyResize } from '../utils/pty-resize-coordinator'
+import { isClaudeLikeTerminal, isClaudeLikeTerminalId, useAppStore } from '../stores/app-store'
 import { useTerminalWebGL } from './use-terminal-webgl'
 import { useTerminalFontTheme } from './use-terminal-font-theme'
 import { useTerminalKeyboard } from './use-terminal-keyboard'
@@ -56,7 +59,7 @@ export function useTerminal({
   const scrollDisposableRef = useRef<IDisposable | null>(null)
   const viewportListenersRef = useRef<ViewportEventListener[] | null>(null)
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
+  const refreshFnRef = useRef<((showNotification?: boolean, preserveAltBuffer?: boolean) => void) | null>(null)
 
   // ── Sub-hooks ──────────────────────────────────────────────────────────────
   const { registerTerminalDebugHandle, unregisterTerminalDebugHandle } =
@@ -92,9 +95,29 @@ export function useTerminal({
     })
 
   const { performFit, cancelScheduledFit, fit } = useTerminalFit({
+    terminalId,
     terminalRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
-    // Part D: silent snapshot replay when cols change (reflow-safe scrollback setting gates this)
-    onColsChanged: () => refreshTerminal(false),
+    // When enabled, rebuild scrollback from raw PTY output after a settled cols
+    // change so old output is re-rendered at the visible width. Claude's
+    // inline normal-buffer UI appends full frames on resize/replay, so skip
+    // automatic rebuilds there.
+    onColsChanged: () => {
+      const t = terminalRef.current
+      if (t && isClaudeLikeTerminalId(terminalId) && t.buffer.active.type === 'normal') return
+      refreshTerminal(false, true)
+    },
+    onResizeEnd: (source, colsChange) => {
+      publishResizeEnd(terminalId, source)
+      const t = terminalRef.current
+      if (
+        t &&
+        t.buffer.active.type === 'normal' &&
+        colsChange.changed &&
+        isClaudeLikeTerminalId(terminalId)
+      ) {
+        refreshTerminal(false, true)
+      }
+    },
   })
   // Wire the ref so WebGL hook can call performFit
   performFitRef.current = performFit
@@ -105,7 +128,14 @@ export function useTerminal({
       if (disposedRef.current || !terminalRef.current || !fitAddonRef.current) return
       clearTextureAtlas()
       performFit()
-      window.electron.terminal.resize(terminalId, terminalRef.current.cols, terminalRef.current.rows)
+      const t = terminalRef.current
+      sendPtyResize({
+        terminalId,
+        xtermCols: t.cols,
+        rows: t.rows,
+        isAlt: t.buffer.active.type === 'alternate',
+        isClaudeMode: isClaudeLikeTerminalId(terminalId),
+      })
     },
     onWebGLReload: reloadWebGLForTheme,
   })
@@ -141,6 +171,23 @@ export function useTerminal({
     return () => { if (webglToggleTimerRef.current) clearTimeout(webglToggleTimerRef.current) }
   }, [isActive, isHidden, reconcileWebGL])
 
+  useEffect(() => {
+    const applyClaudeCursorReflowPolicy = () => {
+      const t = terminalRef.current
+      if (!t || disposedRef.current) return
+      t.options.reflowCursorLine = !isClaudeLikeTerminalId(terminalId)
+    }
+
+    applyClaudeCursorReflowPolicy()
+    const unsubscribe = useAppStore.subscribe((state, prevState) => {
+      const nextClaudeMode = isClaudeLikeTerminal(state.terminals.find(t => t.id === terminalId))
+      const prevClaudeMode = isClaudeLikeTerminal(prevState.terminals.find(t => t.id === terminalId))
+      if (nextClaudeMode === prevClaudeMode) return
+      applyClaudeCursorReflowPolicy()
+    })
+    return unsubscribe
+  }, [terminalId])
+
   // Keep refresh ref in sync so WebGL context-loss handler calls the latest refresh
   const refresh = refreshTerminal
   useEffect(() => { refreshFnRef.current = refresh }, [refresh])
@@ -155,6 +202,7 @@ export function useTerminal({
       // Drain any pause state set by initTerminal in case unmount races ahead
       // of snapshot-apply (prevents stuck pausedBuffer entry).
       resumeTerminalOutput(paneTerminalId)
+      clearPtyMaxCols(paneTerminalId)
       scrollMachine.reset()
       clearUserViewportInteraction()
       cancelScheduledFit()

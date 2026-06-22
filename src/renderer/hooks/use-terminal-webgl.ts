@@ -16,8 +16,12 @@ import type { RefObject } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
 import type { Terminal as XTerm } from '@xterm/xterm'
 import { useSettingsStore, useAppStore, useToastStore } from '../stores'
+import { isClaudeLikeTerminal, isClaudeLikeTerminalId } from '../stores/app-store'
 import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
 import { subscribeToSystemResume, unsubscribeFromSystemResume } from '../utils/terminal-lifecycle-dispatcher'
+import { subscribeToResizeEnd, unsubscribeFromResizeEnd } from '../utils/terminal-resize-end-dispatcher'
+import { triggerAltBufferRepaint, isResizeRepaintEnabled } from '../utils/trigger-alt-buffer-repaint'
+import { sendPtyResize } from '../utils/pty-resize-coordinator'
 
 // ── Per-terminal mutex ───────────────────────────────────────────────────────
 // Prevents concurrent snapshot replays (e.g. refresh + phase-4 auto-resync).
@@ -40,9 +44,7 @@ const REFRESH_DEBOUNCE = 100  // ms debounce for refreshTerminal()
 export function shouldUseWebGL(terminalId: string, _isActive?: boolean, _isHidden?: boolean): boolean {
   void _isActive; void _isHidden
   const { pendingSettings } = useSettingsStore.getState()
-  const isClaudeTerminal = useAppStore.getState().terminals.some(
-    terminal => terminal.id === terminalId && terminal.isClaudeMode
-  )
+  const isClaudeTerminal = isClaudeLikeTerminalId(terminalId)
 
   if (isClaudeTerminal && !pendingSettings.gpuRendererForClaudeTerminals) {
     return false
@@ -78,7 +80,7 @@ interface UseTerminalWebGLResult {
   /** Dispose + reload WebGL after theme change (cursor color requires full reload) */
   reloadWebGLForTheme: () => void
   /** Full display refresh via snapshot replay (debounced). showNotification defaults true. */
-  refreshTerminal: (showNotification?: boolean) => void
+  refreshTerminal: (showNotification?: boolean, preserveAltBuffer?: boolean) => void
 }
 
 interface SnapshotReplayParams {
@@ -92,6 +94,13 @@ interface SnapshotReplayParams {
   reconcileWebGL: () => void
   performFit: (restoreViewport?: boolean) => boolean
   silent: boolean
+  /**
+   * Phase 02: When true, skip the `\x1b[?1049l` alt-buffer-exit write at line 162.
+   * Use for resize-end replays where the user is still mid-vim/Claude-TUI session
+   * and should remain in alt-buffer. Default false (current behavior — system-resume
+   * replay kicks out of alt-buffer so user sees shell prompt after lid-wake).
+   */
+  preserveAltBuffer?: boolean
 }
 
 /**
@@ -117,6 +126,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     reconcileWebGL,
     performFit,
     silent,
+    preserveAltBuffer,
   } = params
 
   // H6: concurrent refresh + auto-resync guard
@@ -159,7 +169,11 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
 
     // B1: force exit alt-buffer before replaying snapshot — ensures shell prompt
     // is visible even if terminal was inside vim/less when refresh was triggered.
-    t.write('\x1b[?1049l', undefined)
+    // Phase 02: skip when caller passes preserveAltBuffer (resize-end replay path
+    // should keep user inside vim/Claude TUI).
+    if (!preserveAltBuffer) {
+      t.write('\x1b[?1049l', undefined)
+    }
 
     // Apply snapshot dimensions if valid
     if (snap.cols > 0 && snap.rows > 0) {
@@ -185,13 +199,19 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
 
     const fitOk = performFit(false)
 
-    // SIGWINCH — makes CLI (vim, tmux, etc.) repaint at current dimensions
-    try {
-      window.electron.terminal.resize(terminalId, t.cols, t.rows)
-    } catch { /* ignore — non-fatal */ }
+    // SIGWINCH — makes CLI (vim, tmux, etc.) repaint at current dimensions.
+    // Routed through the coordinator so this code path stays consistent with
+    // the regular onResize handler.
+    sendPtyResize({
+      terminalId,
+      xtermCols: t.cols,
+      rows: t.rows,
+      isAlt: t.buffer.active.type === 'alternate',
+      isClaudeMode: isClaudeLikeTerminalId(terminalId),
+    })
 
     // H4: drain buffered live chunks (arrival order preserved)
-    resumeAndFlush(terminalId)
+    resumeAndFlush(terminalId, { afterOffset: snap.byteOffset })
 
     if (!silent) {
       try {
@@ -330,8 +350,8 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
     const unsubscribe = useAppStore.subscribe((state, prevState) => {
       if (!terminalRef.current || disposedRef.current) return
 
-      const nextClaudeMode = state.terminals.find(t => t.id === terminalId)?.isClaudeMode ?? false
-      const prevClaudeMode = prevState.terminals.find(t => t.id === terminalId)?.isClaudeMode ?? false
+      const nextClaudeMode = isClaudeLikeTerminal(state.terminals.find(t => t.id === terminalId))
+      const prevClaudeMode = isClaudeLikeTerminal(prevState.terminals.find(t => t.id === terminalId))
 
       if (nextClaudeMode === prevClaudeMode) return
 
@@ -377,7 +397,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
    * Delegates to performSnapshotReplay() which holds the per-terminal mutex,
    * buffers live output during replay (H4), and handles disposal guard (M8).
    */
-  const refreshTerminal = useCallback((showNotification = true) => {
+  const refreshTerminal = useCallback((showNotification = true, preserveAltBuffer = false) => {
     if (disposedRef.current || !terminalRef.current) return
     if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
     refreshDebounceRef.current = setTimeout(() => {
@@ -393,6 +413,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         reconcileWebGL,
         performFit,
         silent: !showNotification,
+        preserveAltBuffer,
       })
     }, REFRESH_DEBOUNCE)
   }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, performFit, reconcileWebGL, terminalId, terminalRef, webglAddonRef])
@@ -415,6 +436,9 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         reconcileWebGL,
         performFit,
         silent: true,
+        // Phase 02: don't kick user out of alt-buffer on lid-wake (vim/Claude TUI).
+        // Refresh button path stays default (false) — explicit user action implies reset intent.
+        preserveAltBuffer: true,
       })
     })
     return () => unsubscribeFromSystemResume(terminalId)
@@ -429,6 +453,29 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
     reconcileWebGL,
     performFit,
   ])
+
+  // Phase 01: subscribe to resize-end events (drag-end, window-resize-end, split-end).
+  // Forces alt-screen TUIs to fully repaint after layout settles. Skips if a snapshot
+  // replay is already in flight (system-resume race) — that replay fires its own SIGWINCH.
+  useEffect(() => {
+    if (!isResizeRepaintEnabled()) return
+    subscribeToResizeEnd(terminalId, (source) => {
+      if (disposedRef.current || !terminalRef.current) return
+      if (snapshotReplayMutex.has(terminalId)) return  // R3: skip during replay
+
+      if (
+        source === 'split' &&
+        terminalRef.current.buffer.active.type === 'normal' &&
+        isClaudeLikeTerminalId(terminalId)
+      ) {
+        refreshTerminal(false, true)
+        return
+      }
+
+      triggerAltBufferRepaint(terminalId, terminalRef.current)
+    })
+    return () => unsubscribeFromResizeEnd(terminalId)
+  }, [terminalId, terminalRef, disposedRef, refreshTerminal])
 
   return { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal }
 }

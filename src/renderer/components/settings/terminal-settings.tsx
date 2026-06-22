@@ -400,10 +400,10 @@ export function TerminalSettings() {
             Auto-rebuild Scrollback on Resize
           </p>
           <p className="text-xs text-[var(--mc-text-muted)] mt-1">
-            The Refresh button always rebuilds scrollback from the raw PTY transcript
-            to eliminate blank gaps from xterm reflow. Enable this option to also do
-            it automatically every time the terminal width changes (split, resize,
-            project switch). Adds ~100-300ms CPU per resize.
+            The Refresh button rebuilds scrollback from the raw PTY transcript to
+            eliminate xterm reflow artifacts. Enable this option to also do it
+            automatically after non-drag terminal width changes, such as window
+            resize or project switch. Adds ~100-300ms CPU per rebuild.
           </p>
         </div>
         <div className="flex items-start gap-3 pt-1">
@@ -416,8 +416,8 @@ export function TerminalSettings() {
               Enable auto-rebuild on width change
             </p>
             <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-              Off by default. Useful for split-heavy workflows; causes a brief CPU
-              spike on each resize.
+              Off by default; pane divider drags resize live without replaying the
+              terminal buffer.
             </p>
           </div>
         </div>

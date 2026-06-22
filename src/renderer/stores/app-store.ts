@@ -13,6 +13,16 @@ export type ActiveView = 'terminals' | 'github'
 
 const DEFAULT_PROJECT_KEY = '__default_project__'
 
+export function isClaudeLikeTerminal(terminal: Pick<Terminal, 'isClaudeMode' | 'agentType' | 'claudeSessionId'> | undefined): boolean {
+  return !!terminal && (terminal.isClaudeMode || terminal.agentType === 'claude' || !!terminal.claudeSessionId)
+}
+
+export function isClaudeLikeTerminalId(terminalId: string): boolean {
+  return useAppStore.getState().terminals.some(
+    terminal => terminal.id === terminalId && isClaudeLikeTerminal(terminal)
+  )
+}
+
 function getTerminalProjectKey(projectId?: string): string {
   return projectId ?? DEFAULT_PROJECT_KEY
 }
@@ -164,21 +174,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateTerminalClaudeMode: (id, isClaudeMode) =>
     set((state) => ({
       terminals: state.terminals.map((t) =>
-        t.id === id ? { ...t, isClaudeMode } : t
+        t.id === id
+          ? {
+              ...t,
+              isClaudeMode,
+              agentType: isClaudeMode
+                ? (t.agentType ?? 'claude')
+                : t.agentType === 'claude' ? undefined : t.agentType,
+              claudeSessionId: isClaudeMode ? t.claudeSessionId : undefined,
+            }
+          : t
       )
     })),
 
   updateTerminalAgentType: (id, agentType) =>
     set((state) => ({
       terminals: state.terminals.map((t) =>
-        t.id === id ? { ...t, agentType } : t
+        t.id === id
+          ? { ...t, agentType, isClaudeMode: agentType === 'claude' ? true : t.isClaudeMode }
+          : t
       )
     })),
 
   updateTerminalClaudeSessionId: (id, claudeSessionId) =>
     set((state) => ({
       terminals: state.terminals.map((t) =>
-        t.id === id ? { ...t, claudeSessionId } : t
+        t.id === id
+          ? {
+              ...t,
+              claudeSessionId,
+              isClaudeMode: claudeSessionId ? true : t.isClaudeMode,
+              agentType: claudeSessionId ? (t.agentType ?? 'claude') : t.agentType,
+            }
+          : t
       )
     })),
 
