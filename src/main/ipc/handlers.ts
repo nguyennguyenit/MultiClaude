@@ -306,6 +306,15 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return projectStore.deleteProject(id)
   })
 
+  safeHandle(IPC_CHANNELS.PROJECT_REORDER, async (_, { sourceId, targetIndex }: { sourceId: string; targetIndex: number }) => {
+    const projects = projectStore.reorderProjects(sourceId, targetIndex)
+    return projects.map(p => ({
+      ...p,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+      updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt
+    }))
+  })
+
   safeHandle(IPC_CHANNELS.PROJECT_SET_ACTIVE, async (_, id: string | null) => {
     projectStore.setActiveProjectId(id)
     return true

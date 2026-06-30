@@ -73,6 +73,37 @@ describe('ProjectStore', () => {
       store.deleteProject(project.id)
       expect(store.getActiveProjectId()).toBeNull()
     })
+
+    it('reorders projects by id and target index', () => {
+      const first = store.addProject({ name: 'First', path: '/first' })
+      const second = store.addProject({ name: 'Second', path: '/second' })
+      const third = store.addProject({ name: 'Third', path: '/third' })
+
+      const reordered = store.reorderProjects(first.id, 2)
+
+      expect(reordered.map((project) => project.id)).toEqual([second.id, third.id, first.id])
+      expect(store.getProjects().map((project) => project.id)).toEqual([second.id, third.id, first.id])
+    })
+
+    it('preserves project metadata when reordering', () => {
+      const first = store.addProject({ name: 'First', path: '/first' })
+      const second = store.addProject({ name: 'Second', path: '/second' })
+      const originalFirst = store.getProject(first.id)
+
+      store.reorderProjects(first.id, 1)
+
+      expect(store.getProject(first.id)).toEqual(originalFirst)
+      expect(store.getProjects().map((project) => project.id)).toEqual([second.id, first.id])
+    })
+
+    it('ignores invalid reorder requests', () => {
+      const first = store.addProject({ name: 'First', path: '/first' })
+      const second = store.addProject({ name: 'Second', path: '/second' })
+
+      expect(store.reorderProjects('missing', 1).map((project) => project.id)).toEqual([first.id, second.id])
+      expect(store.reorderProjects(first.id, -1).map((project) => project.id)).toEqual([first.id, second.id])
+      expect(store.reorderProjects(first.id, 2).map((project) => project.id)).toEqual([first.id, second.id])
+    })
   })
 
   describe('Active Project', () => {

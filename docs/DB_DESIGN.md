@@ -208,6 +208,7 @@ VibeTerminal uses 5 curated themes (each includes UI colors + full ANSI 16-color
 | `addProject(project)` | `Omit<Project, 'id' \| 'createdAt' \| 'updatedAt'>` | `Project` | Create project |
 | `updateProject(id, updates)` | `id, Partial<Project>` | `Project \| null` | Update project |
 | `deleteProject(id)` | `id: string` | `boolean` | Delete project |
+| `reorderProjects(sourceId, targetIndex)` | `sourceId: string, targetIndex: number` | `Project[]` | Persist project tab order by reordering the `projects` array |
 | `getActiveProjectId()` | - | `string \| null` | Get active project |
 | `setActiveProjectId(id)` | `id: string \| null` | void | Set active project |
 | `saveSession(session)` | `AppSession` | void | Save session state |

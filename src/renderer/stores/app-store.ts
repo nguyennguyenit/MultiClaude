@@ -47,6 +47,7 @@ interface AppState {
   setProjects: (projects: Project[]) => void
   addProject: (project: Project) => void
   removeProject: (id: string) => void
+  reorderProjects: (sourceId: string, targetIndex: number) => void
   setActiveProject: (id: string | null) => void
   switchToProject: (projectId: string, terminalId?: string) => void
 
@@ -225,6 +226,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTerminalId: state.activeProjectId === id ? null : state.activeTerminalId,
         lastActiveTerminalByProjectId: nextLastActiveTerminalByProjectId
       }
+    }),
+
+  reorderProjects: (sourceId, targetIndex) =>
+    set((state) => {
+      const sourceIndex = state.projects.findIndex((project) => project.id === sourceId)
+      if (sourceIndex === -1) return state
+      if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= state.projects.length) return state
+      if (sourceIndex === targetIndex) return state
+
+      const projects = [...state.projects]
+      const [moved] = projects.splice(sourceIndex, 1)
+      projects.splice(targetIndex, 0, moved)
+      return { projects }
     }),
 
   setActiveProject: (id) => set({ activeProjectId: id }),

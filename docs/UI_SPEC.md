@@ -93,6 +93,7 @@ App
 | Action | Handler | Result |
 |--------|---------|--------|
 | Click "Add Project" | `handleAddProject` | Opens folder picker, creates project |
+| Drag project tab | `handleReorderProjects` | Persists project order; badges and Alt+1-9 follow new order |
 
 **Source**: `src/renderer/components/welcome-screen.tsx`
 

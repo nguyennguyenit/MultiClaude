@@ -115,6 +115,20 @@ export class ProjectStore {
     return true
   }
 
+  reorderProjects(sourceId: string, targetIndex: number): Project[] {
+    const projects = this.getProjects()
+    const sourceIndex = projects.findIndex(p => p.id === sourceId)
+    if (sourceIndex === -1) return projects
+    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= projects.length) return projects
+    if (sourceIndex === targetIndex) return projects
+
+    const reordered = [...projects]
+    const [moved] = reordered.splice(sourceIndex, 1)
+    reordered.splice(targetIndex, 0, moved)
+    this.store.set('projects', reordered)
+    return reordered
+  }
+
   getActiveProjectId(): string | null {
     return this.store.get('activeProjectId')
   }

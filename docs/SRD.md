@@ -51,7 +51,7 @@
 | ID | Requirement | Status | Screen |
 |----|-------------|--------|--------|
 | FR-02.1 | Add projects via folder picker | ✅ Complete | S-01 |
-| FR-02.2 | Project tab bar with Alt+1-9 switching | ✅ Complete | All |
+| FR-02.2 | Project tab bar with drag reorder and Alt+1-9 switching by current order | ✅ Complete | All |
 | FR-02.3 | Per-project terminal layout persistence | ✅ Complete | S-02 |
 | FR-02.4 | Project metadata storage | ✅ Complete | - |
 

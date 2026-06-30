@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
-import type { Terminal } from '@shared/types'
+import type { Project, Terminal } from '@shared/types'
 import { useAppStore } from './app-store'
 import { resetBufferedTerminalOutputForTests } from './terminal-output-buffer'
 
@@ -14,6 +14,16 @@ function makeTerminal(id = 'term-1', projectId = 'project-1'): Terminal {
     isClaudeMode: false,
     projectId,
     createdAt: new Date().toISOString()
+  }
+}
+
+function makeProject(id: string): Project {
+  return {
+    id,
+    name: id,
+    path: `/tmp/${id}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 }
 
@@ -120,5 +130,33 @@ describe('useAppStore terminal output buffering', () => {
     state.updateTerminalClaudeMode?.('term-1', true)
 
     expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
+  })
+
+  it('reorders projects by id without changing active project or terminal', () => {
+    const projects = [makeProject('project-a'), makeProject('project-b'), makeProject('project-c')]
+    useAppStore.getState().setProjects(projects)
+    useAppStore.getState().setActiveProject('project-a')
+    useAppStore.getState().addTerminal(makeTerminal('term-a', 'project-a'))
+
+    useAppStore.getState().reorderProjects('project-a', 2)
+
+    expect(useAppStore.getState().projects.map((project) => project.id)).toEqual([
+      'project-b',
+      'project-c',
+      'project-a'
+    ])
+    expect(useAppStore.getState().activeProjectId).toBe('project-a')
+    expect(useAppStore.getState().activeTerminalId).toBe('term-a')
+  })
+
+  it('ignores invalid project reorder requests', () => {
+    const projects = [makeProject('project-a'), makeProject('project-b')]
+    useAppStore.getState().setProjects(projects)
+
+    useAppStore.getState().reorderProjects('missing', 1)
+    useAppStore.getState().reorderProjects('project-a', -1)
+    useAppStore.getState().reorderProjects('project-a', 2)
+
+    expect(useAppStore.getState().projects).toEqual(projects)
   })
 })

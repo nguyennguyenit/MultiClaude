@@ -126,6 +126,16 @@ function App() {
     removeProject(id)
   }, [terminals, removeProject, removeTerminal])
 
+  const handleReorderProjects = useCallback(async (sourceId: string, targetIndex: number) => {
+    try {
+      const reorderedProjects = await window.electron.project.reorder(sourceId, targetIndex)
+      setProjects(reorderedProjects)
+    } catch (err) {
+      console.error('[handleReorderProjects] Failed to reorder projects:', err)
+      useToastStore.getState().addToast('Failed to reorder projects. Please try again.', 'error')
+    }
+  }, [setProjects])
+
   // Handler: Switch to project with folder validation
   const handleSelectProject = useCallback(async (id: string | null) => {
     if (!id) {
@@ -692,6 +702,7 @@ function App() {
         onSelectProject={handleSelectProject}
         onAddProject={handleAddProject}
         onDeleteProject={handleDeleteProject}
+        onReorderProjects={handleReorderProjects}
       />
       <UpdateBanner />
 

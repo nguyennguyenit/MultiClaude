@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
   PROJECT_CREATE: 'project:create',
   PROJECT_UPDATE: 'project:update',
   PROJECT_DELETE: 'project:delete',
+  PROJECT_REORDER: 'project:reorder',
   PROJECT_SET_ACTIVE: 'project:set-active',
   PROJECT_OPEN_FOLDER: 'project:open-folder',
   PROJECT_CHECK_FOLDER: 'project:check-folder',

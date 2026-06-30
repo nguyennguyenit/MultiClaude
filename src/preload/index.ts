@@ -65,6 +65,7 @@ export interface ElectronAPI {
     create: (project: { name: string; path: string }) => Promise<Project>
     update: (id: string, updates: Partial<Project>) => Promise<Project | null>
     delete: (id: string) => Promise<boolean>
+    reorder: (sourceId: string, targetIndex: number) => Promise<Project[]>
     setActive: (id: string | null) => Promise<boolean>
     openFolder: () => Promise<string | null>
     checkFolder: (cwd: string) => Promise<{ exists: boolean; isEmpty: boolean; isGitRepo: boolean; fileCount: number }>
@@ -292,6 +293,7 @@ const api: ElectronAPI = {
     create: (project) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_CREATE, project),
     update: (id, updates) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_UPDATE, { id, updates }),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_DELETE, id),
+    reorder: (sourceId, targetIndex) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_REORDER, { sourceId, targetIndex }),
     setActive: (id) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_SET_ACTIVE, id),
     openFolder: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_OPEN_FOLDER),
     checkFolder: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_CHECK_FOLDER, cwd)
