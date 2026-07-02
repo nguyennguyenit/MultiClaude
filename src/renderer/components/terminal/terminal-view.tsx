@@ -99,7 +99,7 @@ export const TerminalView = memo(function TerminalView({
   onRefreshReady,
   onOutput
 }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef } = useTerminal({
     terminalId,
     initialOutput,
     initialViewportY,
@@ -320,15 +320,30 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     if (isActive) {
       focus()
+      restoreActiveRender()
       // Delayed cursor restore to handle WebGL reload timing
       const timer = setTimeout(() => {
+        restoreActiveRender()
         showCursor()
       }, 100)
       return () => clearTimeout(timer)
     } else {
       blur()
     }
-  }, [isActive, focus, blur, showCursor])
+  }, [isActive, focus, blur, showCursor, restoreActiveRender])
+
+  useEffect(() => {
+    if (!isActive) return
+
+    const handleWindowFocus = () => {
+      focus()
+      restoreActiveRender()
+      showCursor()
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    return () => window.removeEventListener('focus', handleWindowFocus)
+  }, [isActive, focus, restoreActiveRender, showCursor])
 
   // Expose fit function to parent for resize handling
   useEffect(() => {

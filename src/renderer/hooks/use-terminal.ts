@@ -199,6 +199,12 @@ export function useTerminal({
     if (t.textarea) t.textarea.focus({ preventScroll: true })
     else t.focus()
   }, [])
+  const restoreActiveRender = useCallback(() => {
+    const t = terminalRef.current
+    if (!t || disposedRef.current) return
+    clearTextureAtlas()
+    if (!performFit(false)) refreshVisibleRows()
+  }, [clearTextureAtlas, performFit, refreshVisibleRows])
   const clear = useCallback(() => { terminalRef.current?.clear() }, [])
   const getViewportSnapshot = useCallback(() => {
     const t = terminalRef.current
@@ -207,7 +213,7 @@ export function useTerminal({
   }, [])
 
   return {
-    containerRef, initTerminal, write, fit, focus, blur, showCursor, clear,
+    containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, clear,
     scrollToTop, scrollToBottom, isAtBottom, hasScrollback,
     refresh, getViewportSnapshot, terminalRef
   }
