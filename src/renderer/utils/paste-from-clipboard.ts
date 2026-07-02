@@ -11,22 +11,24 @@ const BRACKETED_PASTE_END = '\x1b[201~'
 export async function pasteFromClipboard(
   terminalId: string,
   onBeforeWrite?: () => void,
-  term?: XTerm
+  term?: XTerm,
+  onTextWrite?: (payload: string) => void
 ): Promise<void> {
   try {
     const items = await navigator.clipboard.read()
-    const handled = await tryPasteImage(items, terminalId, onBeforeWrite)
+    const handled = await tryPasteImage(items, terminalId, onBeforeWrite, onTextWrite)
     if (handled) return
-    await tryPasteText(terminalId, term, onBeforeWrite)
+    await tryPasteText(terminalId, term, onBeforeWrite, onTextWrite)
   } catch {
-    await tryPasteText(terminalId, term, onBeforeWrite)
+    await tryPasteText(terminalId, term, onBeforeWrite, onTextWrite)
   }
 }
 
 async function tryPasteImage(
   items: readonly ClipboardItem[],
   terminalId: string,
-  onBeforeWrite?: () => void
+  onBeforeWrite?: () => void,
+  onTextWrite?: (payload: string) => void
 ): Promise<boolean> {
   for (const item of items) {
     const imageType = item.types.find((t) => t.startsWith('image/'))
@@ -38,7 +40,7 @@ async function tryPasteImage(
       if (!filePath) return true
 
       onBeforeWrite?.()
-      insertFilePathsIntoTerminal(terminalId, [filePath])
+      insertFilePathsIntoTerminal(terminalId, [filePath], onTextWrite)
       return true
     } catch (err) {
       console.error('Failed to process clipboard image:', err)
@@ -51,7 +53,8 @@ async function tryPasteImage(
 async function tryPasteText(
   terminalId: string,
   term: XTerm | undefined,
-  onBeforeWrite?: () => void
+  onBeforeWrite?: () => void,
+  onTextWrite?: (payload: string) => void
 ): Promise<void> {
   let text: string
   try {
@@ -75,6 +78,7 @@ async function tryPasteText(
   // bracketed mode — without wrapping there's no region to break out of
   // and stripping would corrupt legitimate literal escape sequences.
   const body = bracketed ? normalized.replace(/\x1b\[20[01]~/g, '') : normalized
+  onTextWrite?.(body)
 
   if (body.length <= PASTE_CHUNK_SIZE) {
     const payload = bracketed

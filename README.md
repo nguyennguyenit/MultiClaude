@@ -153,6 +153,7 @@ src/
 | Copy | Right-click → Copy |
 | Paste | Right-click → Paste or Ctrl+V |
 | Paste Image | Ctrl+V (clipboard image > temp file > insert path) |
+| Undo Draft Input | Ctrl+Z while composing (falls through to shell when no draft undo exists) |
 | Insert File Path | Drag-and-drop file |
 
 > **Note:** All shortcuts work regardless of terminal focus. On macOS, Cmd replaces Ctrl (Alt shortcuts unchanged).

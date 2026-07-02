@@ -22,7 +22,11 @@ import { formatPathForTerminal, joinPathsForClaudeTerminal } from './terminal-pa
  *      prompt at the cursor, right where the user dropped it. A single
  *      write still avoids the multi-paste drop-all-but-first bug the
  *      d888103 commit originally tried to fix. */
-export function insertFilePathsIntoTerminal(terminalId: string, paths: string[]): void {
+export function insertFilePathsIntoTerminal(
+  terminalId: string,
+  paths: string[],
+  onTextWrite?: (payload: string) => void
+): void {
   const isClaudeMode = useAppStore.getState().terminals.find((t) => t.id === terminalId)?.isClaudeMode ?? false
 
   if (isClaudeMode) {
@@ -33,7 +37,9 @@ export function insertFilePathsIntoTerminal(terminalId: string, paths: string[])
       }
     }
     if (paths.length > 0) {
-      window.electron.terminal.write(terminalId, joinPathsForClaudeTerminal(paths) + ' ')
+      const payload = joinPathsForClaudeTerminal(paths) + ' '
+      onTextWrite?.(payload)
+      window.electron.terminal.write(terminalId, payload)
     }
     return
   }
@@ -43,6 +49,8 @@ export function insertFilePathsIntoTerminal(terminalId: string, paths: string[])
     if (mediaType) {
       useImageStore.getState().addImage(terminalId, filePath, mediaType)
     }
-    window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
+    const payload = formatPathForTerminal(filePath) + ' '
+    onTextWrite?.(payload)
+    window.electron.terminal.write(terminalId, payload)
   }
 }

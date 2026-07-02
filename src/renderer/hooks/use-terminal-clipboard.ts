@@ -32,14 +32,14 @@ interface UseTerminalClipboardResult {
    * (right-click context menu). Copy on selection has been removed — users copy
    * via right-click menu or Cmd/Ctrl+C.
    */
-  attachClipboardListeners: (terminal: XTerm) => void
+  attachClipboardListeners: (terminal: XTerm, onTextWrite?: (payload: string) => void) => void
   /**
    * Build the Ctrl+V key handler for the given xterm instance. Pass the
    * result to terminal.attachCustomKeyEventHandler in initTerminal. The
    * terminal reference is forwarded to pasteFromClipboard so it can read
    * bracketedPasteMode and wrap the payload accordingly.
    */
-  getCtrlVHandler: (terminal: XTerm) => (e: KeyboardEvent) => boolean | undefined
+  getCtrlVHandler: (terminal: XTerm, onTextWrite?: (payload: string) => void) => (e: KeyboardEvent) => boolean | undefined
   /**
    * Ref that orchestrator fills with followLiveOutput() after useTerminalScroll is set up.
    * Clipboard paste operations call this to re-anchor scroll to live output.
@@ -54,7 +54,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
    */
   const followLiveOutputRef = useRef<(() => void) | null>(null)
 
-  const attachClipboardListeners = useCallback((terminal: XTerm) => {
+  const attachClipboardListeners = useCallback((terminal: XTerm, onTextWrite?: (payload: string) => void) => {
     terminal.element?.addEventListener('contextmenu', (e) => {
       if (!(e instanceof MouseEvent)) return
       e.preventDefault()
@@ -74,7 +74,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
         id: 'paste',
         label: 'Paste',
         onSelect: () => {
-          void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.(), terminal)
+          void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.(), terminal, onTextWrite)
         }
       })
 
@@ -95,7 +95,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
     })
   }, [terminalId])
 
-  const getCtrlVHandler = useCallback((terminal: XTerm) => {
+  const getCtrlVHandler = useCallback((terminal: XTerm, onTextWrite?: (payload: string) => void) => {
     return (e: KeyboardEvent): boolean | undefined => {
       // Intercept split hotkeys before shell scroll-by-line handling.
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
@@ -108,7 +108,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
       }
       if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return undefined
       e.preventDefault()
-      void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.(), terminal)
+      void pasteFromClipboard(terminalId, () => followLiveOutputRef.current?.(), terminal, onTextWrite)
       return false
     }
   }, [terminalId])

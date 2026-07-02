@@ -234,6 +234,7 @@ Each theme includes:
 | `Ctrl+W` | Close active terminal | Global |
 | `Ctrl+G` | Toggle GitHub panel | Global |
 | `Ctrl+V` | Paste or paste image as file path | Terminal focused |
+| `Ctrl+Z` | Undo unsubmitted draft input; falls through to shell when no draft undo exists | Terminal focused |
 | `Enter` | Save terminal title | During title edit |
 | `Escape` | Cancel terminal title edit | During title edit |
 

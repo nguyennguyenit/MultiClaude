@@ -34,6 +34,7 @@ import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
+import { createTerminalDraftUndo } from '../utils/terminal-draft-undo'
 import { getCurrentTerminalTheme } from './use-terminal-font-theme'
 
 const TERMINAL_INIT_DELAY = 50         // ms after terminal.open() before loading addons
@@ -73,8 +74,8 @@ interface UseTerminalInitParams {
   clearUserViewportInteraction: () => void
   markUserViewportInteraction: (durationMs: number) => void
   shouldSendEnhancedEnter: () => boolean
-  attachClipboardListeners: (terminal: XTerm) => void
-  getCtrlVHandler: (terminal: XTerm) => (e: KeyboardEvent) => boolean | undefined
+  attachClipboardListeners: (terminal: XTerm, onTextWrite?: (payload: string) => void) => void
+  getCtrlVHandler: (terminal: XTerm, onTextWrite?: (payload: string) => void) => (e: KeyboardEvent) => boolean | undefined
   followLiveOutput: () => void
   reconcileWebGL: () => void
   syncFontAfterLoad: () => void
@@ -287,8 +288,13 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     fitAddonRef.current = fitAddon
     registerTerminalDebugHandle()
 
+    const draftUndo = createTerminalDraftUndo()
+    const recordPastedText = (payload: string) => {
+      draftUndo.recordInput(payload, { grouped: true })
+    }
+
     // ── Clipboard listeners ──────────────────────────────────────────────────
-    attachClipboardListeners(terminal)
+    attachClipboardListeners(terminal, recordPastedText)
 
     // ── Deferred initialisation (WebGL, fit, restore) ────────────────────────
     setTimeout(() => {
@@ -358,12 +364,28 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     }, TERMINAL_INIT_DELAY)
 
     // ── Custom key event handler ─────────────────────────────────────────────
-    const ctrlVHandler = getCtrlVHandler(terminal)
+    const ctrlVHandler = getCtrlVHandler(terminal, recordPastedText)
 
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (shouldBypassXtermShortcut(e)) return false
 
       if (e.type !== 'keydown') return true
+
+      const activeBuffer = terminal.buffer.active as XTerm['buffer']['active'] & { type?: string }
+      if (
+        activeBuffer.type !== 'alternate' &&
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === 'z'
+      ) {
+        const undo = draftUndo.undo()
+        if (!undo) return true
+        e.preventDefault()
+        followLiveOutput()
+        window.electron.terminal.write(terminalId, undo.sequence)
+        return false
+      }
 
       if (e.key === 'Enter' && shouldSendEnhancedEnter()) {
         const sequence = getCsiUEnterSequence(e)
@@ -415,6 +437,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       }
 
       window.electron.terminal.write(terminalId, payload)
+      draftUndo.recordTerminalData(payload)
 
       // Enter or Ctrl+C clears the prompt — drop any mirrored attachments.
       if ((data === '\r' || data === '\x03') && useImageStore.getState().getImages(terminalId).length > 0) {

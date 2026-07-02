@@ -49,6 +49,21 @@ describe('pasteFromClipboard', () => {
     expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', 'hello')
   })
 
+  it('reports pasted text payload for draft undo grouping', async () => {
+    const onTextWrite = vi.fn()
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue('hello')
+      }
+    })
+
+    await pasteFromClipboard('t1', undefined, undefined, onTextWrite)
+    await flushMicrotasks()
+
+    expect(onTextWrite).toHaveBeenCalledWith('hello')
+  })
+
   it('saves image via electron.clipboard.saveImage when clipboard has image', async () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
     vi.stubGlobal('navigator', {
@@ -102,6 +117,25 @@ describe('pasteFromClipboard', () => {
     expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', '/tmp/pasted.png ')
     // Attachment strip still mirrors the image so the user can preview/remove.
     expect(useImageStore.getState().getImages('t1')).toHaveLength(1)
+  })
+
+  it('reports pasted image path payload for draft undo grouping', async () => {
+    const onTextWrite = vi.fn()
+    useAppStore.setState({
+      terminals: [{ id: 't1', pid: 1, projectId: 'p1', createdAt: new Date(), isClaudeMode: false } as never]
+    })
+    const blob = new Blob([new Uint8Array([1])], { type: 'image/png' })
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([makeClipboardItem('image/png', blob)]),
+        readText: vi.fn()
+      }
+    })
+
+    await pasteFromClipboard('t1', undefined, undefined, onTextWrite)
+    await flushMicrotasks()
+
+    expect(onTextWrite).toHaveBeenCalledWith('/tmp/pasted.png ')
   })
 
   it('falls back to readText when clipboard.read rejects', async () => {
