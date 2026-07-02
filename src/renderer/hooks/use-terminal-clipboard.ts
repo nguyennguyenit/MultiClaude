@@ -22,6 +22,53 @@ const ARROW_TO_SPLIT: Record<string, PaneSplitDirection> = {
   ArrowUp: 'up'
 }
 
+type SelectionAwareTerminal = Pick<XTerm, 'buffer' | 'getSelectionPosition'>
+
+const CK_COMMAND_PATTERN = /^\s*(?:\$?\s*)?\/?ck:[\w-]+(?:\s|$)/
+const LINE_BREAK_PATTERN = /\r?\n[ \t]*/g
+
+function joinCommandContinuation(accumulated: string, continuation: string): string {
+  const next = continuation.trimStart()
+  if (!next) return accumulated
+
+  const previousToken = accumulated.trimEnd().split(/\s+/).at(-1) ?? ''
+  const needsTokenSeparator = /^(?:\$?\/?ck:[\w-]+)$/.test(previousToken) || next.startsWith('-')
+  return `${accumulated.trimEnd()}${needsTokenSeparator ? ' ' : ''}${next}`
+}
+
+function normalizeCkCommandExampleSelection(selection: string): string {
+  if (!CK_COMMAND_PATTERN.test(selection) || !selection.includes('\n')) return selection
+
+  const lineBreaks = selection.match(/\r?\n/g) ?? []
+  const indentedContinuationBreaks = selection.match(/\r?\n[ \t]+(?=\S)/g) ?? []
+  if (lineBreaks.length !== indentedContinuationBreaks.length) return selection
+
+  const segments = selection.split(LINE_BREAK_PATTERN)
+  return segments.slice(1).reduce(joinCommandContinuation, segments[0])
+}
+
+function normalizeSoftWrappedSelection(selection: string, terminal: SelectionAwareTerminal): string {
+  if (!selection.includes('\n')) return selection
+
+  const range = terminal.getSelectionPosition()
+  if (!range) return selection
+
+  const lines = selection.split('\n')
+  if (lines.length < 2) return selection
+
+  let normalized = lines[0]
+  for (let i = 1; i < lines.length; i += 1) {
+    const nextLineIndex = range.start.y + i
+    const isSoftWrapped = terminal.buffer.active.getLine(nextLineIndex)?.isWrapped === true
+    normalized += isSoftWrapped ? lines[i] : `\n${lines[i]}`
+  }
+  return normalized
+}
+
+export function normalizeTerminalCopySelection(selection: string, terminal: SelectionAwareTerminal): string {
+  return normalizeCkCommandExampleSelection(normalizeSoftWrappedSelection(selection, terminal))
+}
+
 interface UseTerminalClipboardParams {
   terminalId: string
 }
@@ -65,7 +112,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
           id: 'copy',
           label: 'Copy',
           onSelect: () => {
-            void navigator.clipboard.writeText(selection)
+            void navigator.clipboard.writeText(normalizeTerminalCopySelection(selection, terminal))
           }
         })
         items.push({ id: 'sep-copy', label: '', separator: true })
