@@ -27,8 +27,8 @@ import type {
   WindowState,
   RemoteControlStatus,
   ContextSnapshot,
-  TerminalOutputPayload,
-  TerminalSnapshotPayload,
+  TerminalOutputChunk,
+  TerminalSnapshot,
   TerminalPlatformDiagnostic,
   AgentEvent,
   AgentProvider,
@@ -52,11 +52,11 @@ export interface ElectronAPI {
     getNativeCapability: () => Promise<import('@main/terminal/native-terminal-capability').NativeTerminalCapability>
     loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
     savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
-    getSnapshot: (terminalId: string) => Promise<TerminalSnapshotPayload>
+    getSnapshot: (terminalId: string) => Promise<TerminalSnapshot>
     getDiagnostics: () => Promise<TerminalPlatformDiagnostic[]>
     /** Diagnostic-only raw-tail rebuild. Normal resize and refresh never call this. */
     rebuildHeadless: (terminalId: string) => Promise<void>
-    onOutput: (callback: (data: TerminalOutputPayload) => void) => () => void
+    onOutput: (callback: (data: TerminalOutputChunk) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
@@ -280,7 +280,7 @@ const api: ElectronAPI = {
     savePaneTree: (projectId, tree) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, { projectId, tree }),
     getSnapshot: (terminalId) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, terminalId) as
-        Promise<TerminalSnapshotPayload>,
+        Promise<TerminalSnapshot>,
     getDiagnostics: () =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_DIAGNOSTICS) as
         Promise<TerminalPlatformDiagnostic[]>,

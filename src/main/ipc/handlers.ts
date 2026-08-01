@@ -17,10 +17,6 @@ import { detectWsl } from '../terminal/wsl-detector'
 import { getNativeTerminalCapability } from '../terminal/native-terminal-capability'
 import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
 import { readMediaDataUrl } from './media-read-data-url-handler'
-import {
-  toTerminalOutputPayload,
-  toTerminalSnapshotPayload,
-} from './terminal-stream-compat'
 
 interface Managers {
   terminalManager: TerminalManager
@@ -78,9 +74,6 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     notificationManager,
     agentRegistry,
   } = managers
-  // Startup-only beta escape hatch. Keep until real beta soak and rollback
-  // evidence satisfy the Phase 7 removal gate.
-  const legacyTerminalStream = app.commandLine.hasSwitch('legacy-terminal-stream')
   const emitWindowState = () => {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.WINDOW_STATE_CHANGED, getWindowState(window))
@@ -107,10 +100,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   terminalManager.on('output', (chunk: import('@shared/types').TerminalOutputChunk) => {
     const { terminalId, data } = chunk
     if (!window.isDestroyed()) {
-      window.webContents.send(
-        IPC_CHANNELS.TERMINAL_OUTPUT,
-        toTerminalOutputPayload(chunk, legacyTerminalStream)
-      )
+      window.webContents.send(IPC_CHANNELS.TERMINAL_OUTPUT, chunk)
       // Detect git branch changes (from git checkout, git switch commands)
       if (GIT_BRANCH_CHANGE_PATTERN.test(data)) {
         const terminal = terminalManager.get(terminalId)
@@ -318,7 +308,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   safeHandle(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, async (_e, terminalId: string) => {
     const snapshot = await terminalManager.getSnapshot(terminalId)
-    return toTerminalSnapshotPayload(snapshot, legacyTerminalStream)
+    return snapshot
   })
 
   safeHandle(IPC_CHANNELS.TERMINAL_GET_DIAGNOSTICS, () => {
@@ -332,8 +322,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
         provider: binding?.session.provider ?? diagnostic.provider,
         engine: settings.terminalEngine,
         fallbackReason: diagnostic.fallbackReason
-          ?? (requestedNativeFallback ? capability.reason : null)
-          ?? (legacyTerminalStream ? 'Legacy terminal stream rollback is active.' : null),
+          ?? (requestedNativeFallback ? capability.reason : null),
       }
     }) satisfies import('@shared/types').TerminalPlatformDiagnostic[]
   })

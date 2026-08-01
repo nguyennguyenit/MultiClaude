@@ -160,7 +160,14 @@ Restore behavior:
 
 `PTYProcess.outputBuffer` is a bounded local restore/diagnostic tail. A separate bounded `notificationTail` serves explicitly enabled Telegram output and smart-summary commands. Neither is the normal UI source of truth; canonical refresh uses the headless snapshot, while renderer live buffering is the failure path when that snapshot is unavailable.
 
-The startup-only `--legacy-terminal-stream` switch remains as the beta rollback escape hatch until real beta soak satisfies the removal gate. `terminal:rebuild-headless` is retained only for manual diagnostics; normal resize, refresh, and resume paths use the continuously maintained canonical mirror and do not invoke a rebuild.
+The startup-only legacy stream switch and its unsequenced IPC payloads were
+removed after the hosted `3.6.0-beta.1` artifact completed the required
+30-minute nine-pane correctness and bounded-memory soak. Rollback is now at the
+release-artifact level: reinstall the `3.6.0-beta.1` artifact to recover the
+last build that contains the runtime escape hatch. `terminal:rebuild-headless`
+is retained only for manual diagnostics; normal resize, refresh, and resume
+paths use the continuously maintained canonical mirror and do not invoke a
+rebuild.
 
 ### State Management
 

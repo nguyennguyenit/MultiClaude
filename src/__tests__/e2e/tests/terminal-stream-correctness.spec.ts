@@ -39,17 +39,16 @@ test.describe('Terminal Stream Correctness', () => {
           await new Promise(resolve => setTimeout(resolve, 25))
         }
         const snapshot = await api.getSnapshot(terminal.id)
-        const canonical = 'ansi' in snapshot ? snapshot : null
         const deliveredText = chunks.map(chunk => chunk.data).join('')
         const occurrences = (text: string, value: string) => text.split(value).length - 1
-        const canonicalText = canonical?.ansi ?? ''
+        const canonicalText = snapshot.ansi
         return {
           markerSeen: chunks.some(chunk => chunk.data.includes(marker)),
           afterResizeMarkerSeen: chunks.some(chunk => chunk.data.includes(afterResizeMarker)),
           epochs: [...new Set(chunks.map(chunk => chunk.streamEpoch))],
           sequences: chunks.map(chunk => chunk.sequence),
-          snapshotHasMarker: canonical?.ansi.includes(marker) ?? false,
-          watermark: canonical?.watermark ?? 0,
+          snapshotHasMarker: snapshot.ansi.includes(marker),
+          watermark: snapshot.watermark,
           markerSequence: chunks.find(chunk => chunk.data.includes(marker))?.sequence ?? 0,
           afterResizeSequence: chunks.find(chunk => chunk.data.includes(afterResizeMarker))?.sequence ?? 0,
           deliveredMarkerCount: occurrences(deliveredText, marker),

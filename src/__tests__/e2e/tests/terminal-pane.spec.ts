@@ -151,8 +151,7 @@ test.describe('Terminal Pane Interactions', () => {
       async (terminalId) => globalThis.window.electron.terminal.getSnapshot(terminalId),
       terminalIds.activeTerminalId!
     )
-    const snapshotData = 'ansi' in snapshot ? snapshot.ansi : snapshot.data
-    expect(snapshotData).not.toContain(pastedMarker)
+    expect(snapshot.ansi).not.toContain(pastedMarker)
 
     await window.keyboard.press('Escape').catch(() => {})
   })

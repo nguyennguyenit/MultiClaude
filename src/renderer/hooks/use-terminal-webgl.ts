@@ -161,18 +161,6 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     // Canonical state is already maintained in the ordered main-process mirror.
     // Refresh never replays the persisted raw tail.
     const snap = await window.electron.terminal.getSnapshot(terminalId)
-    const snapshotData = 'ansi' in snap ? snap.ansi : snap.data
-    const normalizedSnapshot = 'ansi' in snap
-      ? snap
-      : {
-          terminalId,
-          streamEpoch: 'legacy',
-          watermark: 0,
-          ansi: snap.data,
-          cols: snap.cols,
-          rows: snap.rows,
-          buffer: 'normal' as const,
-        }
 
     // M8: terminal destroyed while IPC was in flight
     if (disposedRef.current || !terminalRef.current) {
@@ -188,11 +176,11 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     webglAddonRef.current = null
 
     if (surfaceRef?.current) {
-      await surfaceRef.current.replaceSnapshot(normalizedSnapshot)
+      await surfaceRef.current.replaceSnapshot(snap)
     } else {
       t.reset()
       if (snap.cols > 0 && snap.rows > 0) t.resize(snap.cols, snap.rows)
-      if (snapshotData) await new Promise<void>(resolve => t.write(snapshotData, resolve))
+      if (snap.ansi) await new Promise<void>(resolve => t.write(snap.ansi, resolve))
     }
 
     // Reload WebGL after reset/write cycle
@@ -212,7 +200,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
       window.electron.terminal.resize(terminalId, t.cols, t.rows)
     } catch { /* ignore — non-fatal */ }
 
-    resumeFromSnapshot(normalizedSnapshot)
+    resumeFromSnapshot(snap)
 
     if (!silent) {
       try {

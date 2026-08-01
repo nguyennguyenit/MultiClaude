@@ -8,6 +8,23 @@ import {
   resumeFromSnapshot,
 } from './terminal-output-dispatcher'
 
+const chunk = (terminalId: string, sequence: number, data: string) => ({
+  terminalId,
+  streamEpoch: `epoch-${terminalId}`,
+  sequence,
+  data,
+})
+
+const emptySnapshot = (terminalId: string, watermark = 0) => ({
+  terminalId,
+  streamEpoch: `epoch-${terminalId}`,
+  watermark,
+  ansi: '',
+  cols: 80,
+  rows: 24,
+  buffer: 'normal' as const,
+})
+
 describe('terminal-output-dispatcher', () => {
   beforeEach(() => {
     resetTerminalOutputDispatcherForTests()
@@ -19,9 +36,11 @@ describe('terminal-output-dispatcher', () => {
 
     registerTerminalOutputHandler('term-1', term1Handler)
     registerTerminalOutputHandler('term-2', term2Handler)
+    resumeFromSnapshot(emptySnapshot('term-1'))
+    resumeFromSnapshot(emptySnapshot('term-2'))
 
     const unsubscribe = attachTerminalOutputDispatcher((callback) => {
-      callback({ terminalId: 'term-2', data: 'hello' })
+      callback(chunk('term-2', 1, 'hello'))
       return vi.fn()
     })
 
@@ -35,7 +54,7 @@ describe('terminal-output-dispatcher', () => {
   it('buffers output until a handler is registered and hydration completes', () => {
     const handler = vi.fn()
     const unsubscribe = attachTerminalOutputDispatcher((callback) => {
-      expect(() => callback({ terminalId: 'missing', data: 'hello' })).not.toThrow()
+      expect(() => callback(chunk('missing', 1, 'hello'))).not.toThrow()
       return vi.fn()
     })
 
@@ -48,17 +67,19 @@ describe('terminal-output-dispatcher', () => {
   it('preserves output that arrives during a handler remount gap', () => {
     const received: string[] = []
     const cleanup = registerTerminalOutputHandler('term-1', data => received.push(data))
-    let emit!: (payload: { terminalId: string; data: string }) => void
+    resumeFromSnapshot(emptySnapshot('term-1'))
+    let emit!: (payload: ReturnType<typeof chunk>) => void
     const unsubscribe = attachTerminalOutputDispatcher((callback) => {
       emit = callback
       return vi.fn()
     })
 
-    emit({ terminalId: 'term-1', data: 'before-gap' })
+    emit(chunk('term-1', 1, 'before-gap'))
     cleanup()
-    emit({ terminalId: 'term-1', data: 'during-gap' })
+    emit(chunk('term-1', 2, 'during-gap'))
     registerTerminalOutputHandler('term-1', data => received.push(data))
-    emit({ terminalId: 'term-1', data: 'after-gap' })
+    resumeFromSnapshot(emptySnapshot('term-1', 1))
+    emit(chunk('term-1', 3, 'after-gap'))
 
     expect(received).toEqual(['before-gap', 'during-gap', 'after-gap'])
     unsubscribe()
@@ -71,10 +92,12 @@ describe('terminal-output-dispatcher', () => {
     const cleanup1 = registerTerminalOutputHandler('term-1', term1Handler)
     registerTerminalOutputHandler('term-2', term2Handler)
     cleanup1()
+    resumeFromSnapshot(emptySnapshot('term-1'))
+    resumeFromSnapshot(emptySnapshot('term-2'))
 
     const unsubscribe = attachTerminalOutputDispatcher((callback) => {
-      callback({ terminalId: 'term-1', data: 'first' })
-      callback({ terminalId: 'term-2', data: 'second' })
+      callback(chunk('term-1', 1, 'first'))
+      callback(chunk('term-2', 1, 'second'))
       return vi.fn()
     })
 
@@ -92,9 +115,10 @@ describe('terminal-output-dispatcher', () => {
     const cleanupOlder = registerTerminalOutputHandler('term-1', olderHandler)
     registerTerminalOutputHandler('term-1', newerHandler)
     cleanupOlder()
+    resumeFromSnapshot(emptySnapshot('term-1'))
 
     const unsubscribe = attachTerminalOutputDispatcher((callback) => {
-      callback({ terminalId: 'term-1', data: 'hello' })
+      callback(chunk('term-1', 1, 'hello'))
       return vi.fn()
     })
 
@@ -122,8 +146,8 @@ describe('terminal-output-dispatcher', () => {
       pauseAndBuffer('term-1')
 
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'term-1', data: 'chunk1' })
-        callback({ terminalId: 'term-1', data: 'chunk2' })
+        callback(chunk('term-1', 1, 'chunk1'))
+        callback(chunk('term-1', 2, 'chunk2'))
         return vi.fn()
       })
 
@@ -136,9 +160,9 @@ describe('terminal-output-dispatcher', () => {
       pauseAndBuffer('term-1')
 
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'term-1', data: 'first' })
-        callback({ terminalId: 'term-1', data: 'second' })
-        callback({ terminalId: 'term-1', data: 'third' })
+        callback(chunk('term-1', 1, 'first'))
+        callback(chunk('term-1', 2, 'second'))
+        callback(chunk('term-1', 3, 'third'))
         return vi.fn()
       })
 
@@ -201,7 +225,7 @@ describe('terminal-output-dispatcher', () => {
 
       // Should now dispatch directly
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'term-1', data: 'live' })
+        callback(chunk('term-1', 1, 'live'))
         return vi.fn()
       })
 
@@ -215,10 +239,11 @@ describe('terminal-output-dispatcher', () => {
       registerTerminalOutputHandler('term-1', handler1)
       registerTerminalOutputHandler('term-2', handler2)
       pauseAndBuffer('term-1')
+      resumeAndFlush('term-2')
 
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'term-1', data: 'buffered' })
-        callback({ terminalId: 'term-2', data: 'live' })
+        callback(chunk('term-1', 1, 'buffered'))
+        callback(chunk('term-2', 1, 'live'))
         return vi.fn()
       })
 
@@ -230,7 +255,7 @@ describe('terminal-output-dispatcher', () => {
     it('resumeAndFlush with no handler retains the buffer for later registration', () => {
       pauseAndBuffer('no-handler')
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'no-handler', data: 'dropped' })
+        callback(chunk('no-handler', 1, 'dropped'))
         return vi.fn()
       })
       expect(() => resumeAndFlush('no-handler')).not.toThrow()
@@ -245,14 +270,14 @@ describe('terminal-output-dispatcher', () => {
       pauseAndBuffer('term-1')
 
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'term-1', data: 'first' })
+        callback(chunk('term-1', 1, 'first'))
         return vi.fn()
       })
 
       pauseAndBuffer('term-1') // second call — must not reset buffer
 
       attachTerminalOutputDispatcher((callback) => {
-        callback({ terminalId: 'term-1', data: 'second' })
+        callback(chunk('term-1', 2, 'second'))
         return vi.fn()
       })
 

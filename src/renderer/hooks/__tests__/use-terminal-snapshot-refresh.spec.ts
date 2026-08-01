@@ -42,7 +42,7 @@ import {
   SNAPSHOT_DUPLICATION_CASE,
   TERMINAL_STREAM_CASES,
 } from '../../../main/terminal/__tests__/fixtures/terminal-stream-cases'
-import type { TerminalOutputChunk } from '@shared/types'
+import type { TerminalOutputChunk, TerminalSnapshot } from '@shared/types'
 
 // ── xterm mock helpers ──────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ describe('refreshTerminal with snapshot replay', () => {
       await reference.write(crossesSnapshotBarrier)
       const snapshot = reference.state()
 
-      let emitOutput!: (payload: TerminalOutputChunk | { terminalId: string; data: string }) => void
+      let emitOutput!: (payload: TerminalOutputChunk) => void
       const detach = attachTerminalOutputDispatcher(callback => {
         emitOutput = callback
         return vi.fn()
@@ -293,7 +293,10 @@ describe('refreshTerminal with snapshot replay', () => {
   })
 
   it('calls getSnapshot, resets xterm, writes snapshot data', async () => {
-    const mockSnap = { data: '\x1b[2Jhello', cols: 80, rows: 24 }
+    const mockSnap = {
+      terminalId: 'test-term', streamEpoch: 'epoch-1', watermark: 0,
+      ansi: '\x1b[2Jhello', cols: 80, rows: 24, buffer: 'normal' as const,
+    }
     const electronMock = stubElectronTerminal({
       getSnapshot: vi.fn().mockResolvedValue(mockSnap),
     })
@@ -318,7 +321,10 @@ describe('refreshTerminal with snapshot replay', () => {
   })
 
   it('does not force an alternate-buffer snapshot into the normal buffer', async () => {
-    const mockSnap = { data: 'snap-content', cols: 80, rows: 24 }
+    const mockSnap = {
+      terminalId: 'test-term', streamEpoch: 'epoch-1', watermark: 0,
+      ansi: 'snap-content', cols: 80, rows: 24, buffer: 'normal' as const,
+    }
     stubElectronTerminal({ getSnapshot: vi.fn().mockResolvedValue(mockSnap) })
 
     const { refreshTerminal } = renderWebGL()
@@ -412,7 +418,10 @@ describe('refreshTerminal with snapshot replay', () => {
 
   it('handles empty snapshot gracefully — no reset crash, still SIGWINCH', async () => {
     const electronMock = stubElectronTerminal({
-      getSnapshot: vi.fn().mockResolvedValue({ data: '', cols: 0, rows: 0 }),
+      getSnapshot: vi.fn().mockResolvedValue({
+        terminalId: 'test-term', streamEpoch: 'epoch-1', watermark: 0,
+        ansi: '', cols: 0, rows: 0, buffer: 'normal',
+      }),
     })
 
     const { refreshTerminal } = renderWebGL()
@@ -434,8 +443,11 @@ describe('refreshTerminal with snapshot replay', () => {
 
   it('mutex: rapid double-trigger → only one replay executes', async () => {
     const getSnapshotMock = vi.fn().mockImplementation(
-      () => new Promise<{ data: string; cols: number; rows: number }>(resolve =>
-        setTimeout(() => resolve({ data: 'snap', cols: 80, rows: 24 }), 50)
+      () => new Promise<TerminalSnapshot>(resolve =>
+        setTimeout(() => resolve({
+          terminalId: 'test-term', streamEpoch: 'epoch-1', watermark: 0,
+          ansi: 'snap', cols: 80, rows: 24, buffer: 'normal',
+        }), 50)
       )
     )
     stubElectronTerminal({ getSnapshot: getSnapshotMock })
@@ -467,7 +479,10 @@ describe('refreshTerminal with snapshot replay', () => {
     const getSnapshotMock = vi.fn().mockImplementation(async () => {
       // Simulate terminal being disposed while getSnapshot is in flight
       refs.disposedRef.current = true
-      return { data: 'snap', cols: 80, rows: 24 }
+      return {
+        terminalId: 'test-term', streamEpoch: 'epoch-1', watermark: 0,
+        ansi: 'snap', cols: 80, rows: 24, buffer: 'normal',
+      }
     })
     stubElectronTerminal({ getSnapshot: getSnapshotMock })
 

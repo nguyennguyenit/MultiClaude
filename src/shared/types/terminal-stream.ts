@@ -5,11 +5,6 @@ export interface TerminalOutputChunk {
   data: string
 }
 
-export interface LegacyTerminalOutputChunk {
-  terminalId: string
-  data: string
-}
-
 export interface TerminalSnapshot {
   terminalId: string
   streamEpoch: string
@@ -19,15 +14,6 @@ export interface TerminalSnapshot {
   rows: number
   buffer: 'normal' | 'alternate'
 }
-
-export interface LegacyTerminalSnapshot {
-  data: string
-  cols: number
-  rows: number
-}
-
-export type TerminalOutputPayload = TerminalOutputChunk | LegacyTerminalOutputChunk
-export type TerminalSnapshotPayload = TerminalSnapshot | LegacyTerminalSnapshot
 
 export type TerminalStreamRecoveryReason = 'gap' | 'overflow' | 'epoch'
 

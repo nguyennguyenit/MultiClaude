@@ -342,26 +342,14 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         try {
           const snap = await window.electron.terminal.getSnapshot(terminalId)
           if (disposedRef.current || !terminalRef.current) return
-          const snapshotData = 'ansi' in snap ? snap.ansi : snap.data
-          const normalizedSnapshot = 'ansi' in snap
-            ? snap
-            : {
-                terminalId,
-                streamEpoch: 'legacy',
-                watermark: 0,
-                ansi: snap.data,
-                cols: snap.cols,
-                rows: snap.rows,
-                buffer: 'normal' as const,
-              }
-          const hydrationData = snapshotData || initialOutputRef.current || ''
+          const hydrationData = snap.ansi || initialOutputRef.current || ''
           if (hydrationData) {
             await (surfaceRef.current?.write(hydrationData)
               ?? new Promise<void>(resolve => terminal.write(hydrationData, resolve)))
           }
           if (disposedRef.current || !terminalRef.current) return
           requestAnimationFrame(restoreInitialViewport)
-          resumeFromSnapshot(normalizedSnapshot)
+          resumeFromSnapshot(snap)
         } catch {
           if (disposedRef.current || !terminalRef.current) return
           const fallback = initialOutputRef.current

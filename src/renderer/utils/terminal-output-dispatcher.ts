@@ -1,6 +1,5 @@
 import type {
   TerminalOutputChunk,
-  TerminalOutputPayload,
   TerminalSnapshot,
   TerminalStreamRecoveryReason,
 } from '@shared/types'
@@ -27,7 +26,6 @@ interface StreamState {
 }
 
 const states = new Map<string, StreamState>()
-const legacySequences = new Map<string, number>()
 
 function getState(id: string): StreamState {
   let state = states.get(id)
@@ -157,8 +155,8 @@ export function resumeFromSnapshot(snapshot: TerminalSnapshot): void {
 }
 
 /**
- * Compatibility adapter for legacy initial-output paths without a watermark.
- * New snapshot paths must call resumeFromSnapshot().
+ * Resume sequenced live delivery when snapshot hydration is unavailable.
+ * Normal snapshot paths must call resumeFromSnapshot().
  */
 export function resumeAndFlush(id: string): void {
   const state = states.get(id)
@@ -170,6 +168,7 @@ export function resumeAndFlush(id: string): void {
   }
   state.status = 'live'
   state.explicitlyPaused = false
+  if (!state.handler) return
   flushPending(id, state)
 }
 
@@ -181,10 +180,6 @@ export function registerTerminalOutputHandler(
   const state = getState(id)
   state.handler = handler
   state.recoveryHandler = recoveryHandler
-  if (state.status === 'gap' && state.streamEpoch === 'legacy') {
-    state.status = 'live'
-    flushPending(id, state)
-  }
   if (state.status === 'live') flushPending(id, state)
   if (state.status === 'gap') requestRecovery(id, state, 'gap')
   if (state.status === 'overflowed') requestRecovery(id, state, 'overflow')
@@ -200,30 +195,11 @@ export function registerTerminalOutputHandler(
 
 export function attachTerminalOutputDispatcher(
   subscribe: (
-    callback: (payload: TerminalOutputPayload) => void
+    callback: (payload: TerminalOutputChunk) => void
   ) => () => void
 ): () => void {
-  return subscribe((payload) => {
-    const state = getState(payload.terminalId)
-    if (
-      !('sequence' in payload) &&
-      state.status === 'hydrating' &&
-      !state.explicitlyPaused &&
-      state.handler &&
-      state.pending.length === 0
-    ) {
-      state.streamEpoch = 'legacy'
-      state.lastAppliedSequence = legacySequences.get(payload.terminalId) ?? 0
-      state.status = 'live'
-    }
-    const chunk: TerminalOutputChunk = 'sequence' in payload
-      ? payload
-      : {
-          ...payload,
-          streamEpoch: 'legacy',
-          sequence: (legacySequences.get(payload.terminalId) ?? 0) + 1,
-        }
-    legacySequences.set(chunk.terminalId, chunk.sequence)
+  return subscribe((chunk) => {
+    const state = getState(chunk.terminalId)
     applyChunk(chunk.terminalId, state, chunk)
   })
 }
@@ -238,11 +214,9 @@ export function disposeTerminalOutputState(id: string): void {
   state.handler = undefined
   state.recoveryHandler = undefined
   states.delete(id)
-  legacySequences.delete(id)
 }
 
 export function resetTerminalOutputDispatcherForTests(): void {
   for (const state of states.values()) clearRecovery(state)
   states.clear()
-  legacySequences.clear()
 }
