@@ -38,6 +38,26 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
+      - name: Validate macOS release credentials
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            joined="$(IFS=', '; echo "${missing[*]}")"
+            echo "::error::Missing required macOS release credentials: $joined"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
@@ -101,7 +121,7 @@ jobs:
           if [ -z "$APPIMAGE_PATH" ]; then echo "AppImage artifact not found"; exit 1; fi
           chmod +x "$APPIMAGE_PATH"
           set +e
-          timeout 15s xvfb-run -a "$APPIMAGE_PATH" --no-sandbox
+          timeout 15s xvfb-run -a "$APPIMAGE_PATH" --appimage-extract-and-run --no-sandbox
           STATUS=$?
           set -e
           if [ "$STATUS" -ne 124 ]; then echo "AppImage exited before smoke window (status $STATUS)"; exit "$STATUS"; fi
