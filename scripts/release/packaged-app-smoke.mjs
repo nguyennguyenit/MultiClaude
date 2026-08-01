@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { _electron as electron } from '@playwright/test'
-import { resolvePackagedExecutable } from './packaged-app-smoke-lib.mjs'
+import { packagedLaunchArgs, resolvePackagedExecutable } from './packaged-app-smoke-lib.mjs'
 
 const executableArgument = process.argv.find(argument => argument.startsWith('--executable='))
 const executablePath = executableArgument
@@ -16,7 +16,7 @@ let electronApp
 try {
   electronApp = await electron.launch({
     executablePath,
-    args: [`--user-data-dir=${profilePath}`],
+    args: packagedLaunchArgs(process.platform, profilePath),
     timeout: 60_000,
   })
   const window = await electronApp.firstWindow({ timeout: 30_000 })

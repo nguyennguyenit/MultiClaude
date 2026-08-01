@@ -3,7 +3,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { packagedExecutableCandidates, resolvePackagedExecutable } from './packaged-app-smoke-lib.mjs'
+import {
+  packagedExecutableCandidates,
+  packagedLaunchArgs,
+  resolvePackagedExecutable,
+} from './packaged-app-smoke-lib.mjs'
 
 test('maps every supported platform to an unpacked executable', () => {
   assert.match(packagedExecutableCandidates('darwin', '/release')[0], /mac-arm64.*MultiClaude$/)
@@ -26,4 +30,13 @@ test('resolves the first packaged executable that exists', () => {
 test('fails closed for missing or unsupported packaged executables', () => {
   assert.throws(() => resolvePackagedExecutable('linux', '/missing-release'), /not found/)
   assert.throws(() => packagedExecutableCandidates('freebsd', '/release'), /Unsupported/)
+})
+
+test('disables Chromium sandbox only for the isolated Linux smoke harness', () => {
+  assert.deepEqual(packagedLaunchArgs('linux', '/tmp/profile'), [
+    '--user-data-dir=/tmp/profile',
+    '--no-sandbox',
+  ])
+  assert.deepEqual(packagedLaunchArgs('darwin', '/tmp/profile'), ['--user-data-dir=/tmp/profile'])
+  assert.deepEqual(packagedLaunchArgs('win32', 'C:\\profile'), ['--user-data-dir=C:\\profile'])
 })

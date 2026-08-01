@@ -20,3 +20,12 @@ export function resolvePackagedExecutable(platform, releaseDir) {
   if (!executable) throw new Error(`Packaged executable not found. Checked: ${candidates.join(', ')}`)
   return executable
 }
+
+export function packagedLaunchArgs(platform, profilePath) {
+  const args = [`--user-data-dir=${profilePath}`]
+  // GitHub's Ubuntu images do not allow Electron's unprivileged Chromium
+  // sandbox for unpacked applications. This flag belongs to the isolated smoke
+  // harness only; installed applications retain their normal sandbox policy.
+  if (platform === 'linux') args.push('--no-sandbox')
+  return args
+}

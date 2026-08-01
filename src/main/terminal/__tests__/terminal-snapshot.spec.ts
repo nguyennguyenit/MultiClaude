@@ -170,6 +170,30 @@ describe('TerminalManager.getSnapshot', () => {
     expect(snapshot.rows).toBe(30)
   })
 
+  it('orders a synchronous PTY resize repaint after canonical dimensions', async () => {
+    const term = manager.create()
+    const proc = (manager as unknown as { terminals: InternalTerminals }).terminals.get(term.id)!
+    const events: string[] = []
+    const originalResize = proc.headlessTerm!.resize.bind(proc.headlessTerm)
+    vi.spyOn(proc.headlessTerm!, 'resize').mockImplementation((cols, rows) => {
+      events.push('canonical-resize')
+      originalResize(cols, rows)
+    })
+    mockPty.resize.mockImplementationOnce(() => {
+      events.push('pty-resize')
+      mockPty.__emitData('resize-repaint\r\n')
+    })
+    manager.on('output', () => events.push('repaint-output'))
+
+    expect(manager.resize(term.id, 100, 30)).toBe(true)
+    const snapshot = await manager.getSnapshot(term.id)
+
+    expect(events).toEqual(['pty-resize', 'canonical-resize', 'repaint-output'])
+    expect(snapshot.cols).toBe(100)
+    expect(snapshot.rows).toBe(30)
+    expect(snapshot.ansi).toContain('resize-repaint')
+  })
+
   it('commits final PTY output before publishing terminal exit', async () => {
     const events: string[] = []
     const term = manager.create()

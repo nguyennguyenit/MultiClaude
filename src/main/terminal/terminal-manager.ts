@@ -626,19 +626,23 @@ export class TerminalManager extends EventEmitter {
       console.debug(`[terminal-manager] Skipping resize on destroying terminal: ${id}`)
       return false
     }
+    let ptyResizeSucceeded = false
+    // Reserve canonical resize ordering before invoking node-pty. ConPTY can
+    // emit a synchronous repaint from resize(); pre-queuing keeps that repaint
+    // behind the matching headless dimensions instead of writing it at the old
+    // width and orphaning duplicate rows in scrollback.
+    term.mutationQueue = term.mutationQueue.then(() => {
+      if (!ptyResizeSucceeded || !this.terminals.has(id)) return
+      term.headlessTerm?.resize(cols, rows)
+    }).catch((error) => {
+      console.warn('[terminal-manager] canonical resize mutation failed', {
+        id,
+        error: (error as Error).message,
+      })
+    })
     try {
       term.pty.resize(cols, rows)
-      // PTY resize is immediate, but canonical headless resize joins the same
-      // queue as output and snapshot barriers so mutation order is preserved.
-      term.mutationQueue = term.mutationQueue.then(() => {
-        if (!this.terminals.has(id)) return
-        term.headlessTerm?.resize(cols, rows)
-      }).catch((error) => {
-        console.warn('[terminal-manager] canonical resize mutation failed', {
-          id,
-          error: (error as Error).message,
-        })
-      })
+      ptyResizeSucceeded = true
       return true
     } catch (error) {
       // PTY may be invalid after system resume - log but don't crash
