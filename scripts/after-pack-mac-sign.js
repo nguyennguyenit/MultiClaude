@@ -10,9 +10,23 @@
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 
+export function shouldUseAdHocSigning(environment = process.env) {
+  const signingCertificate = environment[['CSC', 'LINK'].join('_')]
+  const signingIdentity = environment[['CSC', 'NAME'].join('_')]
+  return !signingCertificate && !signingIdentity
+}
+
 /** @param {import('electron-builder').AfterPackContext} context */
 export default async function afterPack(context) {
   if (process.platform !== 'darwin') return
+
+  // electron-builder applies the configured Developer ID signature after this
+  // hook. Avoid the local ad-hoc compatibility pass when production signing is
+  // configured so the release pipeline has one unambiguous signing owner.
+  if (!shouldUseAdHocSigning()) {
+    console.log('[after-pack] Production signing configured; skipping ad-hoc signing')
+    return
+  }
 
   const appPath = join(
     context.appOutDir,
