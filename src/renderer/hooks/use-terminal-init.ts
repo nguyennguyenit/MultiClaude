@@ -28,14 +28,16 @@ import {
   createUserScrollIntent,
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
-import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
-import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
+import { pauseAndBuffer, resumeAndFlush, resumeFromSnapshot } from '../utils/terminal-output-dispatcher'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
 import { createTerminalDraftUndo } from '../utils/terminal-draft-undo'
+import { acquireSnapshotReplayLock } from './use-terminal-webgl'
 import { getCurrentTerminalTheme } from './use-terminal-font-theme'
+import { XtermSurface } from '../terminal/xterm-surface'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 
 const TERMINAL_INIT_DELAY = 50         // ms after terminal.open() before loading addons
 const TERMINAL_MIN_CONTRAST_RATIO = 2.0
@@ -58,6 +60,7 @@ interface ViewportEventListener {
 
 interface UseTerminalInitParams {
   terminalRef: RefObject<XTerm | null>
+  surfaceRef: RefObject<TerminalSurface | null>
   fitAddonRef: RefObject<FitAddon | null>
   disposedRef: RefObject<boolean>
   containerRef: RefObject<HTMLDivElement | null>
@@ -92,6 +95,7 @@ interface UseTerminalInitResult {
 export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitResult {
   const {
     terminalRef,
+    surfaceRef,
     fitAddonRef,
     disposedRef,
     containerRef,
@@ -178,7 +182,9 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
 
-    terminal.open(container)
+    const surface = new XtermSurface(terminal)
+    surface.mount(container)
+    surfaceRef.current = surface
 
     // Sync fit + PTY resize BEFORE any shell output is written. Moving this out
     // of the deferred setTimeout eliminates the new-pane jump: without it, the
@@ -330,35 +336,47 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         resumeAndFlush(terminalId)
       }
 
-      if (initialOutputRef.current) {
-        terminal.write(stripLeakedTerminalResponses(initialOutputRef.current), () => {
-          requestAnimationFrame(restoreInitialViewport)
-          finishInit()
-        })
-      } else {
-        // No prop-provided initialOutput — fetch snapshot from backend.
-        // V2 design decision: snapshot is clean PTY state, so stripLeakedTerminalResponses
-        // is intentionally NOT applied (snapshot has no raw PTY leak artifacts).
-        window.electron.terminal.getSnapshot(terminalId).then(snap => {
-          if (disposedRef.current || !terminalRef.current) { finishInit(); return }
-          if (snap.data) {
-            terminal.write(snap.data, () => {
-              requestAnimationFrame(restoreInitialViewport)
-              finishInit()
-            })
-          } else {
-            // Empty snapshot (fresh terminal) — restore viewport; SIGWINCH
-            // already sent by the sync resize IPC at open() time.
-            requestAnimationFrame(restoreInitialViewport)
-            finishInit()
+      const hydrateFromCanonicalSnapshot = async () => {
+        const releaseLock = await acquireSnapshotReplayLock(terminalId, true)
+        if (!releaseLock) return
+        try {
+          const snap = await window.electron.terminal.getSnapshot(terminalId)
+          if (disposedRef.current || !terminalRef.current) return
+          const snapshotData = 'ansi' in snap ? snap.ansi : snap.data
+          const normalizedSnapshot = 'ansi' in snap
+            ? snap
+            : {
+                terminalId,
+                streamEpoch: 'legacy',
+                watermark: 0,
+                ansi: snap.data,
+                cols: snap.cols,
+                rows: snap.rows,
+                buffer: 'normal' as const,
+              }
+          const hydrationData = snapshotData || initialOutputRef.current || ''
+          if (hydrationData) {
+            await (surfaceRef.current?.write(hydrationData)
+              ?? new Promise<void>(resolve => terminal.write(hydrationData, resolve)))
           }
-        }).catch(() => {
-          // Snapshot fetch failed — fall back to viewport restore.
-          if (disposedRef.current || !terminalRef.current) { finishInit(); return }
+          if (disposedRef.current || !terminalRef.current) return
+          requestAnimationFrame(restoreInitialViewport)
+          resumeFromSnapshot(normalizedSnapshot)
+        } catch {
+          if (disposedRef.current || !terminalRef.current) return
+          const fallback = initialOutputRef.current
+          if (fallback) {
+            await (surfaceRef.current?.write(fallback)
+              ?? new Promise<void>(resolve => terminal.write(fallback, resolve)))
+          }
+          if (disposedRef.current || !terminalRef.current) return
           requestAnimationFrame(restoreInitialViewport)
           finishInit()
-        })
+        } finally {
+          releaseLock()
+        }
       }
+      void hydrateFromCanonicalSnapshot()
 
       syncFontAfterLoad()
     }, TERMINAL_INIT_DELAY)
@@ -409,7 +427,10 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     // and swallow extra DELs from the IME.
     let imeDelDebt = 0
 
-    terminal.onData((data) => {
+    surface.onComposition((active) => {
+      if (active) imeDelDebt = 0
+    })
+    surface.onInput((data) => {
       // Drop xterm focus-report events (DECSET 1004). Forwarding them causes
       // inline TUI apps (e.g. Claude Code) to re-render on every OS window
       // blur/focus, which shifts the prompt down since the redraw can't
@@ -464,7 +485,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     }
-    terminal.onResize(({ cols, rows }) => {
+    surface.onResize((cols, rows) => {
       pendingResize = { cols, rows }
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(flushResize, 80)
@@ -474,6 +495,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     disposedRef,
     containerRef,
     terminalRef,
+    surfaceRef,
     fitAddonRef,
     terminalId,
     isActiveRef,

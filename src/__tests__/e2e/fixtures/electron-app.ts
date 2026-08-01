@@ -1,4 +1,4 @@
-import { test as base, _electron as electron, ElectronApplication, Page } from '@playwright/test'
+import { test as base, expect, _electron as electron, ElectronApplication, Page } from '@playwright/test'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
@@ -13,17 +13,34 @@ type ElectronFixtures = {
   window: Page
 }
 
-export const test = base.extend<ElectronFixtures>({
-  app: async ({}, use, testInfo) => {
-    // Create a unique temp directory for test data isolation
-    const testDataDir = path.join(os.tmpdir(), `multiclaude-test-${testInfo.testId}-${Date.now()}`)
-    fs.mkdirSync(testDataDir, { recursive: true })
+export async function closeElectronApp(app: ElectronApplication): Promise<void> {
+  const child = app.process()
+  let timeout: NodeJS.Timeout | undefined
+  const closedGracefully = await Promise.race([
+    app.close().then(() => true, () => false),
+    new Promise<boolean>((resolve) => {
+      timeout = setTimeout(() => resolve(false), 5_000)
+    })
+  ])
+  if (timeout) clearTimeout(timeout)
 
-    // Launch Electron app from built dist with isolated user data
+  if (!closedGracefully && child.exitCode === null) {
+    child.kill('SIGKILL')
+    await Promise.race([
+      new Promise<void>((resolve) => child.once('exit', () => resolve())),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_000))
+    ])
+  }
+}
+
+export async function launchElectronApp(testDataDir: string): Promise<ElectronApplication> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
     const app = await electron.launch({
       args: [
         path.resolve('./dist/main/index.js'),
         '--no-sandbox',
+        '--e2e',
         `--user-data-dir=${testDataDir}`
       ],
       env: {
@@ -33,20 +50,48 @@ export const test = base.extend<ElectronFixtures>({
         MULTICLAUDE_TEST_STORE_PATH: testDataDir
       }
     })
-    await use(app)
-    await app.close()
 
-    // Clean up test data directory after test
     try {
-      fs.rmSync(testDataDir, { recursive: true, force: true })
-    } catch {
-      // Ignore cleanup errors
+      await app.firstWindow({ timeout: 5_000 })
+      return app
+    } catch (error) {
+      lastError = error
+      await closeElectronApp(app)
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Electron did not create its first test window')
+}
+
+export const test = base.extend<ElectronFixtures>({
+  app: async ({}, use, testInfo) => {
+    // Create a unique temp directory for test data isolation
+    const testDataDir = path.join(os.tmpdir(), `multiclaude-test-${testInfo.testId}-${Date.now()}`)
+    fs.mkdirSync(testDataDir, { recursive: true })
+
+    // Launch Electron app from built output with isolated user data.
+    // A bounded retry covers the occasional macOS launch that starts a
+    // process but never publishes a Playwright window after many rapid runs.
+    const app = await launchElectronApp(testDataDir)
+    try {
+      await use(app)
+    } finally {
+      await closeElectronApp(app)
+
+      // Clean up test data directory after test
+      try {
+        fs.rmSync(testDataDir, { recursive: true, force: true })
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   },
 
   window: async ({ app }, use) => {
     // Get first window and wait for it to load
-    const window = await app.firstWindow()
+    const window = app.windows()[0] ?? await app.firstWindow()
     await window.waitForLoadState('domcontentloaded')
     // Wait for React root to be rendered
     await window.waitForSelector('#root', { state: 'attached' })
@@ -74,16 +119,18 @@ export const WAIT_TIMES = {
  * Helper to add a new terminal (works whether terminals exist or not).
  */
 export async function addTerminal(window: Page): Promise<void> {
-  // First try the empty state button, then the action bar button
-  const emptyStateButton = window.locator('button:has-text("+ New Terminal")')
-  const actionBarButton = window.locator('button:has-text("+ New")')
+  const terminalRoots = window.locator('[data-terminal-id]')
+  const initialCount = await terminalRoots.count()
+  const actionBarButton = window.getByRole('button', { name: 'New Terminal', exact: true })
+  const emptyStateButton = window.getByRole('button', { name: /\+ New Terminal/ })
 
-  if (await emptyStateButton.isVisible()) {
-    await emptyStateButton.click()
-  } else {
+  if (await actionBarButton.isVisible()) {
     await actionBarButton.click()
+  } else {
+    await emptyStateButton.click()
   }
-  await window.waitForTimeout(WAIT_TIMES.STANDARD)
+
+  await expect(terminalRoots).toHaveCount(initialCount + 1)
 }
 
 /**
@@ -168,48 +215,54 @@ const SCREENSHOT_BASE_PATH = './screenshots'
 export const TERMINAL_TEST_PROMPT = 'test@multiclaude:~$ '
 
 /**
- * Helper to clear terminal content and inject a fixed prompt.
- * Ensures consistent terminal screenshots for visual regression testing.
- * @throws Error if terminal at index doesn't exist or cannot be cleared
+ * Normalize terminal content for visual regression screenshots.
+ *
+ * Terminal instances are intentionally not exposed through the app store. The
+ * screenshot harness therefore hides only xterm's volatile paint surface and
+ * adds a deterministic prompt in the test page. Layout, terminal background,
+ * pane chrome, and theme styling remain visible.
+ *
+ * @throws Error if the requested terminal is not mounted
  */
 export async function clearTerminalForScreenshot(window: Page, terminalIndex = 0): Promise<void> {
-  // Send clear command to terminal via xterm API
-  const success = await window.evaluate(({ index, prompt }: { index: number; prompt: string }) => {
-    interface XtermTerminal {
-      write: (data: string) => void
-      clear: () => void
-    }
-    interface TerminalData {
-      xterm?: XtermTerminal
-    }
-    interface AppStoreState {
-      terminals: TerminalData[]
-    }
-    interface StoreApi {
-      getState: () => AppStoreState
-    }
-    const appStore = (window as unknown as { __APP_STORE__?: StoreApi }).__APP_STORE__
-    if (!appStore) {
-      return { success: false, reason: 'App store not found' }
-    }
-    const state = appStore.getState()
-    if (index >= state.terminals.length) {
-      return { success: false, reason: `Terminal index ${index} out of range (${state.terminals.length} terminals)` }
-    }
-    const terminal = state.terminals[index] as TerminalData | undefined
-    if (!terminal?.xterm) {
-      return { success: false, reason: `Terminal ${index} has no xterm instance` }
-    }
-    // Clear terminal content
-    terminal.xterm.clear()
-    // Write fixed prompt for consistent screenshot
-    terminal.xterm.write(`\r\n${prompt}`)
-    return { success: true }
-  }, { index: terminalIndex, prompt: TERMINAL_TEST_PROMPT })
+  const terminal = window.locator('[data-terminal-id]').nth(terminalIndex)
+  await expect(terminal).toBeAttached()
+  await terminal.evaluate((terminalPane, prompt) => {
+    const wrapper = terminalPane.querySelector<HTMLElement>('.terminal-container-wrapper')
+    const container = terminalPane.querySelector<HTMLElement>('.terminal-container')
+    const xterm = container?.querySelector<HTMLElement>('.xterm')
 
-  if (!success.success) {
-    console.warn(`[clearTerminalForScreenshot] ${success.reason}`)
-  }
+    if (!wrapper || !container || !xterm) {
+      throw new Error('Mounted terminal is missing its xterm paint surface')
+    }
+
+    xterm.style.visibility = 'hidden'
+
+    let normalizedPrompt = wrapper.querySelector<HTMLElement>(
+      '[data-testid="terminal-screenshot-prompt"]'
+    )
+    if (!normalizedPrompt) {
+      normalizedPrompt = document.createElement('div')
+      normalizedPrompt.dataset.testid = 'terminal-screenshot-prompt'
+      Object.assign(normalizedPrompt.style, {
+        position: 'absolute',
+        top: '8px',
+        left: '8px',
+        zIndex: '10',
+        pointerEvents: 'none',
+        whiteSpace: 'pre',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--terminal-font)',
+        fontSize: '14px',
+        lineHeight: '20px'
+      })
+      wrapper.append(normalizedPrompt)
+    }
+    normalizedPrompt.textContent = prompt
+  }, TERMINAL_TEST_PROMPT)
+  await expect(
+    terminal.locator('[data-testid="terminal-screenshot-prompt"]')
+  ).toHaveText(TERMINAL_TEST_PROMPT)
 
   // Wait for terminal to re-render
   await window.waitForTimeout(WAIT_TIMES.STANDARD)
@@ -219,7 +272,7 @@ export async function clearTerminalForScreenshot(window: Page, terminalIndex = 0
  * Helper to clear all visible terminals for screenshots.
  */
 export async function clearAllTerminalsForScreenshot(window: Page): Promise<void> {
-  const terminalCount = await window.locator('.terminal-pane').count()
+  const terminalCount = await window.locator('[data-terminal-id]').count()
   for (let i = 0; i < terminalCount; i++) {
     await clearTerminalForScreenshot(window, i)
   }

@@ -33,17 +33,17 @@ describe('useNotificationStore', () => {
   it('tracks notification changes as unsaved until saveSettings persists them', async () => {
     await useNotificationStore.getState().loadSettings()
 
-    useNotificationStore.getState().updateSettings({ soundEnabled: false })
+    useNotificationStore.getState().updateSettings({ onTaskComplete: false })
 
     expect(setSettings).not.toHaveBeenCalled()
-    expect(useNotificationStore.getState().savedSettings.soundEnabled).toBe(true)
-    expect(useNotificationStore.getState().pendingSettings.soundEnabled).toBe(false)
+    expect(useNotificationStore.getState().savedSettings.onTaskComplete).toBe(true)
+    expect(useNotificationStore.getState().pendingSettings.onTaskComplete).toBe(false)
     expect(useNotificationStore.getState().hasUnsavedChanges).toBe(true)
 
     await useNotificationStore.getState().saveSettings()
 
-    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ soundEnabled: false }))
-    expect(useNotificationStore.getState().savedSettings.soundEnabled).toBe(false)
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ onTaskComplete: false }))
+    expect(useNotificationStore.getState().savedSettings.onTaskComplete).toBe(false)
     expect(useNotificationStore.getState().hasUnsavedChanges).toBe(false)
   })
 

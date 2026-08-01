@@ -1,7 +1,7 @@
-import type { TraceNode, TraceToolCall } from '@shared/types/context-window'
+import type { ToolActivityGroup, TraceToolCall } from '@shared/types/context-window'
 import { estimateTokens } from '@shared/utils/estimate-tokens'
 
-const MAIN_ID = '__main__'
+const ACTIVITY_ID = '__tools__'
 const TOOL_CALL_CAP = 50
 
 interface AssistantBlock {
@@ -28,21 +28,18 @@ function stringify(content: unknown): string {
 }
 
 interface MutableNode {
-  node: TraceNode
-  /** Total raw deeper-call count before cap. */
-  deeperCount: number
+  node: ToolActivityGroup
+  /** Total observed calls omitted after the visible cap. */
+  omittedCallCount: number
 }
 
 /**
- * Per-turn execution-trace builder. Fallback mode (no subagent log
- * co-watching): emits a single 'main' node aggregating non-Agent tool
- * calls + one 'subagent' node per `Agent` tool_use. Children depth = 0
- * because we cannot resolve the inner trace of a subagent without
- * watching its log.
+ * Per-turn tool-activity builder. All observed tool invocations, including
+ * `Agent`, stay in one flat ordered group. A nested execution trace is not
+ * claimed because provider events do not expose a correlated inner stream.
  */
 export class ExecutionTraceBuilder {
-  private mainNode: MutableNode | null = null
-  private readonly subagents = new Map<string, MutableNode>()
+  private activityNode: MutableNode | null = null
   /** All observed nodes by tool_use_id for tool_result token attribution. */
   private readonly nodeByToolUseId = new Map<string, MutableNode>()
 
@@ -56,38 +53,20 @@ export class ExecutionTraceBuilder {
       const name = String(block.name ?? '')
       if (!id || !name) continue
 
-      if (name === 'Agent') {
-        const input = (block.input ?? {}) as { subagent_type?: string; description?: string; prompt?: string }
-        const promptTokens = input.prompt ? estimateTokens(String(input.prompt)) : 0
-        const node: TraceNode = {
-          id,
-          agentType: 'subagent',
-          agentName: input.subagent_type ?? 'agent',
-          description: input.description,
-          tokens: promptTokens,
-          toolCalls: [],
-          children: []
-        }
-        const mutable: MutableNode = { node, deeperCount: 0 }
-        this.subagents.set(id, mutable)
-        this.nodeByToolUseId.set(id, mutable)
-        continue
-      }
-
-      const main = this.ensureMain()
-      if (main.node.toolCalls.length >= TOOL_CALL_CAP) {
-        main.deeperCount += 1
-        main.node.depthCapped = true
-        main.node.deeperCount = main.deeperCount
-        // still register for token attribution even when not visible
-        this.nodeByToolUseId.set(id, main)
-        continue
-      }
+      const activity = this.ensureActivity()
       const inputTokens = block.input ? estimateTokens(stringify(block.input)) : 0
+      activity.node.tokens += inputTokens
+      if (activity.node.toolCalls.length >= TOOL_CALL_CAP) {
+        activity.omittedCallCount += 1
+        activity.node.truncated = true
+        activity.node.omittedCallCount = activity.omittedCallCount
+        // still register for token attribution even when not visible
+        this.nodeByToolUseId.set(id, activity)
+        continue
+      }
       const call: TraceToolCall = { id, name, tokens: inputTokens }
-      main.node.toolCalls.push(call)
-      main.node.tokens += inputTokens
-      this.nodeByToolUseId.set(id, main)
+      activity.node.toolCalls.push(call)
+      this.nodeByToolUseId.set(id, activity)
     }
   }
 
@@ -102,41 +81,31 @@ export class ExecutionTraceBuilder {
       if (!target) continue
       const tokens = estimateTokens(stringify(block.content))
       target.node.tokens += tokens
-      // Add to the matching tool call's tokens if it's a main node entry
-      if (target.node.agentType === 'main') {
-        const call = target.node.toolCalls.find((c) => c.id === id)
-        if (call) call.tokens += tokens
-      }
+      const call = target.node.toolCalls.find((c) => c.id === id)
+      if (call) call.tokens += tokens
     }
   }
 
-  snapshot(): TraceNode[] {
-    const out: TraceNode[] = []
-    if (this.mainNode) out.push(cloneNode(this.mainNode.node))
-    for (const m of this.subagents.values()) out.push(cloneNode(m.node))
-    return out
+  snapshot(): ToolActivityGroup[] {
+    return this.activityNode ? [cloneNode(this.activityNode.node)] : []
   }
 
-  private ensureMain(): MutableNode {
-    if (this.mainNode) return this.mainNode
-    const node: TraceNode = {
-      id: MAIN_ID,
-      agentType: 'main',
-      agentName: 'main',
+  private ensureActivity(): MutableNode {
+    if (this.activityNode) return this.activityNode
+    const node: ToolActivityGroup = {
+      id: ACTIVITY_ID,
       tokens: 0,
-      toolCalls: [],
-      children: []
+      toolCalls: []
     }
-    const mutable: MutableNode = { node, deeperCount: 0 }
-    this.mainNode = mutable
+    const mutable: MutableNode = { node, omittedCallCount: 0 }
+    this.activityNode = mutable
     return mutable
   }
 }
 
-function cloneNode(n: TraceNode): TraceNode {
+function cloneNode(n: ToolActivityGroup): ToolActivityGroup {
   return {
     ...n,
-    toolCalls: n.toolCalls.map((c) => ({ ...c })),
-    children: n.children.map(cloneNode)
+    toolCalls: n.toolCalls.map((c) => ({ ...c }))
   }
 }

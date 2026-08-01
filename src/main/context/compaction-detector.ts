@@ -1,9 +1,7 @@
 import type { CompactionEvent } from '@shared/types/context-window'
 
 const HISTORY_CAP = 10
-const SUDDEN_DROP_RATIO = 0.3
 const DEDUP_WINDOW_MS = 2_000
-const CLEAR_GRACE_MS = 5_000
 const SUMMARY_PREVIEW_LEN = 200
 
 interface JsonlLineShape {
@@ -11,7 +9,6 @@ interface JsonlLineShape {
   subtype?: string
   summary?: string
   content?: unknown
-  message?: { content?: unknown }
   timestamp?: string | number
 }
 
@@ -24,29 +21,16 @@ function parseTs(input: string | number | undefined): number {
   return Date.now()
 }
 
-function stringify(content: unknown): string {
-  if (content == null) return ''
-  if (typeof content === 'string') return content
-  try {
-    return JSON.stringify(content)
-  } catch {
-    return ''
-  }
-}
-
 /**
- * Detects context-window auto-compaction events. Two signal types:
- * - **High confidence**: explicit JSONL `type=summary` line, or user-message
- *   content containing `<compact>` / `<conversation_summary>` markers.
- * - **Low confidence**: a >30% drop in total tokens between consecutive
- *   samples, NOT preceded by a recent `/clear` command.
+ * Detects context-window auto-compaction events only from explicit JSONL
+ * summary or boundary signals. Token movement and user-authored text alone are not
+ * evidence that compaction occurred.
  *
  * Dedupes signals within a 2s window. Caps history at 10 events.
  */
 export class CompactionDetector {
   private events: CompactionEvent[] = []
   private prevTotal: number | null = null
-  private lastClearAt: number | null = null
   private lastEventAt = -Infinity
   private idSeq = 0
 
@@ -55,18 +39,8 @@ export class CompactionDetector {
     if (!line || typeof line !== 'object') return null
     const l = line as JsonlLineShape
 
-    // /clear command — note recent occurrence to suppress sudden-drop heuristic
-    if (l.type === 'command_input' && typeof l.content === 'string' && l.content.trim() === '/clear') {
-      this.lastClearAt = parseTs(l.timestamp)
-      return null
-    }
-
-    // Explicit high-confidence signals
-    const isExplicit =
-      l.type === 'summary' ||
-      l.subtype === 'compact_boundary' ||
-      hasCompactMarker(l)
-    if (!isExplicit) return null
+    const source = explicitSource(l)
+    if (!source) return null
 
     const ts = parseTs(l.timestamp)
     if (ts - this.lastEventAt < DEDUP_WINDOW_MS) return null
@@ -75,37 +49,22 @@ export class CompactionDetector {
     const ev: CompactionEvent = {
       id: `c${++this.idSeq}`,
       timestamp: ts,
-      beforeTokens: this.prevTotal ?? 0,
-      afterTokens: this.prevTotal ?? 0,
+      observedTokens: this.prevTotal ?? undefined,
       summary,
-      confidence: 'high'
+      confidence: 'high',
+      source
     }
     this.push(ev)
     return ev
   }
 
   /**
-   * Tick the running total; returns a low-confidence event when a sudden
-   * drop is observed and `/clear` did not fire recently.
+   * Remember the latest observed total for explicit-event context. A total
+   * change never emits a compaction event by itself.
    */
-  recordTotalTokens(total: number, atMs: number): CompactionEvent | null {
-    const before = this.prevTotal
+  recordTotalTokens(total: number, _atMs: number): CompactionEvent | null {
     this.prevTotal = total
-    if (before == null || before === 0) return null
-    if (total >= before) return null
-    const drop = (before - total) / before
-    if (drop < SUDDEN_DROP_RATIO) return null
-    if (this.lastClearAt != null && atMs - this.lastClearAt < CLEAR_GRACE_MS) return null
-    if (atMs - this.lastEventAt < DEDUP_WINDOW_MS) return null
-    const ev: CompactionEvent = {
-      id: `c${++this.idSeq}`,
-      timestamp: atMs,
-      beforeTokens: before,
-      afterTokens: total,
-      confidence: 'low'
-    }
-    this.push(ev)
-    return ev
+    return null
   }
 
   getEvents(): CompactionEvent[] {
@@ -119,9 +78,8 @@ export class CompactionDetector {
   }
 }
 
-function hasCompactMarker(line: JsonlLineShape): boolean {
-  if (line.type !== 'user') return false
-  const c = line.message?.content
-  const text = typeof c === 'string' ? c : stringify(c)
-  return text.includes('<compact>') || text.includes('<conversation_summary>')
+function explicitSource(line: JsonlLineShape): CompactionEvent['source'] | null {
+  if (line.type === 'summary') return 'summary'
+  if (line.subtype === 'compact_boundary') return 'compact-boundary'
+  return null
 }

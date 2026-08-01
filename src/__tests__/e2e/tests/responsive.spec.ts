@@ -2,10 +2,10 @@
  * Responsive Layout E2E Tests
  *
  * Parameterized tests validating layout behavior across multiple viewport sizes.
- * Tests sidebar visibility, terminal grid sizing, and component responsiveness.
+ * Tests project-toolbar visibility, terminal grid sizing, and component responsiveness.
  */
-import { test, expect, injectMockProject, takeConsistentScreenshot } from '../fixtures'
-import { mockProject, mockProjects, viewportSizes, SIDEBAR_DIMENSIONS } from '../fixtures/test-data'
+import { test, expect, injectMockProject } from '../fixtures'
+import { mockProject, mockProjects, viewportSizes } from '../fixtures/test-data'
 
 /**
  * Helper to check if viewport has horizontal scrollbar.
@@ -51,23 +51,19 @@ for (const viewport of viewportSizes) {
       expect(bodyWidth).toBeLessThanOrEqual(viewport.width)
     })
 
-    test('sidebar is visible and functional', async ({ window }) => {
+    test('project toolbar is visible and functional', async ({ window }) => {
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(200)
 
-      // Sidebar container should exist using data-testid (may be collapsed or expanded)
-      const sidebar = window.locator('[data-testid="sidebar"]')
-      await expect(sidebar).toBeVisible()
+      const toolbar = window.locator('.toolbar')
+      await expect(toolbar).toBeVisible()
+      await expect(window.locator('[data-testid="project-tabs-container"]')).toBeVisible()
+      await expect(window.locator('[data-testid="settings-button"]')).toBeVisible()
 
-      // Verify sidebar has positive width
-      const dims = await getElementDimensions(sidebar)
+      const dims = await getElementDimensions(toolbar)
       expect(dims).not.toBeNull()
       expect(dims!.width).toBeGreaterThan(0)
-
-      // Sidebar width is user-controlled (manual collapse), not auto-responsive
-      // Just verify it exists and has reasonable dimensions
-      expect(dims!.width).toBeGreaterThan(SIDEBAR_DIMENSIONS.MIN_COLLAPSED)
-      expect(dims!.width).toBeLessThanOrEqual(SIDEBAR_DIMENSIONS.MAX_EXPANDED)
+      expect(dims!.width).toBeLessThanOrEqual(viewport.width)
     })
 
     test('terminal grid uses adequate space (>40% of viewport)', async ({ window }) => {
@@ -137,135 +133,14 @@ for (const viewport of viewportSizes) {
       await injectMockProject(window, [mockProject])
       await window.waitForTimeout(500)
 
-      // Take screenshot for visual comparison
-      await takeConsistentScreenshot(window, `layout-${viewport.name}`, {
-        basePath: 'screenshots/responsive'
+      await expect(window).toHaveScreenshot(`responsive-layout-${viewport.name}.png`, {
+        animations: 'disabled',
+        fullPage: true,
+        maxDiffPixelRatio: 0.015
       })
     })
   })
 }
-
-/**
- * Sidebar Responsive Behavior Tests
- *
- * Tests sidebar collapse/expand behavior at different viewport widths.
- * NOTE: Sidebar was removed in favor of toolbar + project bar layout.
- * These tests are skipped until sidebar is re-introduced.
- */
-test.describe.skip('Sidebar Responsive Behavior', () => {
-  test('sidebar collapse toggle works at large viewport', async ({ window }) => {
-    await window.setViewportSize({ width: 1920, height: 1080 })
-    await injectMockProject(window, [mockProject])
-    await window.waitForTimeout(200)
-
-    // Find sidebar using data-testid
-    const sidebar = window.locator('[data-testid="sidebar"]')
-    await expect(sidebar).toBeVisible()
-
-    // Get initial width
-    const initialDims = await getElementDimensions(sidebar)
-    expect(initialDims).not.toBeNull()
-
-    // Find collapse toggle button using data-testid
-    const toggleButton = window.locator('[data-testid="sidebar-toggle"]')
-    if (await toggleButton.isVisible()) {
-      await toggleButton.click()
-      await window.waitForTimeout(300) // Allow transition
-
-      // Verify sidebar width changed
-      const newDims = await getElementDimensions(sidebar)
-      expect(newDims).not.toBeNull()
-      expect(newDims!.width).not.toBe(initialDims!.width)
-    }
-  })
-
-  test('sidebar collapse toggle works at medium viewport', async ({ window }) => {
-    await window.setViewportSize({ width: 1366, height: 768 })
-    await injectMockProject(window, [mockProject])
-    await window.waitForTimeout(200)
-
-    const sidebar = window.locator('[data-testid="sidebar"]')
-    await expect(sidebar).toBeVisible()
-
-    const initialDims = await getElementDimensions(sidebar)
-    expect(initialDims).not.toBeNull()
-
-    // Toggle collapse using data-testid
-    const toggleButton = window.locator('[data-testid="sidebar-toggle"]')
-    if (await toggleButton.isVisible()) {
-      await toggleButton.click()
-      await window.waitForTimeout(300)
-
-      const newDims = await getElementDimensions(sidebar)
-      expect(newDims).not.toBeNull()
-      expect(newDims!.width).not.toBe(initialDims!.width)
-
-      // Toggle back
-      await toggleButton.click()
-      await window.waitForTimeout(300)
-
-      const restoredDims = await getElementDimensions(sidebar)
-      expect(restoredDims!.width).toBe(initialDims!.width)
-    }
-  })
-
-  test('sidebar collapse toggle works at small viewport', async ({ window }) => {
-    await window.setViewportSize({ width: 800, height: 600 })
-    await injectMockProject(window, [mockProject])
-    await window.waitForTimeout(200)
-
-    const sidebar = window.locator('[data-testid="sidebar"]')
-    await expect(sidebar).toBeVisible()
-
-    // At small viewport, sidebar is still visible (user must manually collapse)
-    const dims = await getElementDimensions(sidebar)
-    expect(dims).not.toBeNull()
-    expect(dims!.width).toBeGreaterThan(0)
-
-    // Toggle collapse using data-testid
-    const toggleButton = window.locator('[data-testid="sidebar-toggle"]')
-    if (await toggleButton.isVisible()) {
-      const initialWidth = dims!.width
-
-      await toggleButton.click()
-      await window.waitForTimeout(300)
-
-      const newDims = await getElementDimensions(sidebar)
-      expect(newDims).not.toBeNull()
-      // Width should have changed after toggle
-      expect(newDims!.width).not.toBe(initialWidth)
-    }
-  })
-
-  test('sidebar toggle button in title bar works', async ({ window }) => {
-    await window.setViewportSize({ width: 1366, height: 768 })
-    await injectMockProject(window, [mockProject])
-    await window.waitForTimeout(200)
-
-    // Find titlebar toggle button using data-testid
-    const toggleButton = window.locator('[data-testid="titlebar-sidebar-toggle"]')
-    await expect(toggleButton).toBeVisible()
-
-    // Check sidebar is visible initially using data-testid
-    const sidebar = window.locator('[data-testid="sidebar"]')
-    const initiallyVisible = await sidebar.isVisible()
-
-    // Toggle sidebar visibility
-    await toggleButton.click()
-    await window.waitForTimeout(300)
-
-    // Sidebar visibility should have changed
-    const afterToggle = await sidebar.isVisible()
-    expect(afterToggle).not.toBe(initiallyVisible)
-
-    // Toggle back
-    await toggleButton.click()
-    await window.waitForTimeout(300)
-
-    const afterRestore = await sidebar.isVisible()
-    expect(afterRestore).toBe(initiallyVisible)
-  })
-})
 
 /**
  * Layout Consistency Tests
@@ -288,6 +163,7 @@ test.describe('Layout Consistency', () => {
     }
 
     // All title bar heights should be the same (40px as per App.tsx)
+    expect(titleBarHeights).toHaveLength(3)
     const firstHeight = titleBarHeights[0]
     for (const height of titleBarHeights) {
       expect(height).toBe(firstHeight)
@@ -301,7 +177,6 @@ test.describe('Layout Consistency', () => {
     await window.setViewportSize({ width: 1920, height: 1080 })
     await window.waitForTimeout(200)
 
-    const sidebar = window.locator('[data-testid="sidebar"]')
     // Resize to small viewport
     await window.setViewportSize({ width: 800, height: 600 })
     await window.waitForTimeout(300)
@@ -314,12 +189,9 @@ test.describe('Layout Consistency', () => {
     await window.setViewportSize({ width: 1920, height: 1080 })
     await window.waitForTimeout(300)
 
-    // Sidebar should restore (if it was visible before)
-    if (await sidebar.isVisible()) {
-      const restoredWidth = (await getElementDimensions(sidebar))?.width ?? 0
-      // Width should be close to original (allowing for collapsed state)
-      expect(restoredWidth).toBeGreaterThan(0)
-    }
+    const toolbarWidth = (await getElementDimensions(window.locator('.toolbar')))?.width ?? 0
+    expect(toolbarWidth).toBeGreaterThan(0)
+    expect(toolbarWidth).toBeLessThanOrEqual(1920)
   })
 })
 
@@ -331,42 +203,25 @@ test.describe('Layout Consistency', () => {
 test.describe('Visual Regression', () => {
   test('welcome screen layout at FHD', async ({ window }) => {
     await window.setViewportSize({ width: 1920, height: 1080 })
-    // Don't inject project - show welcome screen
     await window.waitForTimeout(300)
 
-    const welcomeScreen = window.locator('text=Welcome').first()
-    if (await welcomeScreen.isVisible()) {
-      await takeConsistentScreenshot(window, 'welcome-fhd', {
-        basePath: 'screenshots/responsive',
-        fullPage: true
-      })
-    }
+    await expect(window.getByRole('heading', { name: 'MultiClaude' })).toBeVisible()
+    await expect(window).toHaveScreenshot('responsive-welcome-fhd.png', {
+      animations: 'disabled',
+      fullPage: true,
+      maxDiffPixelRatio: 0.015
+    })
   })
 
   test('welcome screen layout at laptop size', async ({ window }) => {
     await window.setViewportSize({ width: 1366, height: 768 })
     await window.waitForTimeout(300)
 
-    const welcomeScreen = window.locator('text=Welcome').first()
-    if (await welcomeScreen.isVisible()) {
-      await takeConsistentScreenshot(window, 'welcome-laptop', {
-        basePath: 'screenshots/responsive',
-        fullPage: true
-      })
-    }
-  })
-
-  test('main layout comparison across viewports', async ({ window }) => {
-    await injectMockProject(window, [mockProject])
-
-    for (const viewport of viewportSizes) {
-      await window.setViewportSize({ width: viewport.width, height: viewport.height })
-      await window.waitForTimeout(300)
-
-      // Capture main layout
-      await takeConsistentScreenshot(window, `main-layout-${viewport.name}`, {
-        basePath: 'screenshots/responsive'
-      })
-    }
+    await expect(window.getByRole('heading', { name: 'MultiClaude' })).toBeVisible()
+    await expect(window).toHaveScreenshot('responsive-welcome-laptop.png', {
+      animations: 'disabled',
+      fullPage: true,
+      maxDiffPixelRatio: 0.015
+    })
   })
 })

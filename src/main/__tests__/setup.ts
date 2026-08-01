@@ -2,13 +2,17 @@ import { vi } from 'vitest'
 
 // Mock electron-store globally
 vi.mock('electron-store', () => {
+  const persistedByCwd = new Map<string, Record<string, unknown>>()
   return {
     default: class MockStore {
       private data: Record<string, unknown> = {}
 
-      constructor(options?: { defaults?: Record<string, unknown> }) {
-        if (options?.defaults) {
-          this.data = { ...options.defaults }
+      constructor(options?: { defaults?: Record<string, unknown>; cwd?: string }) {
+        if (options?.cwd && persistedByCwd.has(options.cwd)) {
+          this.data = persistedByCwd.get(options.cwd)!
+        } else {
+          this.data = { ...options?.defaults }
+          if (options?.cwd) persistedByCwd.set(options.cwd, this.data)
         }
       }
 

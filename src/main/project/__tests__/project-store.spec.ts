@@ -61,6 +61,26 @@ describe('ProjectStore', () => {
       expect(store.getProject(project.id)).toBeUndefined()
     })
 
+    it('scrubs saved terminal tails for a deleted project', () => {
+      const project = store.addProject({ name: 'Test', path: '/test' })
+      store.saveSession({
+        terminals: [
+          { id: 'removed', title: 'Removed', cwd: '/test', projectId: project.id, outputBuffer: 'secret' },
+          { id: 'kept', title: 'Kept', cwd: '/other', projectId: 'other', outputBuffer: 'keep' },
+        ],
+        activeTerminalId: 'removed',
+      })
+
+      store.deleteProject(project.id)
+
+      expect(store.getSession()).toEqual({
+        terminals: [
+          { id: 'kept', title: 'Kept', cwd: '/other', projectId: 'other', outputBuffer: 'keep' },
+        ],
+        activeTerminalId: null,
+      })
+    })
+
     it('returns false when deleting non-existent project', () => {
       expect(store.deleteProject('invalid')).toBe(false)
     })
@@ -138,6 +158,21 @@ describe('ProjectStore', () => {
       store.saveSession({ terminals: [] } as unknown as Parameters<typeof store.saveSession>[0])
       store.clearSession()
       expect(store.getSession()).toBeNull()
+    })
+
+    it('scrubs one terminal tail and clears its active id', () => {
+      store.saveSession({
+        terminals: [
+          { id: 'removed', title: 'Removed', cwd: '/test', outputBuffer: 'secret' },
+          { id: 'kept', title: 'Kept', cwd: '/test', outputBuffer: 'keep' },
+        ],
+        activeTerminalId: 'removed',
+      })
+
+      store.removeTerminalFromSession('removed')
+
+      expect(store.getSession()?.terminals.map(terminal => terminal.id)).toEqual(['kept'])
+      expect(store.getSession()?.activeTerminalId).toBeNull()
     })
   })
 

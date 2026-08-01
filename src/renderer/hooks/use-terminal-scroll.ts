@@ -16,19 +16,20 @@ import type { RefObject } from 'react'
 import type { Terminal as XTerm } from '@xterm/xterm'
 import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import type { UserScrollIntent } from '../utils/terminal-scroll-utils'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 import {
   createUserScrollIntent,
   isViewportNearBottom,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
-import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
 
 const USER_SCROLL_WHEEL_GRACE = 180   // ms wheel-scroll intent grace period
 const USER_SCROLL_DRAG_GRACE = 1200  // ms scrollbar-drag intent grace period
 
 interface UseTerminalScrollParams {
   terminalRef: RefObject<XTerm | null>
+  surfaceRef: RefObject<TerminalSurface | null>
   disposedRef: RefObject<boolean>
   isHiddenRef: RefObject<boolean>
   scrollMachineRef: RefObject<TerminalScrollMachine>
@@ -53,6 +54,7 @@ interface UseTerminalScrollResult {
 export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalScrollResult {
   const {
     terminalRef,
+    surfaceRef,
     disposedRef,
     isHiddenRef,
     scrollMachineRef,
@@ -128,7 +130,10 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal) return ''
 
-    const visibleData = stripLeakedTerminalResponses(processKeyboardEnhancementOutput(data))
+    // PTY output is an ordered byte stream. Do not apply per-chunk regex
+    // filtering here: control sequences may be split across envelopes and a
+    // stateless filter can delete user text or corrupt parser state.
+    const visibleData = processKeyboardEnhancementOutput(data)
     if (!visibleData) return ''
 
     const scrollMachine = scrollMachineRef.current
@@ -144,7 +149,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
 
     scrollMachine.pendingWriteCount += 1
 
-    terminal.write(visibleData, () => {
+    const afterWrite = () => {
       scrollMachine.pendingWriteCount = Math.max(0, scrollMachine.pendingWriteCount - 1)
       const term = terminalRef.current
       if (!term) return
@@ -185,11 +190,13 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
 
       const buffer = term.buffer.active
       syncViewportState(buffer, isHiddenRef.current ? scrollMachine.hiddenViewportIntent : null)
-    })
+    }
+    if (surfaceRef.current) void surfaceRef.current.write(visibleData).then(afterWrite)
+    else terminal.write(visibleData, afterWrite)
 
     return visibleData
   // eslint-disable-next-line react-hooks/exhaustive-deps -- disposedRef is a stable ref object
-  }, [disposedRef, isHiddenRef, processKeyboardEnhancementOutput, scrollMachineRef, syncViewportState, terminalRef])
+  }, [disposedRef, isHiddenRef, processKeyboardEnhancementOutput, scrollMachineRef, surfaceRef, syncViewportState, terminalRef])
 
   const scrollToTop = useCallback(() => {
     const terminal = terminalRef.current

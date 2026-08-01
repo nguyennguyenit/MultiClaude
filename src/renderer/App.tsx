@@ -24,8 +24,12 @@ import { buildEvenVerticalLayout, migrateFlatToTree } from '@shared/utils/pane-t
 import type { NewTerminalLayout } from './utils/shortcut-utils'
 import { registerSplitHandlers } from './utils/terminal-context-actions'
 import { shellInfoToWindowsShell } from './utils'
+import { resolveAppTheme } from './utils/app-theme'
 import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
-import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
+import {
+  attachTerminalOutputDispatcher,
+  disposeTerminalOutputState,
+} from './utils/terminal-output-dispatcher'
 import { attachTerminalLifecycleDispatcher } from './utils/terminal-lifecycle-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { ShellInfo, Project } from '@shared/types'
@@ -41,6 +45,11 @@ function App() {
   const updateTerminalClaudeMode = useAppStore((state) => state.updateTerminalClaudeMode)
   const updateTerminalAgentType = useAppStore((state) => state.updateTerminalAgentType)
   const updateTerminalClaudeSessionId = useAppStore((state) => state.updateTerminalClaudeSessionId)
+  const setAgentReadiness = useAppStore((state) => state.setAgentReadiness)
+  const setAgentBinding = useAppStore((state) => state.setAgentBinding)
+  const removeAgentBinding = useAppStore((state) => state.removeAgentBinding)
+  const setInsightSnapshot = useContextWindowStore((state) => state.setInsightSnapshot)
+  const removeInsightSnapshot = useContextWindowStore((state) => state.removeInsightSnapshot)
   const addProject = useAppStore((state) => state.addProject)
   const removeProject = useAppStore((state) => state.removeProject)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -203,7 +212,11 @@ function App() {
         cwd: activeProject?.path,
         projectId: activeProject?.id,
         shellPath: isUnixShell ? effectiveShell.path : undefined,
-        shell: isWindowsShell ? shellInfoToWindowsShell(effectiveShell) : savedSettings.windowsShell,
+        shell: isWindowsShell
+          ? shellInfoToWindowsShell(effectiveShell)
+          : savedSettings.defaultShell && savedSettings.defaultShell.kind !== 'unix'
+            ? shellInfoToWindowsShell(savedSettings.defaultShell)
+            : undefined,
       })
       addTerminal(terminal)
 
@@ -343,7 +356,7 @@ function App() {
     terminalLimit: effectiveLimit,
     terminalCount: visibleCount,
     selectedShell,
-    windowsShellFallback: pendingSettings.windowsShell,
+    defaultShellFallback: pendingSettings.defaultShell,
     addTerminal,
     notifyLimit: (limit) => {
       useToastStore.getState().addToast(
@@ -448,21 +461,33 @@ function App() {
     const root = document.documentElement
     // Find theme by id, fall back to first (handles legacy theme IDs gracefully)
     const theme = THEMES.find(t => t.id === pendingSettings.colorTheme) ?? THEMES[0]
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
 
-    // Set new CSS variable system
-    root.style.setProperty('--bg-primary', theme.background)
-    root.style.setProperty('--bg-secondary', theme.tabBg)
-    root.style.setProperty('--bg-tertiary', theme.border)
-    root.style.setProperty('--text-primary', theme.foreground)
-    root.style.setProperty('--text-secondary', `${theme.foreground}99`)
-    root.style.setProperty('--text-muted', `${theme.foreground}66`)
-    root.style.setProperty('--accent', theme.accent)
-    root.style.setProperty('--border', theme.border)
-    root.style.setProperty('--hover', theme.hover)
-    root.style.setProperty('--tab-bg', theme.tabBg)
-    root.style.setProperty('--tab-active-bg', theme.tabActiveBg)
-    root.style.setProperty('--cursor', theme.cursor)
-    root.style.setProperty('--selection-bg', theme.selectionBg)
+    const applyTheme = () => {
+      const palette = resolveAppTheme(theme, pendingSettings.themeMode, media.matches)
+
+      root.dataset.themeMode = palette.mode
+      root.style.colorScheme = palette.mode
+      root.style.setProperty('--bg-primary', palette.background)
+      root.style.setProperty('--bg-secondary', palette.tabBg)
+      root.style.setProperty('--bg-tertiary', palette.border)
+      root.style.setProperty('--text-primary', palette.foreground)
+      root.style.setProperty('--text-secondary', palette.textSecondary)
+      root.style.setProperty('--text-muted', palette.textMuted)
+      root.style.setProperty('--accent', palette.accent)
+      root.style.setProperty('--on-accent', palette.onAccent)
+      root.style.setProperty('--border', palette.border)
+      root.style.setProperty('--hover', palette.hover)
+      root.style.setProperty('--tab-bg', palette.tabBg)
+      root.style.setProperty('--tab-active-bg', palette.tabActiveBg)
+      root.style.setProperty('--cursor', palette.cursor)
+      root.style.setProperty('--selection-bg', palette.selectionBg)
+    }
+
+    applyTheme()
+    if (pendingSettings.themeMode === 'system') {
+      media.addEventListener('change', applyTheme)
+    }
 
     // Set terminal font from settings (xterm uses this via use-terminal hook)
     const termFontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
@@ -476,20 +501,36 @@ function App() {
       root.style.setProperty('--modern-font', appFont.family)
       document.body.style.fontFamily = appFont.family
     }
-  }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily, pendingSettings.modernFontFamily])
+
+    return () => {
+      media.removeEventListener('change', applyTheme)
+    }
+  }, [
+    pendingSettings.colorTheme,
+    pendingSettings.themeMode,
+    pendingSettings.terminalFontFamily,
+    pendingSettings.modernFontFamily,
+  ])
 
   // Sync --terminal-bg CSS var whenever the xterm theme could change.
   // globals.css uses var(--terminal-bg) on .xterm + .xterm-viewport so every
   // terminal (including ones mounted before the change) picks it up without
   // needing a per-instance inline-style sync.
   useEffect(() => {
-    const bg = getCurrentTerminalTheme().background
-    if (bg) document.documentElement.style.setProperty('--terminal-bg', bg)
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const syncBackground = () => {
+      const bg = getCurrentTerminalTheme().background
+      if (bg) document.documentElement.style.setProperty('--terminal-bg', bg)
+    }
+
+    syncBackground()
+    if (pendingSettings.themeMode === 'system') {
+      media.addEventListener('change', syncBackground)
+    }
+    return () => media.removeEventListener('change', syncBackground)
   }, [
     pendingSettings.colorTheme,
     pendingSettings.themeMode,
-    pendingSettings.uiStyle,
-    pendingSettings.terminalStyleOptions?.colorPreset,
   ])
 
   // Load saved projects on mount and validate folder existence
@@ -537,6 +578,7 @@ function App() {
   // Handle terminal exit
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onExit(({ terminalId }) => {
+      disposeTerminalOutputState(terminalId)
       useAppStore.getState().removeTerminal(terminalId)
     })
     return unsubscribe
@@ -570,6 +612,43 @@ function App() {
     })
     return unsubscribe
   }, [updateTerminalAgentType])
+
+  useEffect(() => {
+    let active = true
+    void window.electron.agent.getReadiness().then((readiness) => {
+      if (active) setAgentReadiness(readiness)
+    })
+    const unsubscribeChanged = window.electron.agent.onBindingChanged((binding) => {
+      setAgentBinding(binding)
+      void window.electron.agentInsights.getSnapshot(binding.terminalId).then((snapshot) => {
+        if (snapshot) setInsightSnapshot(snapshot)
+      })
+    })
+    const unsubscribeRemoved = window.electron.agent.onBindingRemoved((binding) => {
+      removeAgentBinding(binding.terminalId)
+      removeInsightSnapshot(binding.session)
+    })
+    const unsubscribeInsights = window.electron.agentInsights.onUpdated(setInsightSnapshot)
+    return () => {
+      active = false
+      unsubscribeChanged()
+      unsubscribeRemoved()
+      unsubscribeInsights()
+    }
+  }, [removeAgentBinding, removeInsightSnapshot, setAgentBinding, setAgentReadiness, setInsightSnapshot])
+
+  useEffect(() => {
+    for (const terminal of terminals) {
+      void window.electron.agent.getBinding(terminal.id).then((binding) => {
+        if (binding) {
+          setAgentBinding(binding)
+          void window.electron.agentInsights.getSnapshot(terminal.id).then((snapshot) => {
+            if (snapshot) setInsightSnapshot(snapshot)
+          })
+        }
+      })
+    }
+  }, [setAgentBinding, setInsightSnapshot, terminals])
 
   // Propagate Claude sessionId changes from main → renderer store (drives
   // context-window drawer binding).

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { ThinkingBlock } from '@shared/types'
-import { formatTokens } from '@shared/utils/format-tokens'
 
 interface Props {
   blocks: ThinkingBlock[]
@@ -44,7 +43,6 @@ function ThinkingRow({ block }: { block: ThinkingBlock }) {
     >
       <span className="thinking-turn">#{block.turnId}</span>
       <span className="thinking-count">{block.count} block{block.count === 1 ? '' : 's'}</span>
-      <span className="thinking-tokens">~{formatTokens(block.approxTokens)}</span>
       <span className="thinking-badge" title="Signature-only — text not persisted">🔒 signed</span>
       {open ? (
         <div className="thinking-detail">

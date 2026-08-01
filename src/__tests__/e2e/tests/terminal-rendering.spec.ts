@@ -39,8 +39,7 @@ async function selectRenderingMode(
   window: Page,
   mode: 'Performance' | 'Balanced' | 'Quality'
 ): Promise<void> {
-  // Find the button with exact mode name
-  const modeButton = window.locator(`button:has(span.font-medium:text-is("${mode}"))`).first()
+  const modeButton = window.getByRole('button', { name: new RegExp(mode, 'i') }).first()
   await modeButton.click()
   await window.waitForTimeout(WAIT_TIMES.SHORT)
 }
@@ -49,8 +48,12 @@ async function selectRenderingMode(
  * Helper to save and close settings.
  */
 async function saveAndCloseSettings(window: Page): Promise<void> {
-  const saveButton = window.locator('button:has-text("Save Settings")')
-  await saveButton.click()
+  const saveButton = window.getByTestId('settings-save-button')
+  if (await saveButton.isEnabled()) {
+    await saveButton.click()
+  } else {
+    await window.getByRole('button', { name: 'Close Settings' }).click()
+  }
   await window.waitForTimeout(WAIT_TIMES.MEDIUM)
 }
 
@@ -72,10 +75,8 @@ test.describe('Terminal Rendering Modes', () => {
     // Select Performance mode
     await selectRenderingMode(window, 'Performance')
 
-    // Verify Performance button has active styling (check mark visible)
-    const performanceButton = window.locator('button:has(span.font-medium:text-is("Performance"))')
-    const checkMark = performanceButton.locator('span.text-\\[var\\(--mc-accent\\)\\]:has-text("✓")')
-    await expect(checkMark).toBeVisible()
+    const performanceButton = window.getByRole('button', { name: /Performance/i }).first()
+    await expect(performanceButton).toHaveAttribute('aria-pressed', 'true')
 
     // Verify description
     const description = performanceButton.locator('span:has-text("No WebGL")')
@@ -84,14 +85,14 @@ test.describe('Terminal Rendering Modes', () => {
     await saveAndCloseSettings(window)
 
     // Create a terminal to verify rendering if none exist
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
     if (initialCount === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
     // Terminal should render (in performance mode, no WebGL canvas)
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
     await expect(terminalPane).toBeVisible()
 
     // Clear terminal and inject fixed prompt for consistent screenshot
@@ -111,10 +112,8 @@ test.describe('Terminal Rendering Modes', () => {
     // Select Balanced mode
     await selectRenderingMode(window, 'Balanced')
 
-    // Verify Balanced button is selected
-    const balancedButton = window.locator('button:has(span.font-medium:text-is("Balanced"))')
-    const checkMark = balancedButton.locator('span.text-\\[var\\(--mc-accent\\)\\]:has-text("✓")')
-    await expect(checkMark).toBeVisible()
+    const balancedButton = window.getByRole('button', { name: /Balanced/i }).first()
+    await expect(balancedButton).toHaveAttribute('aria-pressed', 'true')
 
     // Verify description
     const description = balancedButton.locator('span:has-text("WebGL only for active")')
@@ -123,27 +122,29 @@ test.describe('Terminal Rendering Modes', () => {
     await saveAndCloseSettings(window)
 
     // Create terminals if none exist
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
     if (initialCount === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
     // Ensure we have at least 2 terminals
-    const currentCount = await window.locator('.terminal-pane').count()
+    const currentCount = await window.locator('[data-terminal-id]').count()
     if (currentCount < 2) {
       await addTerminal(window)
     }
 
     // Verify at least 2 terminals visible
-    const terminalCount = await window.locator('.terminal-pane').count()
+    const terminalCount = await window.locator('[data-terminal-id]').count()
     expect(terminalCount).toBeGreaterThanOrEqual(2)
 
     // Clear all terminals and inject fixed prompt for consistent screenshot
     await clearAllTerminalsForScreenshot(window)
 
     // Take screenshot
-    const gridArea = window.locator('.terminal-pane').first().locator('..')
+    const gridArea = window.getByRole('region', {
+      name: `Terminal grid for project ${mockProject.id}`
+    })
     await expect(gridArea).toHaveScreenshot('terminal-balanced-mode.png', {
       maxDiffPixelRatio: 0.02
     })
@@ -157,10 +158,8 @@ test.describe('Terminal Rendering Modes', () => {
     // Select Quality mode
     await selectRenderingMode(window, 'Quality')
 
-    // Verify Quality button is selected
-    const qualityButton = window.locator('button:has(span.font-medium:text-is("Quality"))')
-    const checkMark = qualityButton.locator('span.text-\\[var\\(--mc-accent\\)\\]:has-text("✓")')
-    await expect(checkMark).toBeVisible()
+    const qualityButton = window.getByRole('button', { name: /Quality/i }).first()
+    await expect(qualityButton).toHaveAttribute('aria-pressed', 'true')
 
     // Verify description
     const description = qualityButton.locator('span:has-text("WebGL always")')
@@ -169,14 +168,14 @@ test.describe('Terminal Rendering Modes', () => {
     await saveAndCloseSettings(window)
 
     // Create a terminal if none exist
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
     if (initialCount === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
     // Terminal should be visible
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
     await expect(terminalPane).toBeVisible()
 
     // Clear terminal and inject fixed prompt for consistent screenshot
@@ -188,8 +187,7 @@ test.describe('Terminal Rendering Modes', () => {
     })
   })
 
-  test.skip('rendering mode persists after page reload', async ({ window }) => {
-    // Skip: Electron page reload causes browser context to close in test environment
+  test('rendering mode persists after page reload', async ({ window }) => {
     // Set to performance mode
     await openSettings(window)
     await navigateToTerminalsTab(window)
@@ -206,9 +204,8 @@ test.describe('Terminal Rendering Modes', () => {
     await navigateToTerminalsTab(window)
 
     // Verify Performance is selected
-    const performanceButton = window.locator('button:has(span.font-medium:text-is("Performance"))')
-    const checkMark = performanceButton.locator('span:has-text("✓")')
-    await expect(checkMark).toBeVisible()
+    const performanceButton = window.getByRole('button', { name: /Performance/i }).first()
+    await expect(performanceButton).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('terminal settings section displays correctly', async ({ window }) => {
@@ -221,20 +218,22 @@ test.describe('Terminal Rendering Modes', () => {
     await expect(sectionHeader).toBeVisible()
 
     // Verify "Rendering Mode" subsection
-    const renderingLabel = window.locator('span:has-text("Rendering Mode")')
+    const renderingLabel = window.getByText('Rendering Mode', { exact: true })
     await expect(renderingLabel).toBeVisible()
 
     // Verify all three mode buttons exist
-    const performanceBtn = window.locator('button:has(span:text-is("Performance"))')
-    const balancedBtn = window.locator('button:has(span:text-is("Balanced"))')
-    const qualityBtn = window.locator('button:has(span:text-is("Quality"))')
+    const performanceBtn = window.getByRole('button', { name: /Performance/i }).first()
+    const balancedBtn = window.getByRole('button', { name: /Balanced/i }).first()
+    const qualityBtn = window.getByRole('button', { name: /Quality/i }).first()
 
     await expect(performanceBtn).toBeVisible()
     await expect(balancedBtn).toBeVisible()
     await expect(qualityBtn).toBeVisible()
 
     // Take screenshot of terminal settings
-    const settingsContent = window.locator('.flex-1.p-4.overflow-auto')
+    const settingsContent = window
+      .getByRole('dialog', { name: 'Settings' })
+      .locator('.overflow-y-scroll')
     await expect(settingsContent).toHaveScreenshot('terminal-settings-panel.png', {
       maxDiffPixelRatio: 0.02
     })
@@ -246,27 +245,26 @@ test.describe('Terminal Rendering Modes', () => {
     await navigateToTerminalsTab(window)
 
     // Verify terminal limit section exists
-    const limitLabel = window.locator('span:has-text("Max Terminals per Project")')
+    const limitLabel = window.getByText('Max Terminals per Project', { exact: true })
     await expect(limitLabel).toBeVisible()
 
     // Click on preset "4"
-    const preset4Button = window.locator('button:has-text("4")').filter({
-      has: window.locator('text=/^4$/')
-    })
+    const preset4Button = window.getByRole('button', { name: '4', exact: true })
     await preset4Button.click()
     await window.waitForTimeout(WAIT_TIMES.SHORT)
+    await expect(preset4Button).toHaveAttribute('aria-pressed', 'true')
 
     await saveAndCloseSettings(window)
 
     // Create a terminal if none exist
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
     if (initialCount === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
     // Terminal should be created
-    const terminalCount = await window.locator('.terminal-pane').count()
+    const terminalCount = await window.locator('[data-terminal-id]').count()
     expect(terminalCount).toBeGreaterThanOrEqual(1)
   })
 })

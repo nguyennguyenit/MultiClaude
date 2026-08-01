@@ -9,8 +9,7 @@ function block(turnId: number, count = 1): ThinkingBlock {
     turnId,
     timestamp: 1_700_000_000_000 + turnId,
     count,
-    signatures: Array.from({ length: count }, (_, i) => `sig${turnId}_${i}xxxxxxxx`.slice(0, 16)),
-    approxTokens: count * 50
+    signatures: Array.from({ length: count }, (_, i) => `sig${turnId}_${i}xxxxxxxx`.slice(0, 16))
   }
 }
 
@@ -20,10 +19,11 @@ describe('ThinkingViewer', () => {
     expect(screen.getByTestId('thinking-empty')).toBeTruthy()
   })
 
-  it('renders one row per turn with count + tokens', () => {
+  it('renders one row per turn without fabricating token volume', () => {
     render(<ThinkingViewer blocks={[block(1, 2), block(2, 1)]} />)
     expect(screen.getAllByTestId(/thinking-row-/).length).toBe(2)
     expect(screen.getByTestId('thinking-row-1').textContent).toMatch(/2/)
+    expect(screen.getByTestId('thinking-row-1').textContent).not.toMatch(/~|token/i)
   })
 
   it('expands to show signature prefixes (signed-only badge)', () => {

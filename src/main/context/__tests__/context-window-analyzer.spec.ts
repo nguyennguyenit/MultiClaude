@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { EventEmitter } from 'events'
 import { ContextWindowAnalyzer, type JsonlLineEvent } from '../context-window-analyzer'
 import { ClaudeMdReader } from '../claude-md-reader'
+import claudeInsightLines from './fixtures/claude-insights.jsonl?raw'
 
 function makeSource() {
   const src = new EventEmitter()
@@ -34,6 +35,53 @@ describe('ContextWindowAnalyzer', () => {
     expect(snap!.buckets['user-messages'].itemCount).toBe(1)
     expect(snap!.buckets['thinking-text'].itemCount).toBe(1)
     expect(snap!.total).toBeGreaterThan(0)
+    a.destroy()
+  })
+
+  it('characterizes cumulative estimated totals from the redacted Claude fixture', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const analyzer = new ContextWindowAnalyzer(source, stubReader)
+
+    for (const line of claudeInsightLines.trim().split('\n').map(value => JSON.parse(value))) {
+      emit({ sessionId: 'fixture-session', cwd: '/redacted', filePath: 'fixture.jsonl', line })
+    }
+
+    const snapshot = analyzer.getSnapshot('fixture-session')
+    expect(snapshot).not.toBeNull()
+    expect(snapshot!.total).toBe(
+      Object.values(snapshot!.buckets).reduce((total, bucket) => total + bucket.tokens, 0)
+    )
+    expect(snapshot!.buckets['user-messages'].itemCount).toBe(1)
+    expect(snapshot!.buckets['thinking-text'].itemCount).toBe(1)
+    expect(snapshot!.total).toBeGreaterThan(0)
+    analyzer.destroy()
+  })
+
+  it('skips advanced computation when the startup-only setting is disabled', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader, { advancedEnabled: false })
+
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'inspect a file' } } })
+    emit({
+      sessionId: 's', filePath: 'f',
+      line: {
+        type: 'assistant',
+        message: { content: [
+          { type: 'tool_use', id: 'tu_r', name: 'Read', input: { path: '/x' } },
+          { type: 'thinking', thinking: '', signature: 'EpECClkIDBgCKkBJsig1' }
+        ] }
+      }
+    })
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'summary', summary: 'compact summary' } })
+
+    const snap = a.getSnapshot('s')
+    expect(snap?.total).toBeGreaterThan(0)
+    expect(snap?.turnDeltas).toBeUndefined()
+    expect(snap?.compactionEvents).toBeUndefined()
+    expect(snap?.thinkingBlocks).toBeUndefined()
+    expect(a.getTurnDetail('s', 1)).toBeNull()
     a.destroy()
   })
 
@@ -135,6 +183,7 @@ describe('ContextWindowAnalyzer', () => {
     expect(snap!.thinkingBlocks!.length).toBe(1)
     expect(snap!.thinkingBlocks![0].count).toBe(2)
     expect(snap!.thinkingBlocks![0].signatures.length).toBe(2)
+    expect(snap!.thinkingBlocks![0]).not.toHaveProperty('approxTokens')
     a.destroy()
   })
 
@@ -153,12 +202,23 @@ describe('ContextWindowAnalyzer', () => {
     a.destroy()
   })
 
-  it('attaches execution trace to closed-turn summary', () => {
+  it('does not promote user-authored compact marker text to a compaction event', () => {
     const { source, emit } = makeSource()
     const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
     const a = new ContextWindowAnalyzer(source, stubReader)
 
-    // Turn 1 with Agent + main tool
+    emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'Explain <compact> without running it' } } })
+
+    expect(a.getSnapshot('s')?.compactionEvents ?? []).toEqual([])
+    a.destroy()
+  })
+
+  it('attaches flat tool activity to the closed-turn summary', () => {
+    const { source, emit } = makeSource()
+    const stubReader = { load: async () => ({ text: '', bytes: 0, sources: [] }) } as unknown as ClaudeMdReader
+    const a = new ContextWindowAnalyzer(source, stubReader)
+
+    // Turn 1 with Agent + ordinary tool activity
     emit({ sessionId: 's', filePath: 'f', line: { type: 'user', message: { content: 'turn one' } } })
     emit({
       sessionId: 's', filePath: 'f',
@@ -191,12 +251,8 @@ describe('ContextWindowAnalyzer', () => {
     const snap = a.getSnapshot('s')
     const turn1 = snap?.turnDeltas?.find((t) => t.turnId === 1)
     expect(turn1?.trace).toBeDefined()
-    expect(turn1!.trace!.length).toBe(2)
-    const main = turn1!.trace!.find((n) => n.agentType === 'main')
-    const sub = turn1!.trace!.find((n) => n.agentType === 'subagent')
-    expect(main?.toolCalls.length).toBe(1)
-    expect(main?.toolCalls[0].name).toBe('Read')
-    expect(sub?.agentName).toBe('tester')
+    expect(turn1!.trace!.length).toBe(1)
+    expect(turn1!.trace![0].toolCalls.map((call) => call.name)).toEqual(['Read', 'Agent'])
     a.destroy()
   })
 

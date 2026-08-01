@@ -1,7 +1,15 @@
 import Store from 'electron-store'
 import { app } from 'electron'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalRenderMode, UiStyle, TerminalColorPreset, TerminalFontId, AppFontId } from '@shared/types'
-import { DEFAULT_SETTINGS, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
+import type { AppSettings, ThemeMode, TerminalRenderMode, TerminalFontId, AppFontId, ShellInfo, TerminalEngine } from '@shared/types'
+import { DEFAULT_SETTINGS, SCROLLBACK_MIN, SCROLLBACK_MAX, THEMES } from '@shared/constants'
+import { getNativeTerminalCapability, resolveTerminalEngine } from '../terminal/native-terminal-capability'
+import { CURRENT_SETTINGS_SCHEMA_VERSION, migrateSettings } from './settings-migrations'
+import {
+  beginSettingsMigration,
+  confirmSettingsMigrationReady,
+  recoverSettingsMigrationOnLaunch,
+  type SettingsMigrationTransaction,
+} from './settings-migration-transaction'
 
 /**
  * Detect whether the current build is on a pre-release channel
@@ -9,33 +17,38 @@ import { DEFAULT_SETTINGS, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/consta
  * enableContextWindowAdvanced. Falls back to stable if app.getVersion()
  * is unavailable (non-Electron contexts, e.g. tests).
  */
-function isPreReleaseChannel(): boolean {
+function isPreReleaseChannel(appVersion?: string): boolean {
   try {
-    return /-(beta|rc|alpha)/i.test(app.getVersion())
+    return /-(beta|rc|alpha)/i.test(appVersion ?? app.getVersion())
   } catch {
     return false
   }
 }
 
 interface StoreSchema {
-  settings: AppSettings
+  settings?: AppSettings
+  settingsMigration: SettingsMigrationTransaction | null
+}
+
+interface SettingsStoreOptions {
+  /** Test seam; production reads Electron's app version. */
+  appVersion?: string
 }
 
 // Allowed values for enum-like settings
 const VALID_THEME_MODES: ThemeMode[] = ['light', 'dark', 'system']
-const VALID_COLOR_THEMES: ColorTheme[] = ['default', 'dusk', 'lime', 'ocean', 'retro', 'neo', 'forest', 'neon-cyber', 'pro-dark', 'vibrant']
+const VALID_COLOR_THEMES = new Set(THEMES.map(theme => theme.id))
 const VALID_RENDER_MODES: TerminalRenderMode[] = ['performance', 'balanced', 'quality']
 const VALID_TERMINAL_PRESETS = [2, 4, 9, 'custom'] as const
-const VALID_UI_STYLES: UiStyle[] = ['modern', 'terminal']
-const VALID_TERMINAL_COLOR_PRESETS: TerminalColorPreset[] = ['green', 'blue', 'white']
 const VALID_TERMINAL_FONT_IDS: TerminalFontId[] = ['system', 'jetbrains-mono', 'source-code-pro', 'fira-code', 'vt323', 'ibm-plex-mono', 'space-mono']
 const VALID_APP_FONT_IDS: AppFontId[] = ['system', 'inter', 'geist', 'plus-jakarta-sans', 'roboto', 'ubuntu', 'segoe-ui']
+const VALID_SHELL_KINDS: ShellInfo['kind'][] = ['unix', 'cmd', 'powershell', 'wsl']
 
 /**
  * Validate and sanitize incoming settings to prevent data corruption.
  * Returns sanitized settings with invalid values replaced by defaults.
  */
-function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings): Partial<AppSettings> {
+export function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings): Partial<AppSettings> {
   const validated: Partial<AppSettings> = {}
 
   // Validate themeMode
@@ -47,9 +60,20 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
 
   // Validate colorTheme
   if (settings.colorTheme !== undefined) {
-    validated.colorTheme = VALID_COLOR_THEMES.includes(settings.colorTheme)
+    validated.colorTheme = VALID_COLOR_THEMES.has(settings.colorTheme)
       ? settings.colorTheme
       : defaults.colorTheme
+  }
+
+  if (settings.settingsSchemaVersion !== undefined) {
+    validated.settingsSchemaVersion = CURRENT_SETTINGS_SCHEMA_VERSION
+  }
+
+  if (settings.terminalEngine !== undefined) {
+    validated.terminalEngine = resolveTerminalEngine(
+      settings.terminalEngine as TerminalEngine,
+      getNativeTerminalCapability(),
+    )
   }
 
   // Validate terminalRenderMode
@@ -91,27 +115,6 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
       : defaults.enableContextWindowAdvanced
   }
 
-  // Validate enableThinkingSyntaxHighlight
-  if (settings.enableThinkingSyntaxHighlight !== undefined) {
-    validated.enableThinkingSyntaxHighlight = typeof settings.enableThinkingSyntaxHighlight === 'boolean'
-      ? settings.enableThinkingSyntaxHighlight
-      : defaults.enableThinkingSyntaxHighlight
-  }
-
-  // Validate reflowSafeScrollback (Part D)
-  if (settings.reflowSafeScrollback !== undefined) {
-    validated.reflowSafeScrollback = typeof settings.reflowSafeScrollback === 'boolean'
-      ? settings.reflowSafeScrollback
-      : defaults.reflowSafeScrollback
-  }
-
-  // Validate glassmorphismEnabled
-  if (settings.glassmorphismEnabled !== undefined) {
-    validated.glassmorphismEnabled = typeof settings.glassmorphismEnabled === 'boolean'
-      ? settings.glassmorphismEnabled
-      : defaults.glassmorphismEnabled
-  }
-
   // Validate terminalFontFamily
   if (settings.terminalFontFamily !== undefined) {
     validated.terminalFontFamily = VALID_TERMINAL_FONT_IDS.includes(settings.terminalFontFamily as TerminalFontId)
@@ -140,14 +143,24 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
     }
   }
 
-  // Validate windowsShell
-  if (settings.windowsShell !== undefined) {
-    const shell = settings.windowsShell
-    if (shell && typeof shell === 'object' && 'type' in shell) {
-      if (shell.type === 'cmd' || shell.type === 'powershell') {
-        validated.windowsShell = { type: shell.type }
-      } else if (shell.type === 'wsl' && typeof shell.distro === 'string' && shell.distro.length > 0) {
-        validated.windowsShell = { type: 'wsl', distro: shell.distro }
+  if (settings.defaultShell !== undefined) {
+    const shell = settings.defaultShell
+    if (
+      shell &&
+      typeof shell.path === 'string' &&
+      shell.path.length > 0 &&
+      typeof shell.name === 'string' &&
+      shell.name.length > 0 &&
+      typeof shell.isDefault === 'boolean' &&
+      VALID_SHELL_KINDS.includes(shell.kind) &&
+      (shell.kind !== 'wsl' || typeof shell.distro === 'string')
+    ) {
+      validated.defaultShell = {
+        path: shell.path,
+        name: shell.name,
+        isDefault: shell.isDefault,
+        kind: shell.kind,
+        ...(shell.kind === 'wsl' ? { distro: shell.distro } : {}),
       }
     }
   }
@@ -159,36 +172,6 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
       : defaults.modernFontFamily
   }
 
-  // Validate uiStyle
-  if (settings.uiStyle !== undefined) {
-    validated.uiStyle = VALID_UI_STYLES.includes(settings.uiStyle)
-      ? settings.uiStyle
-      : defaults.uiStyle
-  }
-
-  // Validate terminalStyleOptions
-  if (settings.terminalStyleOptions !== undefined) {
-    const opts = settings.terminalStyleOptions
-    const defaultOpts = defaults.terminalStyleOptions ?? {
-      colorPreset: 'green' as TerminalColorPreset,
-      fontFamily: 'jetbrains-mono' as TerminalFontId,
-      useBorderChars: false
-    }
-    if (opts && typeof opts === 'object') {
-      validated.terminalStyleOptions = {
-        colorPreset: VALID_TERMINAL_COLOR_PRESETS.includes(opts.colorPreset)
-          ? opts.colorPreset
-          : defaultOpts.colorPreset,
-        fontFamily: VALID_TERMINAL_FONT_IDS.includes(opts.fontFamily)
-          ? opts.fontFamily
-          : defaultOpts.fontFamily,
-        useBorderChars: typeof opts.useBorderChars === 'boolean'
-          ? opts.useBorderChars
-          : defaultOpts.useBorderChars
-      }
-    }
-  }
-
   return validated
 }
 
@@ -198,17 +181,78 @@ function validateSettings(settings: Partial<AppSettings>, defaults: AppSettings)
  */
 export class SettingsStore {
   private store: Store<StoreSchema>
+  private readonly channelDefaults: AppSettings
 
-  constructor() {
+  constructor(options: SettingsStoreOptions = {}) {
+    this.channelDefaults = {
+      ...DEFAULT_SETTINGS,
+      enableContextWindowAdvanced: isPreReleaseChannel(options.appVersion),
+    }
     const cwd = process.env.MULTICLAUDE_TEST_STORE_PATH || undefined
 
     this.store = new Store<StoreSchema>({
       name: 'multiclaude-settings',
       cwd,
       defaults: {
-        settings: DEFAULT_SETTINGS
+        settingsMigration: null,
       }
     })
+    this.prepareSettings()
+  }
+
+  private prepareSettings(): void {
+    const raw = (this.store.get('settings') ?? {}) as unknown as Record<string, unknown>
+    const transaction = this.store.get('settingsMigration')
+    const recovered = recoverSettingsMigrationOnLaunch(raw, transaction)
+    if (transaction) {
+      const recoveredSettings = recovered.restoredBackup
+        ? this.completeSettingsProfile(recovered.settings)
+        : recovered.settings as unknown as AppSettings
+      this.store.set('settings', recoveredSettings)
+      this.store.set('settingsMigration', recovered.transaction)
+      if (recovered.restoredBackup) return
+      if (recovered.transaction?.phase === 'next-launch-expiry-pending') return
+    }
+
+    const migrated = {
+      ...this.channelDefaults,
+      ...migrateSettings(recovered.settings),
+      settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    } as AppSettings
+    const candidateSettings = {
+      ...this.channelDefaults,
+      ...validateSettings(migrated, this.channelDefaults),
+      settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    } as AppSettings
+    candidateSettings.terminalEngine = resolveTerminalEngine(candidateSettings.terminalEngine)
+    if (JSON.stringify(recovered.settings) === JSON.stringify(candidateSettings)) return
+
+    const backup = structuredClone(
+      this.completeSettingsProfile(recovered.settings),
+    ) as unknown as Record<string, unknown>
+    const candidate = structuredClone(candidateSettings) as unknown as Record<string, unknown>
+    this.store.set('settingsMigration', {
+      phase: 'backup-written',
+      backup,
+      candidate,
+    })
+    this.store.set('settingsMigration', beginSettingsMigration(backup, candidate))
+    this.store.set('settings', candidateSettings)
+
+    const persistedCandidate = this.store.get('settings')
+    const readValidated = {
+      ...this.channelDefaults,
+      ...validateSettings(persistedCandidate ?? {}, this.channelDefaults),
+      settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+    } as AppSettings
+    readValidated.terminalEngine = resolveTerminalEngine(readValidated.terminalEngine)
+    if (
+      JSON.stringify(persistedCandidate) !== JSON.stringify(candidateSettings) ||
+      JSON.stringify(readValidated) !== JSON.stringify(candidateSettings)
+    ) {
+      this.store.set('settings', backup as unknown as AppSettings)
+      this.store.set('settingsMigration', null)
+    }
   }
 
   /** Retrieve current settings from disk, applying channel-aware defaults
@@ -216,19 +260,14 @@ export class SettingsStore {
    *  upgrading to v3.6.0). Writes back once so subsequent reads are stable.
    */
   getSettings(): AppSettings {
-    const raw = this.store.get('settings')
-    const patched: AppSettings = { ...raw }
-    let changed = false
-    if (raw.enableContextWindowAdvanced === undefined) {
-      patched.enableContextWindowAdvanced = isPreReleaseChannel()
-      changed = true
-    }
-    if (raw.enableThinkingSyntaxHighlight === undefined) {
-      patched.enableThinkingSyntaxHighlight = false
-      changed = true
-    }
-    if (changed) this.store.set('settings', patched)
-    return patched
+    return this.store.get('settings') ?? structuredClone(this.channelDefaults)
+  }
+
+  private completeSettingsProfile(settings: Record<string, unknown>): AppSettings {
+    return {
+      ...structuredClone(this.channelDefaults),
+      ...structuredClone(settings),
+    } as AppSettings
   }
 
   /**
@@ -238,7 +277,10 @@ export class SettingsStore {
   setSettings(settings: Partial<AppSettings>): AppSettings {
     const current = this.getSettings()
     // Validate input before merging
-    const validated = validateSettings(settings, current)
+    const migratedInput = migrateSettings(
+      settings as unknown as Record<string, unknown>,
+    ) as Partial<AppSettings>
+    const validated = validateSettings(migratedInput, current)
     const updated: AppSettings = {
       ...current,
       ...validated,
@@ -246,18 +288,24 @@ export class SettingsStore {
       terminalLimit: validated.terminalLimit
         ? { ...current.terminalLimit, ...validated.terminalLimit }
         : current.terminalLimit,
-      terminalStyleOptions: validated.terminalStyleOptions
-        ? { ...current.terminalStyleOptions, ...validated.terminalStyleOptions }
-        : current.terminalStyleOptions,
-      windowsShell: validated.windowsShell ?? current.windowsShell
+      settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
     }
-    this.store.set('settings', updated)
-    return updated
+    const sanitized = migrateSettings(updated as unknown as Record<string, unknown>) as unknown as AppSettings
+    sanitized.terminalEngine = resolveTerminalEngine(sanitized.terminalEngine)
+    this.store.set('settings', sanitized)
+    return sanitized
+  }
+
+  markMigrationHealthy(): void {
+    const transaction = this.store.get('settingsMigration')
+    if (!transaction || transaction.phase === 'app-ready-confirmed') return
+    this.store.set('settingsMigration', confirmSettingsMigrationReady(transaction))
   }
 
   /** Reset all settings to defaults. */
   resetSettings(): AppSettings {
-    this.store.set('settings', DEFAULT_SETTINGS)
-    return DEFAULT_SETTINGS
+    const defaults = structuredClone(this.channelDefaults)
+    this.store.set('settings', defaults)
+    return defaults
   }
 }

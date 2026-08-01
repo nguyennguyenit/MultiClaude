@@ -13,7 +13,7 @@ describe('ThinkingExtractor', () => {
     expect(blocks[0].turnId).toBe(1)
     expect(blocks[0].count).toBe(1)
     expect(blocks[0].signatures[0]).toBe('EpECClkIDBgCKkBJ')
-    expect(blocks[0].approxTokens).toBeGreaterThan(0)
+    expect(blocks[0]).not.toHaveProperty('approxTokens')
   })
 
   it('merges multiple thinking blocks within a turn', () => {

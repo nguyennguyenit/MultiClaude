@@ -205,11 +205,13 @@ export class TelegramCommandRouter {
     }
 
     const index = terminals.findIndex(term => term.id === resolved.terminal?.id) + 1
-    const ok = this.terminalManager.destroy(resolved.terminal.id)
+    const ok = await this.terminalManager.destroyAsync(resolved.terminal.id)
     if (!ok) {
       await this.sendReply(`Failed to kill terminal ${index}`)
       return
     }
+    this.projectStore.removeTerminalFromSession(resolved.terminal.id)
+    this.terminalManager.forgetTerminalHistory(resolved.terminal.id)
 
     await this.sendReply(`🗑️ Terminal ${index} \\(${this.esc(resolved.terminal.title)}\\) killed`)
   }
@@ -782,22 +784,17 @@ export class TelegramCommandRouter {
   }
 
   private getTerminalOutput(terminalId: string, lineCount: number): string | null {
-    const sessions = this.terminalManager.getSessions()
-    const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
-    if (!session?.outputBuffer) return null
+    const liveTail = this.terminalManager.getNotificationTail(terminalId)
+    if (!liveTail) return null
 
-    const lines = cleanTerminalOutput(session.outputBuffer).split('\n')
+    const lines = cleanTerminalOutput(liveTail).split('\n')
     const tail = lines.slice(-lineCount)
     return tail.length > 0 ? tail.join('\n') : null
   }
 
   /** Returns raw output buffer for smart summary (no pre-cleaning, formatter handles it) */
   private getRawTerminalOutput(terminalId: string): string | null {
-    const sessions = this.terminalManager.getSessions()
-    const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
-    if (session?.outputBuffer) return session.outputBuffer
-    // Fallback: exited terminal ghost cache
-    return this.terminalManager.getExitedSession(terminalId)?.outputBuffer ?? null
+    return this.terminalManager.getNotificationTail(terminalId) ?? null
   }
 
   private esc(text: string): string {

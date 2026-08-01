@@ -8,7 +8,7 @@ describe('ExecutionTraceBuilder', () => {
     expect(b.snapshot()).toEqual([])
   })
 
-  it('groups non-Agent tool calls under a single main node', () => {
+  it('groups tool calls under a single flat activity node', () => {
     const b = new ExecutionTraceBuilder()
     b.recordAssistantBlocks([
       { type: 'tool_use', id: 'tu_1', name: 'Read', input: { path: '/a' } },
@@ -20,13 +20,12 @@ describe('ExecutionTraceBuilder', () => {
     ])
     const trace = b.snapshot()
     expect(trace.length).toBe(1)
-    expect(trace[0].agentType).toBe('main')
     expect(trace[0].toolCalls.length).toBe(2)
     expect(trace[0].toolCalls[0].name).toBe('Read')
     expect(trace[0].tokens).toBeGreaterThan(0)
   })
 
-  it('emits a subagent node per Agent tool_use', () => {
+  it('records Agent invocations as tool activity without claiming a nested trace', () => {
     const b = new ExecutionTraceBuilder()
     b.recordAssistantBlocks([
       {
@@ -42,19 +41,20 @@ describe('ExecutionTraceBuilder', () => {
         input: { subagent_type: 'researcher', description: 'find docs', prompt: 'search X' }
       }
     ])
+    const beforeResults = b.snapshot()[0].toolCalls.map((call) => call.tokens)
     b.recordToolResults([
       { tool_use_id: 'tu_a1', content: 'agent output 1' },
       { tool_use_id: 'tu_a2', content: 'agent output 2' }
     ])
     const trace = b.snapshot()
-    expect(trace.length).toBe(2)
-    expect(trace[0].agentType).toBe('subagent')
-    expect(trace[0].agentName).toBe('git-manager')
-    expect(trace[0].description).toBe('commit')
-    expect(trace[1].agentName).toBe('researcher')
+    expect(trace.length).toBe(1)
+    expect(trace[0].toolCalls.map((call) => call.name)).toEqual(['Agent', 'Agent'])
+    expect(trace[0].toolCalls.every((call, index) => call.tokens > beforeResults[index])).toBe(true)
+    expect(trace[0]).not.toHaveProperty('children')
+    expect(trace[0]).not.toHaveProperty('agentType')
   })
 
-  it('mixes main + subagent nodes when both kinds observed', () => {
+  it('keeps ordinary and Agent calls in invocation order in one activity group', () => {
     const b = new ExecutionTraceBuilder()
     b.recordAssistantBlocks([
       { type: 'tool_use', id: 'tu_r', name: 'Read', input: {} },
@@ -70,9 +70,8 @@ describe('ExecutionTraceBuilder', () => {
       { tool_use_id: 'tu_a', content: 'subagent done' }
     ])
     const trace = b.snapshot()
-    expect(trace.length).toBe(2)
-    expect(trace.find((n) => n.agentType === 'main')).toBeDefined()
-    expect(trace.find((n) => n.agentType === 'subagent')).toBeDefined()
+    expect(trace.length).toBe(1)
+    expect(trace[0].toolCalls.map((call) => call.name)).toEqual(['Read', 'Agent'])
   })
 
   it('ignores tool_result with no matching tool_use (orphan)', () => {
@@ -81,17 +80,23 @@ describe('ExecutionTraceBuilder', () => {
     expect(b.snapshot()).toEqual([])
   })
 
-  it('caps inner toolCalls at 50 with deeperCount', () => {
+  it('caps visible calls at 50 while retaining aggregate input tokens and omitted count', () => {
     const b = new ExecutionTraceBuilder()
     const blocks = []
     for (let i = 0; i < 70; i++) {
-      blocks.push({ type: 'tool_use', id: `t${i}`, name: 'Read', input: {} })
+      blocks.push({ type: 'tool_use', id: `t${i}`, name: 'Read', input: { path: `/file/${i}` } })
     }
     b.recordAssistantBlocks(blocks)
     const trace = b.snapshot()
+    const aggregateBeforeResults = trace[0].tokens
+    const visibleInputTotal = trace[0].toolCalls.reduce((total, call) => total + call.tokens, 0)
     expect(trace[0].toolCalls.length).toBe(50)
-    expect(trace[0].depthCapped).toBe(true)
-    expect(trace[0].deeperCount).toBe(20)
+    expect(trace[0].truncated).toBe(true)
+    expect(trace[0].omittedCallCount).toBe(20)
+    expect(aggregateBeforeResults).toBeGreaterThan(visibleInputTotal)
+
+    b.recordToolResults([{ tool_use_id: 't69', content: 'result from omitted call' }])
+    expect(b.snapshot()[0].tokens).toBeGreaterThan(aggregateBeforeResults)
   })
 
   it('snapshot returns a defensive copy (subsequent records do not mutate prior snapshots)', () => {

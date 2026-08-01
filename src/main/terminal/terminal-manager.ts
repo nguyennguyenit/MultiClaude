@@ -2,10 +2,19 @@ import * as pty from '@lydell/node-pty'
 import os from 'os'
 import { spawnSync } from 'child_process'
 import { EventEmitter } from 'events'
+import { randomUUID } from 'crypto'
 import { existsSync, readdirSync, realpathSync } from 'fs'
 import path from 'path'
-import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO, AGENT_DETECTION_PATTERNS, HEADLESS_SCROLLBACK_LINES } from '@shared/constants'
-import type { Terminal, TerminalSession, WindowsShell, AgentType, ShellInfo, WslInfo, CreateTerminalOptions } from '@shared/types'
+import {
+  AGENT_DETECTION_PATTERNS,
+  HEADLESS_SCROLLBACK_LINES,
+  NOTIFICATION_TAIL_MAX_BYTES,
+  RESTORE_TAIL_MAX_BYTES,
+  RESTORE_TAIL_TRIM_TO_BYTES,
+} from '@shared/constants'
+import type { Terminal, TerminalSession, WindowsShell, AgentType, AgentProvider, ShellInfo, WslInfo, CreateTerminalOptions } from '@shared/types'
+import type { TerminalOutputChunk, TerminalSnapshot } from '@shared/types'
+import { Utf8TailBuffer } from '@shared/utils/utf8-tail'
 import { detectMacosShells } from './macos-shell-detector'
 import { detectWsl } from './wsl-detector'
 // @xterm/headless is CJS-only (package.json "module" field points to non-existent lib/xterm.mjs).
@@ -25,16 +34,12 @@ interface PTYProcess {
   id: string
   pty: pty.IPty
   metadata: Terminal
-  // Raw-ANSI buffer kept ONLY for Telegram's text-only notification path.
-  // Visual terminal state = headless snapshot (see getSnapshot). Do not grow this for UI use.
-  outputBuffer: string
-  // Monotonic count of total bytes ever appended to outputBuffer (survives trim).
-  // Paired with bufferStartOffset, gives absolute positions used by rebuildHeadless
-  // to compute the tail correctly even if a trim runs concurrently with replay.
-  bytesWritten: number
-  // Absolute byte position of outputBuffer[0] in the monotonic stream.
-  // Invariant: bufferStartOffset + outputBuffer.length === bytesWritten
-  bufferStartOffset: number
+  // Local-only raw tail persisted for app-restart restoration and diagnostics.
+  // Visual terminal state = headless snapshot (see getSnapshot).
+  outputBuffer: Utf8TailBuffer
+  // Live in-memory tail for explicitly enabled remote notification/control.
+  // It is never serialized into AppSession.
+  notificationTail: Utf8TailBuffer
   inputBuffer: string
   lastOutputAt: number // Timestamp of last output for busy detection
   oscBuffer: string // Buffer for incomplete OSC sequences
@@ -44,6 +49,11 @@ interface PTYProcess {
   // Phase 1: headless terminal mirror for snapshot/restore
   headlessTerm?: HeadlessTerminal
   serializeAddon?: SerializeAddon
+  exitFinalized?: boolean
+  streamEpoch: string
+  nextSequence: number
+  lastCommittedSequence: number
+  mutationQueue: Promise<void>
 }
 
 export class TerminalManager extends EventEmitter {
@@ -53,6 +63,7 @@ export class TerminalManager extends EventEmitter {
   private shell: string
   private resolvedWindowsPowerShellCommand: string | null = null
   private systemSuspended = false // Track system suspend state
+  private notificationTailEnabled = false
   private nextTerminalNumber = 1
   // Shell list caching (C3: store Promise, not raw array — prevents startup race)
   private shellsPromise: Promise<ShellInfo[]> | null = null
@@ -82,6 +93,37 @@ export class TerminalManager extends EventEmitter {
         this.emit('terminal-resumed', { terminalId: term.id })
       }
     })
+  }
+
+  private finalizeTerminalExit(termProcess: PTYProcess, exitCode: number): void {
+    const { id } = termProcess
+    if (termProcess.exitFinalized || !this.terminals.has(id)) return
+    termProcess.exitFinalized = true
+
+    this.emit('exit', { terminalId: id, exitCode })
+    this.exitedTerminals.set(id, {
+      id,
+      title: termProcess.metadata.title,
+      cwd: termProcess.metadata.cwd,
+      projectId: termProcess.metadata.projectId,
+      claudeSessionId: termProcess.metadata.claudeSessionId,
+      outputBuffer: termProcess.notificationTail.toString(),
+      lastOutputAt: termProcess.lastOutputAt,
+      exitedAt: Date.now()
+    })
+    const now = Date.now()
+    for (const [gid, session] of this.exitedTerminals) {
+      if (session.exitedAt && (now - session.exitedAt) > GHOST_TTL_MS) {
+        this.exitedTerminals.delete(gid)
+      }
+    }
+    if (this.exitedTerminals.size > MAX_GHOST_TERMINALS) {
+      this.exitedTerminals.delete(this.exitedTerminals.keys().next().value!)
+    }
+    termProcess.headlessTerm?.dispose()
+    termProcess.headlessTerm = undefined
+    termProcess.serializeAddon = undefined
+    this.terminals.delete(id)
   }
 
   private getDefaultShell(): string {
@@ -134,13 +176,13 @@ export class TerminalManager extends EventEmitter {
       {
         path: process.env.COMSPEC || 'cmd.exe',
         name: 'Command Prompt',
-        isDefault: !this.settings?.windowsShell || this.settings.windowsShell.type === 'cmd',
+        isDefault: !this.settings?.defaultShell || this.settings.defaultShell.kind === 'cmd',
         kind: 'cmd',
       },
       {
         path: this.resolvedWindowsPowerShellCommand ?? 'powershell.exe',
         name: 'PowerShell',
-        isDefault: this.settings?.windowsShell?.type === 'powershell',
+        isDefault: this.settings?.defaultShell?.kind === 'powershell',
         kind: 'powershell',
       },
     ]
@@ -150,9 +192,10 @@ export class TerminalManager extends EventEmitter {
       list.push({
         path: `wsl://${d.name}`,
         name: d.name,
-        isDefault: this.settings?.windowsShell?.type === 'wsl' &&
-          (this.settings.windowsShell as { type: 'wsl'; distro: string }).distro === d.name,
+        isDefault: this.settings?.defaultShell?.kind === 'wsl' &&
+          this.settings.defaultShell.distro === d.name,
         kind: 'wsl',
+        distro: d.name,
       })
     }
 
@@ -160,10 +203,10 @@ export class TerminalManager extends EventEmitter {
   }
 
   // Settings reference for Windows shell info (injected from startup)
-  private settings: { windowsShell?: WindowsShell } | null = null
+  private settings: { defaultShell?: ShellInfo } | null = null
 
   /** Provide settings context so buildWindowsShellInfoList can mark the default. */
-  setSettings(s: { windowsShell?: WindowsShell }): void {
+  setSettings(s: { defaultShell?: ShellInfo }): void {
     this.settings = s
   }
 
@@ -285,7 +328,7 @@ export class TerminalManager extends EventEmitter {
   private resolvedShellPaths: Set<string> | null = null
 
   private extractClaudeSessionId(command: string): string | undefined {
-    const match = command.match(/(?:^|\s)--resume(?:=|\s+)(\S+)/)
+    const match = command.match(/(?:^|\s)--(?:resume|session-id)(?:=|\s+)(\S+)/)
     return match?.[1]
   }
 
@@ -458,12 +501,15 @@ export class TerminalManager extends EventEmitter {
       id,
       pty: ptyProcess,
       metadata: terminal,
-      outputBuffer: '',
-      bytesWritten: 0,
-      bufferStartOffset: 0,
+      outputBuffer: new Utf8TailBuffer(RESTORE_TAIL_MAX_BYTES, RESTORE_TAIL_TRIM_TO_BYTES),
+      notificationTail: new Utf8TailBuffer(NOTIFICATION_TAIL_MAX_BYTES, RESTORE_TAIL_TRIM_TO_BYTES),
       inputBuffer: '',
       lastOutputAt: 0,
-      oscBuffer: ''
+      oscBuffer: '',
+      streamEpoch: randomUUID(),
+      nextSequence: 1,
+      lastCommittedSequence: 0,
+      mutationQueue: Promise.resolve()
     }
 
     // Phase 1: construct headless mirror BEFORE registering pty.onData (red-team H3 ordering).
@@ -495,64 +541,47 @@ export class TerminalManager extends EventEmitter {
       // during the suspend→resume window (snapshot replay missing content).
       // SIGTRAP risk lives in pty.write/pty.resize — guards there are kept.
 
-      // Phase 1: mirror PTY output to headless terminal BEFORE IPC emit.
-      // Skip headless write during rebuild — outputBuffer accumulates the data,
-      // and the replay in rebuildHeadless() covers it. Writing here AND replaying
-      // would duplicate content (C1 concurrent-write race fix).
-      if (!termProcess.rebuildingHeadless) {
-        termProcess.headlessTerm?.write(data)
+      const chunk: TerminalOutputChunk = {
+        terminalId: id,
+        streamEpoch: termProcess.streamEpoch,
+        sequence: termProcess.nextSequence++,
+        data,
       }
 
-      // Raw-ANSI buffer — Telegram text-only path only. Visual source of truth = headless snapshot (getSnapshot).
-      termProcess.outputBuffer += data
-      termProcess.bytesWritten += data.length
+      // Keep local restoration and live remote-control tails as separate contracts.
+      termProcess.outputBuffer.append(data)
+      if (this.notificationTailEnabled) termProcess.notificationTail.append(data)
       termProcess.lastOutputAt = Date.now()
-      if (termProcess.outputBuffer.length > TERMINAL_OUTPUT_BUFFER_MAX) {
-        const beforeLen = termProcess.outputBuffer.length
-        const sliced = termProcess.outputBuffer.slice(-TERMINAL_OUTPUT_BUFFER_TRIM_TO)
-        // Trim to the next \n boundary so we don't start mid-ANSI sequence.
-        const newlineIdx = sliced.indexOf('\n')
-        const trimmed = newlineIdx >= 0 ? sliced.slice(newlineIdx + 1) : sliced
-        // Track absolute byte position of buffer[0] (C2) so rebuildHeadless can
-        // map captured offsets through trims that happen during replay.
-        termProcess.bufferStartOffset += beforeLen - trimmed.length
-        termProcess.outputBuffer = trimmed
-      }
-      this.emit('output', { terminalId: id, data })
+      // Canonical ordering: commit the headless write before exposing the
+      // envelope. Snapshot capture joins this same queue, so its watermark is
+      // always coherent with the serialized terminal state.
+      termProcess.mutationQueue = termProcess.mutationQueue.then(async () => {
+        if (!this.terminals.has(id)) return
+        if (termProcess.headlessTerm) {
+          await new Promise<void>(resolve => termProcess.headlessTerm!.write(data, resolve))
+        }
+        if (!this.terminals.has(id)) return
+        termProcess.lastCommittedSequence = chunk.sequence
+        this.emit('output', chunk)
+      }).catch((error) => {
+        console.warn('[terminal-manager] canonical output mutation failed', {
+          id,
+          sequence: chunk.sequence,
+          error: (error as Error).message,
+        })
+      })
 
       // Parse OSC sequences for title changes
       this.parseOscTitle(termProcess, data)
     })
 
     ptyProcess.onExit(({ exitCode }) => {
-      this.emit('exit', { terminalId: id, exitCode })
-      // Save to ghost cache before removing — allows Telegram buttons to still work
-      this.exitedTerminals.set(id, {
-        id,
-        title: termProcess.metadata.title,
-        cwd: termProcess.metadata.cwd,
-        projectId: termProcess.metadata.projectId,
-        claudeSessionId: termProcess.metadata.claudeSessionId,
-        outputBuffer: termProcess.outputBuffer,
-        lastOutputAt: termProcess.lastOutputAt,
-        exitedAt: Date.now()
+      // Stop new input immediately, but let already-sequenced output commit
+      // before exit is exposed and canonical state is disposed.
+      termProcess.destroying = true
+      termProcess.mutationQueue = termProcess.mutationQueue.finally(() => {
+        this.finalizeTerminalExit(termProcess, exitCode)
       })
-      // Evict expired ghosts first
-      const now = Date.now()
-      for (const [gid, session] of this.exitedTerminals) {
-        if (session.exitedAt && (now - session.exitedAt) > GHOST_TTL_MS) {
-          this.exitedTerminals.delete(gid)
-        }
-      }
-      // Count-based eviction if still over limit
-      if (this.exitedTerminals.size > MAX_GHOST_TERMINALS) {
-        this.exitedTerminals.delete(this.exitedTerminals.keys().next().value!)
-      }
-      // Phase 1: dispose headless terminal on PTY exit to prevent memory leak
-      termProcess.headlessTerm?.dispose()
-      termProcess.headlessTerm = undefined
-      termProcess.serializeAddon = undefined
-      this.terminals.delete(id)
     })
 
     this.terminals.set(id, termProcess)
@@ -599,12 +628,17 @@ export class TerminalManager extends EventEmitter {
     }
     try {
       term.pty.resize(cols, rows)
-      // Phase 1: resize headless mirror inside same try block (validation V1).
-      // Skip resize during rebuild — freshTerm is created at the current cols, a
-      // concurrent resize here would re-introduce the wrong-width artifact (C1).
-      if (!term.rebuildingHeadless) {
+      // PTY resize is immediate, but canonical headless resize joins the same
+      // queue as output and snapshot barriers so mutation order is preserved.
+      term.mutationQueue = term.mutationQueue.then(() => {
+        if (!this.terminals.has(id)) return
         term.headlessTerm?.resize(cols, rows)
-      }
+      }).catch((error) => {
+        console.warn('[terminal-manager] canonical resize mutation failed', {
+          id,
+          error: (error as Error).message,
+        })
+      })
       return true
     } catch (error) {
       // PTY may be invalid after system resume - log but don't crash
@@ -629,29 +663,81 @@ export class TerminalManager extends EventEmitter {
   /**
    * Serialize the headless terminal mirror for a given terminal ID.
    * Drains the write queue first (B2) then serializes with full scrollback.
-   * Returns empty payload on missing id or serialize error (M7).
+   * Returns an empty payload for a missing/destroyed terminal. A live terminal
+   * whose canonical mirror is unavailable rejects so renderer recovery keeps
+   * buffered sequenced output live instead of adopting an empty epoch.
    *
    * Re-checks process existence after await to guard against PTY exit during serialize.
    */
-  async getSnapshot(id: string): Promise<{ data: string; cols: number; rows: number }> {
-    const empty = { data: '', cols: 0, rows: 0 }
+  async getSnapshot(id: string): Promise<TerminalSnapshot> {
+    const empty: TerminalSnapshot = {
+      terminalId: id,
+      streamEpoch: '',
+      watermark: 0,
+      ansi: '',
+      cols: 0,
+      rows: 0,
+      buffer: 'normal',
+    }
     const proc = this.terminals.get(id)
-    if (!proc?.headlessTerm || !proc.serializeAddon) return empty
+    if (!proc || proc.destroying) return empty
+    if (!proc.headlessTerm || !proc.serializeAddon) {
+      // A live PTY without its canonical mirror must not masquerade as a valid
+      // empty snapshot. Rejecting activates the renderer's bounded live-stream
+      // fallback instead of binding it to the empty epoch and dropping output.
+      await proc.mutationQueue
+      if (!this.terminals.has(id) || proc.destroying) return empty
+      throw new Error(`Canonical terminal snapshot unavailable for ${id}`)
+    }
     try {
-      // Drain pending writes before serializing (red-team B2)
-      await this.flushHeadless(id)
-      // Re-check after await — PTY may have exited while we awaited (guard against stale ref)
-      const current = this.terminals.get(id)
-      if (!current?.headlessTerm || !current.serializeAddon) return empty
-      return {
-        data: current.serializeAddon.serialize({ scrollback: HEADLESS_SCROLLBACK_LINES }),
-        cols: current.headlessTerm.cols,
-        rows: current.headlessTerm.rows,
-      }
+      let snapshot = empty
+      const barrier = proc.mutationQueue.then(() => {
+        const current = this.terminals.get(id)
+        if (!current?.headlessTerm || !current.serializeAddon) return
+        snapshot = {
+          terminalId: id,
+          streamEpoch: current.streamEpoch,
+          watermark: current.lastCommittedSequence,
+          ansi: current.serializeAddon.serialize({ scrollback: HEADLESS_SCROLLBACK_LINES }),
+          cols: current.headlessTerm.cols,
+          rows: current.headlessTerm.rows,
+          buffer: current.headlessTerm.buffer.active.type,
+        }
+      })
+      proc.mutationQueue = barrier.catch(() => undefined)
+      await barrier
+      return snapshot
     } catch (err) {
       console.warn('[terminal-manager] getSnapshot failed', { id, err: (err as Error).message })
-      return empty
+      throw new Error(`Canonical terminal snapshot unavailable for ${id}`)
     }
+  }
+
+  /** Return stream/backend metadata without serializing or exposing terminal content. */
+  getDiagnostics(): Array<{
+    terminalId: string
+    provider: AgentProvider | null
+    backend: 'xterm-headless' | 'unavailable'
+    backendAvailable: boolean
+    lastSequence: number
+    watermark: number
+    fallbackReason: string | null
+  }> {
+    return [...this.terminals.values()].map(proc => {
+      const backendAvailable = Boolean(proc.headlessTerm && proc.serializeAddon)
+      const provider = proc.metadata.agentType === 'claude' || proc.metadata.agentType === 'codex'
+        ? proc.metadata.agentType
+        : null
+      return {
+        terminalId: proc.id,
+        provider,
+        backend: backendAvailable ? 'xterm-headless' : 'unavailable',
+        backendAvailable,
+        lastSequence: Math.max(0, proc.nextSequence - 1),
+        watermark: proc.lastCommittedSequence,
+        fallbackReason: backendAvailable ? null : 'Canonical xterm headless mirror unavailable.',
+      }
+    })
   }
 
   /**
@@ -661,8 +747,7 @@ export class TerminalManager extends EventEmitter {
    * calls produce artifact-free output — ANSI erase sequences execute at the correct
    * column width and no reflow gaps are left in the scrollback.
    *
-   * Called by the renderer before every snapshot replay (Part F) so the refresh button
-   * always produces a clean snapshot regardless of prior resize history.
+   * Diagnostic-only fallback. Normal refresh and resize consume the canonical mirror.
    *
    * Guards:
    *   - PTY already destroyed / destroying → no-op (idempotent)
@@ -671,32 +756,16 @@ export class TerminalManager extends EventEmitter {
    */
   async rebuildHeadless(id: string): Promise<void> {
     const proc = this.terminals.get(id)
-    // Guard: terminal gone or being torn down
-    if (!proc || proc.destroying) return
-    // Guard: headless was never initialised (init failure at create time)
-    if (!proc.headlessTerm) return
-    // C1: serialize concurrent rebuilds. A second call while one is in flight
-    // would dispose the in-flight freshTerm and corrupt the tail-flush window.
-    if (proc.rebuildingHeadless) return
+    if (!proc || proc.destroying || !proc.headlessTerm || proc.rebuildingHeadless) return
 
-    // Raise rebuild flag so pty.onData and resize() skip live headless writes.
-    // outputBuffer keeps accumulating; replay+tail-flush below cover all bytes.
+    // Capture at invocation time. Output arriving later is sequenced behind this
+    // queue entry and will be written once to the replacement terminal.
+    const replayPayload = proc.outputBuffer.toString()
     proc.rebuildingHeadless = true
-
-    // Capture current dimensions before disposing
-    const cols = proc.headlessTerm.cols || 80
-    const rows = proc.headlessTerm.rows || 24
-
-    // Dispose existing headless + addon to free memory before allocating new ones
-    try { proc.serializeAddon?.dispose() } catch { /* ignore */ }
-    try { proc.headlessTerm.dispose() } catch { /* ignore */ }
-    proc.headlessTerm = undefined
-    proc.serializeAddon = undefined
-
-    try {
-      // Guard: PTY may have exited during the dispose calls above
-      if (proc.destroying || !this.terminals.has(id)) return
-
+    const rebuild = proc.mutationQueue.then(async () => {
+      if (proc.destroying || !this.terminals.has(id) || !proc.headlessTerm) return
+      const cols = proc.headlessTerm.cols || 80
+      const rows = proc.headlessTerm.rows || 24
       const freshTerm = new HeadlessTerminalCtor({
         cols,
         rows,
@@ -706,63 +775,29 @@ export class TerminalManager extends EventEmitter {
       const freshAddon = new SerializeAddon()
       freshTerm.loadAddon(freshAddon as unknown as Parameters<typeof freshTerm.loadAddon>[0])
 
-      // C2: snapshot the replay payload + absolute end-byte synchronously, so the
-      // tail-flush window survives any trim that runs during the await below.
-      const replayPayload = proc.outputBuffer
-      const replayEndByte = proc.bytesWritten
-
-      // Replay raw transcript at the current column width BEFORE attaching to proc.
-      // Race with a 5 s timeout in case freshTerm is disposed mid-write and the
-      // callback never fires; 5 s far exceeds the ~100-300 ms cost of 3 MB replay.
-      let replayTimedOut = false
       if (replayPayload) {
-        await Promise.race([
-          new Promise<void>(resolve => freshTerm.write(replayPayload, resolve)),
-          new Promise<void>(resolve => setTimeout(() => { replayTimedOut = true; resolve() }, 5000)),
-        ])
-        if (replayTimedOut) {
-          console.warn('[terminal-manager] rebuildHeadless: replay write timed out at 5s', { id, payloadBytes: replayPayload.length })
-        }
+        await new Promise<void>(resolve => freshTerm.write(replayPayload, resolve))
       }
-
-      // Re-check liveness after the await — PTY may have exited during write.
       if (proc.destroying || !this.terminals.has(id)) {
         try { freshAddon.dispose() } catch { /* ignore */ }
         try { freshTerm.dispose() } catch { /* ignore */ }
         return
       }
 
-      // Attach only after replay completes — pty.onData resumes writing here once
-      // rebuildingHeadless is cleared in finally.
+      try { proc.serializeAddon?.dispose() } catch { /* ignore */ }
+      try { proc.headlessTerm.dispose() } catch { /* ignore */ }
       proc.headlessTerm = freshTerm
       proc.serializeAddon = freshAddon
-
-      // Flush any bytes that arrived after the replay snapshot (C2).
-      // Use absolute byte positions so a concurrent trim cannot corrupt the offset.
-      // bytes still resident in outputBuffer occupy [bufferStartOffset, bytesWritten).
-      const tailStartByte = Math.max(replayEndByte, proc.bufferStartOffset)
-      const tailStartIdx = tailStartByte - proc.bufferStartOffset
-      const tail = tailStartIdx < proc.outputBuffer.length
-        ? proc.outputBuffer.slice(tailStartIdx)
-        : ''
-      if (tail) {
-        let tailTimedOut = false
-        await Promise.race([
-          new Promise<void>(resolve => freshTerm.write(tail, resolve)),
-          new Promise<void>(resolve => setTimeout(() => { tailTimedOut = true; resolve() }, 5000)),
-        ])
-        if (tailTimedOut) {
-          console.warn('[terminal-manager] rebuildHeadless: tail write timed out at 5s', { id, tailBytes: tail.length })
-        }
-      }
-    } catch (err) {
-      // Non-fatal: headless rebuild failed — next getSnapshot will return stale/empty data,
-      // which is the same behaviour as before this feature was added.
-      console.warn('[terminal-manager] rebuildHeadless failed', { id, err: (err as Error).message })
-      // Leave headlessTerm/serializeAddon as undefined — getSnapshot returns empty payload
-    } finally {
+    })
+    proc.mutationQueue = rebuild.catch((err) => {
+      console.warn('[terminal-manager] rebuildHeadless failed', {
+        id,
+        err: (err as Error).message,
+      })
+    }).finally(() => {
       proc.rebuildingHeadless = false
-    }
+    })
+    await proc.mutationQueue
   }
 
   destroy(id: string): boolean {
@@ -817,34 +852,21 @@ export class TerminalManager extends EventEmitter {
     term.destroying = true
 
     return new Promise((resolve) => {
-      let resolved = false
-
-      const cleanup = () => {
-        if (resolved) return
-        resolved = true
+      const onManagerExit = ({ terminalId }: { terminalId: string }) => {
+        if (terminalId !== id) return
         clearTimeout(timeout)
-        // Phase 1: dispose headless terminal on async destroy (mirrors create-time onExit handler)
-        term.headlessTerm?.dispose()
-        term.headlessTerm = undefined
-        term.serializeAddon = undefined
-        this.terminals.delete(id)
+        this.off('exit', onManagerExit)
+        resolve(true)
       }
+      this.on('exit', onManagerExit)
 
-      // Attach exit listener BEFORE initiating kill to avoid race condition
-      term.pty.onExit(() => {
-        cleanup()
-        resolve(true)
-      })
-
-      // Timeout handler - force kill if graceful fails
       const timeout = setTimeout(() => {
-        if (resolved) return
         this.forceKill(term)
-        cleanup()
-        resolve(true)
+        term.mutationQueue = term.mutationQueue.finally(() => {
+          this.finalizeTerminalExit(term, -1)
+        })
       }, DESTROY_TIMEOUT_MS)
 
-      // Initiate graceful kill after listener attached
       term.pty.kill()
     })
   }
@@ -904,9 +926,46 @@ export class TerminalManager extends EventEmitter {
       cwd: t.metadata.cwd,
       projectId: t.metadata.projectId,
       claudeSessionId: t.metadata.claudeSessionId,
-      outputBuffer: t.outputBuffer,
+      outputBuffer: t.outputBuffer.toString(),
       lastOutputAt: t.lastOutputAt
     }))
+  }
+
+  /** Live-only output tail for authorized notification/control consumers. */
+  getNotificationTail(id: string): string | undefined {
+    return this.terminals.get(id)?.notificationTail.toString()
+      ?? this.exitedTerminals.get(id)?.outputBuffer
+  }
+
+  /** Retain live transcript content only while Telegram remote control is enabled. */
+  setNotificationTailEnabled(enabled: boolean): void {
+    this.notificationTailEnabled = enabled
+    if (enabled) return
+    for (const terminal of this.terminals.values()) terminal.notificationTail.clear()
+    this.exitedTerminals.clear()
+  }
+
+  /** Scrub all retained transcript content for a deleted terminal. */
+  forgetTerminalHistory(id: string): void {
+    const live = this.terminals.get(id)
+    if (live) {
+      live.outputBuffer.clear()
+      live.notificationTail.clear()
+    }
+    this.exitedTerminals.delete(id)
+  }
+
+  /** Scrub all retained transcript content associated with a deleted project. */
+  forgetProjectHistory(projectId: string): void {
+    for (const terminal of this.terminals.values()) {
+      if (terminal.metadata.projectId === projectId) {
+        terminal.outputBuffer.clear()
+        terminal.notificationTail.clear()
+      }
+    }
+    for (const [id, session] of this.exitedTerminals) {
+      if (session.projectId === projectId) this.exitedTerminals.delete(id)
+    }
   }
 
   /** Returns cached session data for an exited terminal (for notification button fallback) */

@@ -132,6 +132,36 @@ describe('useAppStore terminal output buffering', () => {
     expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
   })
 
+  it('keeps managed provider bindings separate from detected terminal metadata', () => {
+    useAppStore.getState().addTerminal({ ...makeTerminal(), agentType: 'gemini' })
+    useAppStore.getState().setAgentReadiness({
+      claude: { status: 'ready', version: '2.1.220' },
+      codex: { status: 'fallback', reason: 'App Server too old' }
+    })
+    useAppStore.getState().setAgentBinding({
+      session: { provider: 'claude', id: 'session-1' },
+      terminalId: 'term-1',
+      projectId: 'project-1',
+      webContentsId: 7,
+      capabilities: {
+        send: true,
+        interrupt: true,
+        resume: true,
+        approvals: false,
+        contextUsage: 'estimated',
+        reasoningMetadata: true
+      },
+      status: 'idle'
+    })
+
+    expect(useAppStore.getState().terminals[0]?.agentType).toBe('gemini')
+    expect(useAppStore.getState().agentBindings['term-1']?.session.provider).toBe('claude')
+    expect(useAppStore.getState().agentReadiness.codex?.status).toBe('fallback')
+
+    useAppStore.getState().removeAgentBinding('term-1')
+    expect(useAppStore.getState().agentBindings['term-1']).toBeUndefined()
+  })
+
   it('reorders projects by id without changing active project or terminal', () => {
     const projects = [makeProject('project-a'), makeProject('project-b'), makeProject('project-c')]
     useAppStore.getState().setProjects(projects)

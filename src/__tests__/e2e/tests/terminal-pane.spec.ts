@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { test, expect, injectMockProject, WAIT_TIMES } from '../fixtures'
+import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
 import { mockProject } from '../fixtures/test-data'
 
 // Skip PTY-dependent tests on CI (terminal creation can be unreliable)
@@ -80,7 +80,7 @@ test.describe('Terminal Pane Interactions', () => {
 
   test('header displays terminal title', async ({ window }) => {
     // Find terminal pane header
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
     await expect(terminalPane).toBeVisible()
 
     // Header should contain title text
@@ -94,7 +94,7 @@ test.describe('Terminal Pane Interactions', () => {
   })
 
   test('title editable on double-click (input appears)', async ({ window }) => {
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
 
     // Find the title span (not Claude badge or buttons)
     const titleSpan = terminalPane.locator('span[title="Double-click to rename"]').first()
@@ -147,45 +147,17 @@ test.describe('Terminal Pane Interactions', () => {
     await terminalScreen.click({ button: 'right' })
     await window.waitForTimeout(WAIT_TIMES.LONG)
 
-    await expect(window.locator(`text=${pastedMarker}`)).toHaveCount(0)
+    const snapshot = await window.evaluate(
+      async (terminalId) => globalThis.window.electron.terminal.getSnapshot(terminalId),
+      terminalIds.activeTerminalId!
+    )
+    const snapshotData = 'ansi' in snapshot ? snapshot.ansi : snapshot.data
+    expect(snapshotData).not.toContain(pastedMarker)
 
     await window.keyboard.press('Escape').catch(() => {})
   })
-
-  test.skip('new title saves on Enter', async ({ window }) => {
-    // Skip: Title updates require store state propagation which doesn't work reliably in test env
-    const terminalPane = window.locator('.terminal-pane').first()
-
-    // Enter edit mode
-    const titleSpan = terminalPane.locator('span[title="Double-click to rename"]').first()
-    await titleSpan.dblclick()
-
-    // Find the input
-    const titleInput = terminalPane.locator('input[type="text"]')
-    await expect(titleInput).toBeVisible()
-
-    // Clear and type new title
-    const newTitle = 'My Custom Terminal'
-    await titleInput.fill(newTitle)
-
-    // Verify input has the new value before pressing Enter
-    await expect(titleInput).toHaveValue(newTitle)
-
-    await titleInput.press('Enter')
-
-    // Wait for input to disappear (edit mode ended)
-    await expect(titleInput).not.toBeVisible({ timeout: 2000 })
-
-    // Wait for state to propagate
-    await window.waitForTimeout(300)
-
-    // Verify new title is displayed
-    const updatedTitleSpan = terminalPane.locator('span[title="Double-click to rename"]')
-    await expect(updatedTitleSpan).toHaveText(newTitle, { timeout: 3000 })
-  })
-
   test('title edit cancels on Escape', async ({ window }) => {
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
 
     // Get original title
     const titleSpan = terminalPane.locator('span[title="Double-click to rename"]').first()
@@ -206,33 +178,34 @@ test.describe('Terminal Pane Interactions', () => {
     await expect(restoredTitleSpan).toHaveText(originalTitle || '')
   })
 
-  test.skip('close button removes terminal', async ({ window }) => {
-    // Skip: Closing terminals can cause app instability in test environment
-    let terminalCount = await window.locator('.terminal-pane').count()
-    expect(terminalCount).toBeGreaterThanOrEqual(1)
+  test('close button removes terminal', async ({ window }) => {
+    const terminals = window.locator('[data-terminal-id]')
+    const initialCount = await terminals.count()
+    expect(initialCount).toBeGreaterThanOrEqual(1)
+
+    await terminals.first().getByRole('button', { name: 'Close terminal' }).click()
+    await expect(terminals).toHaveCount(initialCount - 1)
   })
 
   test('active terminal has highlight styling', async ({ window }) => {
     // Get initial count
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
 
     // Ensure we have at least 2 terminals
     if (initialCount < 2) {
-      const addButton = window.locator('button:has-text("+ New")')
       const terminalsToAdd = 2 - initialCount
       for (let i = 0; i < terminalsToAdd; i++) {
-        await addButton.click()
-        await window.waitForTimeout(WAIT_TIMES.STANDARD)
+        await addTerminal(window)
       }
     }
 
     // Verify at least 2 terminals
-    const terminalCount = await window.locator('.terminal-pane').count()
+    const terminalCount = await window.locator('[data-terminal-id]').count()
     expect(terminalCount).toBeGreaterThanOrEqual(2)
 
     // The most recently created terminal should be active
-    const terminalPanes = window.locator('.terminal-pane')
-    const activePane = window.locator('.terminal-pane-active')
+    const terminalPanes = window.locator('[data-terminal-id]')
+    const activePane = window.locator('.terminal-cell-overlay.active [data-terminal-id]')
 
     // Should have exactly one active pane
     await expect(activePane).toHaveCount(1)
@@ -241,13 +214,13 @@ test.describe('Terminal Pane Interactions', () => {
     await terminalPanes.nth(0).click()
     await window.waitForTimeout(WAIT_TIMES.MEDIUM)
 
-    // Now first pane should have active class
-    await expect(terminalPanes.nth(0)).toHaveClass(/terminal-pane-active/)
+    // The overlay that owns the first terminal should now be active.
+    await expect(terminalPanes.nth(0).locator('xpath=ancestor::div[contains(@class,"terminal-cell-overlay")]')).toHaveClass(/active/)
   })
 
   test('Terminal header buttons display correctly', async ({ window }) => {
     // First terminal should show header elements
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
     await expect(terminalPane).toBeVisible()
 
     // Refresh terminal button should be visible
@@ -260,7 +233,7 @@ test.describe('Terminal Pane Interactions', () => {
   })
 
   test('insert file path button exists and is clickable', async ({ window }) => {
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
     await expect(terminalPane).toBeVisible()
 
     // Find insert file path button

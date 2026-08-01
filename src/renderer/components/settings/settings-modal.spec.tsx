@@ -66,20 +66,22 @@ beforeEach(() => {
   })
 })
 
-describe('SettingsModal — Mobile tab integration (v3.4.0 regression)', () => {
-  it('renders 5 tabs including Mobile between Notifications and Updates', async () => {
+describe('SettingsModal — settings ownership', () => {
+  it('renders Diagnostics and Agents & Integrations as explicit tabs', async () => {
     render(<SettingsModal isOpen={true} onClose={() => undefined} />)
 
     const appearance = await screen.findByTestId('settings-tab-appearance')
     const terminals = screen.getByTestId('settings-tab-terminals')
     const notifications = screen.getByTestId('settings-tab-notifications')
-    const mobile = screen.getByTestId('settings-tab-mobile-control')
+    const diagnostics = screen.getByTestId('settings-tab-diagnostics')
+    const agents = screen.getByTestId('settings-tab-agents-integrations')
     const updates = screen.getByTestId('settings-tab-updates')
 
     expect(appearance).toBeTruthy()
     expect(terminals).toBeTruthy()
     expect(notifications).toBeTruthy()
-    expect(mobile).toBeTruthy()
+    expect(diagnostics).toBeTruthy()
+    expect(agents).toBeTruthy()
     expect(updates).toBeTruthy()
 
     // Verify DOM order: notifications → mobile → updates
@@ -90,26 +92,66 @@ describe('SettingsModal — Mobile tab integration (v3.4.0 regression)', () => {
       'settings-tab-appearance',
       'settings-tab-terminals',
       'settings-tab-notifications',
-      'settings-tab-mobile-control',
+      'settings-tab-diagnostics',
+      'settings-tab-agents-integrations',
       'settings-tab-updates'
     ])
   })
 
-  it('clicking Mobile tab renders MobileControlSettings body', async () => {
+  it('clicking Agents & Integrations renders MobileControlSettings body', async () => {
     render(<SettingsModal isOpen={true} onClose={() => undefined} />)
-    const mobileTab = await screen.findByTestId('settings-tab-mobile-control')
-    fireEvent.click(mobileTab)
+    const agentsTab = await screen.findByTestId('settings-tab-agents-integrations')
+    fireEvent.click(agentsTab)
     await waitFor(() => {
       // SettingsTitle text rendered inside MobileControlSettings
       expect(screen.getByText('Mobile Control')).toBeTruthy()
+      expect(screen.getByText('Telegram')).toBeTruthy()
+      expect(screen.getByText('Discord')).toBeTruthy()
       expect(screen.getByTestId('mc-toggle')).toBeTruthy()
     })
   })
 
-  it('default active tab remains appearance (does not accidentally default to mobile)', async () => {
+  it('keeps provider controls out of Notifications', async () => {
+    render(<SettingsModal isOpen={true} onClose={() => undefined} />)
+    fireEvent.click(await screen.findByTestId('settings-tab-notifications'))
+
+    expect(await screen.findByText('On Task Complete')).toBeTruthy()
+    expect(screen.queryByText('Detection Mode')).toBeNull()
+    expect(screen.queryByText('Telegram')).toBeNull()
+    expect(screen.queryByText('Discord')).toBeNull()
+  })
+
+  it('clicking Diagnostics renders parser overrides outside Notifications', async () => {
+    render(<SettingsModal isOpen={true} onClose={() => undefined} />)
+    const diagnosticsTab = await screen.findByTestId('settings-tab-diagnostics')
+    fireEvent.click(diagnosticsTab)
+    expect(await screen.findByText('Detection Mode')).toBeTruthy()
+  })
+
+  it('default active tab remains appearance', async () => {
     render(<SettingsModal isOpen={true} onClose={() => undefined} />)
     await screen.findByTestId('settings-tab-appearance')
     // MobileControlSettings body not mounted yet
     expect(screen.queryByTestId('mc-toggle')).toBeNull()
+  })
+
+  it('traps focus and restores the previously focused control on close', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const view = render(<SettingsModal isOpen={true} onClose={() => undefined} />)
+    const close = await screen.findByLabelText('Close Settings')
+    await waitFor(() => expect(document.activeElement).toBe(close))
+
+    const modal = screen.getByTestId('settings-modal')
+    const focusable = modal.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), select:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    )
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(focusable[focusable.length - 1])
+
+    view.rerender(<SettingsModal isOpen={false} onClose={() => undefined} />)
+    expect(document.activeElement).toBe(opener)
+    opener.remove()
   })
 })

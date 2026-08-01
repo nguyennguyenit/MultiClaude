@@ -1,7 +1,10 @@
 import type { PaneTree } from './pane-tree'
+import type { AgentType } from './agent-provider'
 
-// Agent type detected from terminal command input
-export type AgentType = 'claude' | 'codex' | 'gemini' | 'aider' | 'generic'
+export * from './agent-provider'
+export * from './agent-session'
+export * from './agent-event'
+export * from './agent-insights'
 
 /** Per-terminal task lifecycle state derived from notification events. */
 export type TerminalTaskStatus = 'idle' | 'running' | 'review' | 'done' | 'failed'
@@ -193,19 +196,13 @@ export type ColorTheme =
 
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
+export type TerminalEngine = 'xterm' | 'ghostty'
 
 // UI Style types for Terminal/TUI mode
-export type UiStyle = 'modern' | 'terminal'
 export type TerminalColorPreset = 'green' | 'blue' | 'white'
 export type TerminalFontId = 'system' | 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
 // App/UI font (non-terminal) - sans-serif fonts for the main interface
 export type AppFontId = 'system' | 'inter' | 'geist' | 'plus-jakarta-sans' | 'roboto' | 'ubuntu' | 'segoe-ui'
-
-export interface TerminalStyleOptions {
-  colorPreset: TerminalColorPreset
-  fontFamily: TerminalFontId
-  useBorderChars: boolean
-}
 
 // WSL detection types (Windows only)
 export interface WslDistro {
@@ -230,6 +227,7 @@ export interface ShellInfo {
   name: string          // display name: 'zsh', 'fish', 'bash', 'Command Prompt', etc.
   isDefault: boolean    // true if this matches the user's login shell / default Windows shell
   kind: 'unix' | 'cmd' | 'powershell' | 'wsl'  // discriminant — no name-matching needed
+  distro?: string       // WSL distribution name when kind === 'wsl'
 }
 
 // Options for creating a new terminal
@@ -265,6 +263,8 @@ export interface ColorThemeDefinition {
 }
 
 export interface AppSettings {
+  settingsSchemaVersion: number
+  terminalEngine: TerminalEngine
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
@@ -275,22 +275,15 @@ export interface AppSettings {
    * (~1–2KB per line). Range: 1000–200000. Default: 20000.
    */
   scrollbackLines?: number
-  glassmorphismEnabled: boolean
   // Terminal content font family (xterm)
   terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
-  windowsShell?: WindowsShell
   // Cross-platform: persisted default shell selection
   defaultShell?: ShellInfo
   // Legacy fields - kept optional for backward compat with saved settings + hook
   themeMode?: ThemeMode
   // Main app/UI font family (non-terminal)
   modernFontFamily?: AppFontId
-  // Legacy: UI style (terminal/modern toggle - removed in VibeTerminal reskin)
-  uiStyle?: UiStyle
-  terminalStyleOptions?: TerminalStyleOptions
-  // Legacy: Activity Bar state (removed in VibeTerminal reskin)
-  activityBarState?: ActivityBarState
   /**
    * Toggle the context-window breakdown feature (drawer + main analyzer).
    * Startup-only: a restart is required for changes to take effect.
@@ -299,30 +292,11 @@ export interface AppSettings {
   enableContextWindow?: boolean
   /**
    * Toggle the advanced context-window features (turn-injection diff,
-   * execution trace, compaction timeline, extended thinking viewer).
+   * tool activity, compaction timeline, extended thinking viewer).
    * Startup-only. Default: channel-aware — true on beta/rc/alpha channel,
    * false on stable. See src/main/settings/settings-store.ts channel detect.
    */
   enableContextWindowAdvanced?: boolean
-  /**
-   * Toggle lazy-loaded syntax highlighter in the Extended Thinking viewer.
-   * Startup-only. Default: false (adds ~25KB gzip chunk when enabled).
-   * Ignored when enableContextWindowAdvanced is false.
-   */
-  enableThinkingSyntaxHighlight?: boolean
-  /**
-   * Part D (opt-in): When true, automatically rebuilds terminal scrollback from the raw
-   * PTY transcript whenever the terminal width changes (split, resize, project switch).
-   * Eliminates blank gaps in old output caused by xterm's internal reflow.
-   *
-   * Memory note: the raw transcript buffer (TERMINAL_OUTPUT_BUFFER_MAX = 3 MB/terminal)
-   * is allocated regardless of this setting — it powers the always-on Refresh-button
-   * rebuild (Part F). This toggle only gates auto-rebuild on resize; the CPU cost
-   * (~100-300 ms per resize) is what you opt into here.
-   *
-   * Default: false — Refresh button still rebuilds; no automatic rebuild on resize.
-   */
-  reflowSafeScrollback?: boolean
 }
 
 // GitHub Issues/PRs types
@@ -358,3 +332,4 @@ export * from './pane-tree'
 
 // Context window breakdown types
 export * from './context-window'
+export * from './terminal-stream'

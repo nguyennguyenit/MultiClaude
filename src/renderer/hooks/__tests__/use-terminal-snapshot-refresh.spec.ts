@@ -24,9 +24,25 @@ vi.mock('@xterm/addon-webgl')
 vi.mock('@xterm/addon-fit')
 vi.mock('@xterm/addon-web-links')
 
-import { useTerminalWebGL } from '../use-terminal-webgl'
-import { pauseAndBuffer, resumeAndFlush, resetTerminalOutputDispatcherForTests } from '../../utils/terminal-output-dispatcher'
+import {
+  acquireSnapshotReplayLock,
+  performSnapshotReplay,
+  useTerminalWebGL,
+} from '../use-terminal-webgl'
+import {
+  attachTerminalOutputDispatcher,
+  pauseAndBuffer,
+  registerTerminalOutputHandler,
+  resumeAndFlush,
+  resetTerminalOutputDispatcherForTests,
+} from '../../utils/terminal-output-dispatcher'
 import { useToastStore } from '../../stores'
+import { createTerminalStateHarness } from '../../utils/__tests__/terminal-state-harness'
+import {
+  SNAPSHOT_DUPLICATION_CASE,
+  TERMINAL_STREAM_CASES,
+} from '../../../main/terminal/__tests__/fixtures/terminal-stream-cases'
+import type { TerminalOutputChunk } from '@shared/types'
 
 // ── xterm mock helpers ──────────────────────────────────────────────────────
 
@@ -44,13 +60,23 @@ const extendedMock = mockTerminalInstance as typeof mockTerminalInstance & {
 // ── window.electron helpers ─────────────────────────────────────────────────
 
 type ElectronTerminalMock = {
+  rebuildHeadless: ReturnType<typeof vi.fn>
   getSnapshot: ReturnType<typeof vi.fn>
   resize: ReturnType<typeof vi.fn>
 }
 
 function stubElectronTerminal(overrides: Partial<ElectronTerminalMock> = {}) {
   const mock: ElectronTerminalMock = {
-    getSnapshot: vi.fn().mockResolvedValue({ data: '\x1b[2Jhello', cols: 80, rows: 24 }),
+    rebuildHeadless: vi.fn().mockResolvedValue(undefined),
+    getSnapshot: vi.fn().mockResolvedValue({
+      terminalId: 'test-term',
+      streamEpoch: 'epoch-1',
+      watermark: 0,
+      ansi: '\x1b[2Jhello',
+      cols: 80,
+      rows: 24,
+      buffer: 'normal',
+    }),
     resize: vi.fn(),
     ...overrides,
   }
@@ -125,6 +151,147 @@ describe('dispatcher pauseAndBuffer / resumeAndFlush', () => {
 // ── refreshTerminal (snapshot replay) ───────────────────────────────────────
 
 describe('refreshTerminal with snapshot replay', () => {
+  it('serializes initialization hydration behind an in-flight replay lock', async () => {
+    vi.useRealTimers()
+    const releaseReplay = await acquireSnapshotReplayLock('locked-term')
+    expect(releaseReplay).not.toBeNull()
+
+    let hydrationAcquired = false
+    const hydrationLock = acquireSnapshotReplayLock('locked-term', true).then(release => {
+      hydrationAcquired = true
+      return release
+    })
+    await Promise.resolve()
+    expect(hydrationAcquired).toBe(false)
+
+    releaseReplay!()
+    const releaseHydration = await hydrationLock
+    expect(hydrationAcquired).toBe(true)
+    releaseHydration?.()
+  })
+
+  it.each(TERMINAL_STREAM_CASES)(
+    'the state harness applies $name chunks without altering stream boundaries',
+    async ({ chunks, expectedText }) => {
+      vi.useRealTimers()
+      const harness = createTerminalStateHarness()
+      try {
+        for (const chunk of chunks) await harness.write(chunk)
+        const state = harness.state()
+        for (const text of expectedText) expect(state.data).toContain(text)
+        expect(state).toMatchObject({
+          cols: 80,
+          rows: 24,
+          bufferType: 'normal',
+        })
+      } finally {
+        harness.dispose()
+      }
+    }
+  )
+
+  it('produces exact-once final state when a buffered chunk is already in the snapshot', async () => {
+    vi.useRealTimers()
+    const reference = createTerminalStateHarness()
+    const replayed = createTerminalStateHarness()
+    const { beforeSnapshot, crossesSnapshotBarrier } = SNAPSHOT_DUPLICATION_CASE
+
+    try {
+      await reference.write(beforeSnapshot)
+      await reference.write(crossesSnapshotBarrier)
+      const snapshot = reference.state()
+
+      let emitOutput!: (payload: TerminalOutputChunk | { terminalId: string; data: string }) => void
+      const detach = attachTerminalOutputDispatcher(callback => {
+        emitOutput = callback
+        return vi.fn()
+      })
+      const unregister = registerTerminalOutputHandler('test-term', data => {
+        replayed.terminal.write(data)
+      })
+      stubElectronTerminal({
+        getSnapshot: vi.fn().mockImplementation(async () => {
+          emitOutput({
+            terminalId: 'test-term',
+            streamEpoch: 'epoch-1',
+            sequence: 2,
+            data: crossesSnapshotBarrier,
+          })
+          return {
+            terminalId: 'test-term',
+            streamEpoch: 'epoch-1',
+            watermark: 2,
+            ansi: snapshot.data,
+            cols: snapshot.cols,
+            rows: snapshot.rows,
+            buffer: 'normal',
+          }
+        }),
+      })
+
+      await performSnapshotReplay({
+        terminalId: 'test-term',
+        terminalRef: { current: replayed.terminal } as never,
+        disposedRef: { current: false },
+        isActiveRef: { current: true },
+        isHiddenRef: { current: false },
+        clearTextureAtlas: vi.fn(),
+        webglAddonRef: { current: null },
+        reconcileWebGL: vi.fn(),
+        performFit: vi.fn().mockReturnValue(true),
+        silent: true,
+      })
+      await replayed.write('')
+
+      expect(replayed.state()).toEqual(reference.state())
+      unregister()
+      detach()
+    } finally {
+      reference.dispose()
+      replayed.dispose()
+    }
+  })
+
+  it('restores alternate-buffer state from the canonical snapshot', async () => {
+    vi.useRealTimers()
+    const reference = createTerminalStateHarness()
+    const replayed = createTerminalStateHarness()
+    try {
+      await reference.write('\x1b[?1049halternate-state')
+      const snapshot = reference.state()
+      expect(snapshot.bufferType).toBe('alternate')
+      stubElectronTerminal({
+        getSnapshot: vi.fn().mockResolvedValue({
+          terminalId: 'alt-term',
+          streamEpoch: 'alt-epoch',
+          watermark: 1,
+          ansi: snapshot.data,
+          cols: snapshot.cols,
+          rows: snapshot.rows,
+          buffer: 'alternate',
+        }),
+      })
+
+      await performSnapshotReplay({
+        terminalId: 'alt-term',
+        terminalRef: { current: replayed.terminal } as never,
+        disposedRef: { current: false },
+        isActiveRef: { current: true },
+        isHiddenRef: { current: false },
+        clearTextureAtlas: vi.fn(),
+        webglAddonRef: { current: null },
+        reconcileWebGL: vi.fn(),
+        performFit: vi.fn().mockReturnValue(true),
+        silent: true,
+      })
+
+      expect(replayed.state()).toEqual(reference.state())
+    } finally {
+      reference.dispose()
+      replayed.dispose()
+    }
+  })
+
   it('calls getSnapshot, resets xterm, writes snapshot data', async () => {
     const mockSnap = { data: '\x1b[2Jhello', cols: 80, rows: 24 }
     const electronMock = stubElectronTerminal({
@@ -150,7 +317,7 @@ describe('refreshTerminal with snapshot replay', () => {
     expect(typeof snapWriteCall?.[1]).toBe('function')
   })
 
-  it('writes \\x1b[?1049l (alt-buffer exit) before snapshot data', async () => {
+  it('does not force an alternate-buffer snapshot into the normal buffer', async () => {
     const mockSnap = { data: 'snap-content', cols: 80, rows: 24 }
     stubElectronTerminal({ getSnapshot: vi.fn().mockResolvedValue(mockSnap) })
 
@@ -169,11 +336,8 @@ describe('refreshTerminal with snapshot replay', () => {
     const altBufIdx = writeCalls.indexOf('\x1b[?1049l')
     const snapIdx = writeCalls.indexOf('snap-content')
 
-    // Both should have been written
-    expect(altBufIdx).toBeGreaterThanOrEqual(0)
     expect(snapIdx).toBeGreaterThanOrEqual(0)
-    // Alt-buffer exit must come before snapshot data
-    expect(altBufIdx).toBeLessThan(snapIdx)
+    expect(altBufIdx).toBe(-1)
   })
 
   it('sends SIGWINCH (electron resize) after snapshot write', async () => {
@@ -190,6 +354,7 @@ describe('refreshTerminal with snapshot replay', () => {
     })
 
     expect(electronMock.resize).toHaveBeenCalledWith('test-term', expect.any(Number), expect.any(Number))
+    expect(electronMock.rebuildHeadless).not.toHaveBeenCalled()
   })
 
   it('shows success toast on normal refresh', async () => {

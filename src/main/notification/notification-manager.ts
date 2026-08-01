@@ -2,7 +2,7 @@ import path from 'path'
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
 import Store from 'electron-store'
-import type { NotificationSettings, NotificationEventType, NotificationEvent, AgentType } from '@shared/types'
+import type { NotificationSettings, NotificationEventType, AgentType } from '@shared/types'
 import type { TaskEvent } from '@shared/types/notification-events'
 import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS, AGENT_DISPLAY_NAMES } from '@shared/constants'
 import { SecureStorage } from './secure-storage'
@@ -22,6 +22,7 @@ import { generateTaskEventId } from './parser-utils'
 import type { RemoteControlStatus, TerminalTaskStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
+import { migrateNotificationSettings } from './notification-settings-migrations'
 
 function paneStatusForEvent(type: NotificationEventType): TerminalTaskStatus | null {
   switch (type) {
@@ -34,12 +35,12 @@ function paneStatusForEvent(type: NotificationEventType): TerminalTaskStatus | n
 
 // Keys to persist (exclude computed fields like telegramConfigured/discordConfigured)
 type PersistableKey = 'onTaskComplete' | 'onTaskFailed' | 'onReviewNeeded' |
-  'soundEnabled' | 'soundPreset' | 'telegramEnabled' | 'discordEnabled' |
+  'telegramEnabled' | 'discordEnabled' |
   'outputMode' | 'notifyOnlyBackground' | 'includeTaskSummary' | 'remoteControlEnabled'
 
 const PERSISTABLE_KEYS: PersistableKey[] = [
   'onTaskComplete', 'onTaskFailed', 'onReviewNeeded',
-  'soundEnabled', 'soundPreset', 'telegramEnabled', 'discordEnabled',
+  'telegramEnabled', 'discordEnabled',
   'outputMode', 'notifyOnlyBackground', 'includeTaskSummary', 'remoteControlEnabled'
 ]
 
@@ -92,7 +93,13 @@ export class NotificationManager extends EventEmitter {
     this.logWatcher = new ClaudeLogWatcher()
 
     // Load persisted settings, merge with defaults and computed fields
-    const persisted = this.store.get('notificationSettings', {})
+    const rawPersisted = this.store.get('notificationSettings', {})
+    const persisted = migrateNotificationSettings(
+      rawPersisted as Record<string, unknown>
+    ) as Partial<NotificationSettings>
+    if (JSON.stringify(rawPersisted) !== JSON.stringify(persisted)) {
+      this.store.set('notificationSettings', persisted)
+    }
     this.settings = {
       ...DEFAULT_NOTIFICATION_SETTINGS,
       ...persisted,
@@ -283,8 +290,12 @@ export class NotificationManager extends EventEmitter {
   /** Start or stop remote control based on settings */
   syncRemoteControl(): void {
     const settings = this.getSettings()
+    const enabled = settings.remoteControlEnabled
+      && settings.telegramEnabled
+      && settings.telegramConfigured
+    this.terminalManagerRef?.setNotificationTailEnabled(enabled)
 
-    if (settings.remoteControlEnabled && settings.telegramEnabled && settings.telegramConfigured) {
+    if (enabled) {
       this.startRemoteControl()
     } else {
       this.stopRemoteControl()
@@ -561,19 +572,6 @@ export class NotificationManager extends EventEmitter {
     const message = settings.includeTaskSummary
       ? `${event.projectName}: ${event.taskName}`
       : event.taskName
-
-    // Legacy NotificationEvent for renderer (sound playback)
-    const legacyEvent: NotificationEvent = {
-      type: event.type,
-      terminalId: event.terminalId,
-      message,
-      timestamp: event.timestamp
-    }
-
-    // Send to renderer for sound playback
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_EVENT, legacyEvent)
-    }
 
     // Show native notification
     this.showNativeNotification(event.type, message)

@@ -15,13 +15,29 @@ export const IPC_CHANNELS = {
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
   TERMINAL_CLAUDE_SESSION_ID_CHANGED: 'terminal:claude-session-id-changed',
   TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
+  TERMINAL_GET_NATIVE_CAPABILITY: 'terminal:get-native-capability',
   TERMINAL_LOAD_PANE_TREE: 'terminal:load-pane-tree',
   TERMINAL_SAVE_PANE_TREE: 'terminal:save-pane-tree',
   TERMINAL_GET_SNAPSHOT: 'terminal:get-snapshot',
+  TERMINAL_GET_DIAGNOSTICS: 'terminal:get-diagnostics',
   // Part F: rebuild headless mirror from raw PTY transcript before snapshot
   TERMINAL_REBUILD_HEADLESS: 'terminal:rebuild-headless',
   // Phase 4: forwarded to renderer when system resumes from sleep/suspend
   TERMINAL_SYSTEM_RESUMED: 'terminal:system-resumed',
+
+  // Managed provider-neutral agent channels
+  AGENT_GET_READINESS: 'agent:get-readiness',
+  AGENT_GET_BINDING: 'agent:get-binding',
+  AGENT_START: 'agent:start',
+  AGENT_RESUME: 'agent:resume',
+  AGENT_SEND: 'agent:send',
+  AGENT_INTERRUPT: 'agent:interrupt',
+  AGENT_APPROVE: 'agent:approve',
+  AGENT_EVENT: 'agent:event',
+  AGENT_BINDING_CHANGED: 'agent:binding-changed',
+  AGENT_BINDING_REMOVED: 'agent:binding-removed',
+  AGENT_INSIGHTS_GET: 'agent-insights:get',
+  AGENT_INSIGHTS_UPDATED: 'agent-insights:updated',
 
   // Project channels
   PROJECT_LIST: 'project:list',

@@ -5,18 +5,12 @@ export type NotificationEventType = 'taskComplete' | 'taskFailed' | 'reviewNeede
 export type OutputMode = 'auto' | 'stream-json' | 'plain-text'
 
 // Sound preset options
-export type SoundPreset = 'default' | 'minimal' | 'retro'
-
 // Main settings interface (stored in localStorage via Zustand)
 export interface NotificationSettings {
   // Event toggles
   onTaskComplete: boolean
   onTaskFailed: boolean
   onReviewNeeded: boolean
-
-  // Sound
-  soundEnabled: boolean
-  soundPreset: SoundPreset
 
   // Telegram (credentials stored securely via IPC)
   telegramEnabled: boolean

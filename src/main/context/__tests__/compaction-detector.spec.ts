@@ -12,35 +12,42 @@ describe('CompactionDetector', () => {
     })
     expect(ev).not.toBeNull()
     expect(ev!.confidence).toBe('high')
-    expect(ev!.beforeTokens).toBe(50_000)
+    expect(ev!.source).toBe('summary')
+    expect(ev!.observedTokens).toBe(50_000)
     expect(ev!.summary).toMatch(/recap of prior turns/)
   })
 
-  it('emits high-confidence on user content containing <compact> marker', () => {
+  it('does not treat user-authored marker text as an explicit signal', () => {
     const d = new CompactionDetector()
     d.recordTotalTokens(80_000, 1)
     const ev = d.recordLine({
       type: 'user',
       message: { content: '<compact>summary text</compact>' }
     })
-    expect(ev?.confidence).toBe('high')
+    expect(ev).toBeNull()
+    expect(d.getEvents()).toEqual([])
   })
 
-  it('infers low-confidence event from a >30% sudden token drop', () => {
+  it('records an explicit compact boundary with its source', () => {
+    const d = new CompactionDetector()
+    const ev = d.recordLine({ subtype: 'compact_boundary', timestamp: 1_000 })
+    expect(ev).toMatchObject({ confidence: 'high', source: 'compact-boundary' })
+  })
+
+  it('does not infer compaction from a sudden token drop', () => {
     const d = new CompactionDetector()
     d.recordTotalTokens(100_000, 1_000)
     const ev = d.recordTotalTokens(40_000, 2_000)
-    expect(ev?.confidence).toBe('low')
-    expect(ev?.beforeTokens).toBe(100_000)
-    expect(ev?.afterTokens).toBe(40_000)
+    expect(ev).toBeNull()
+    expect(d.getEvents()).toEqual([])
   })
 
-  it('does NOT flag a sudden drop right after observing /clear', () => {
+  it('does not treat /clear as a compaction signal', () => {
     const d = new CompactionDetector()
     d.recordTotalTokens(100_000, 1_000)
-    d.recordLine({ type: 'command_input', content: '/clear' })
-    const ev = d.recordTotalTokens(0, 2_000)
-    expect(ev).toBeNull()
+    expect(d.recordLine({ type: 'command_input', content: '/clear' })).toBeNull()
+    expect(d.recordTotalTokens(0, 2_000)).toBeNull()
+    expect(d.getEvents()).toEqual([])
   })
 
   it('does NOT flag the first sample (no before-state)', () => {
@@ -61,8 +68,7 @@ describe('CompactionDetector', () => {
   it('caps history at 10 events (FIFO)', () => {
     const d = new CompactionDetector()
     for (let i = 0; i < 15; i++) {
-      d.recordTotalTokens(100_000, i * 5_000)
-      d.recordTotalTokens(40_000, i * 5_000 + 1)
+      d.recordLine({ type: 'summary', summary: `summary ${i}`, timestamp: i * 5_000 })
     }
     expect(d.getEvents().length).toBe(10)
   })

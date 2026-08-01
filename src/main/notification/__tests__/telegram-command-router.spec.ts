@@ -9,8 +9,10 @@ import type { ProjectStore } from '../../project/project-store'
 const mockTerminalManager = {
   list: vi.fn<() => Terminal[]>(),
   write: vi.fn<(id: string, data: string) => boolean>(),
-  destroy: vi.fn<(id: string) => boolean>(),
+  destroyAsync: vi.fn<(id: string) => Promise<boolean>>(),
   getSessions: vi.fn(),
+  getNotificationTail: vi.fn<(id: string) => string | undefined>(),
+  forgetTerminalHistory: vi.fn<(id: string) => void>(),
   getExitedSession: vi.fn(),
   findByClaudeSessionId: vi.fn<(sessionId: string) => { id: string } | undefined>(),
   create: vi.fn<(opts: { cwd?: string; projectId?: string; shell?: unknown }) => Terminal>()
@@ -20,7 +22,8 @@ const mockProjectStore = {
   getProjects: vi.fn<() => Project[]>(),
   getProject: vi.fn<(id: string) => Project | undefined>(),
   setActiveProjectId: vi.fn<(id: string | null) => void>(),
-  getActiveProjectId: vi.fn<() => string | null>()
+  getActiveProjectId: vi.fn<() => string | null>(),
+  removeTerminalFromSession: vi.fn<(id: string) => void>()
 }
 
 const mockSendReply = vi.fn<(text: string) => Promise<boolean>>()
@@ -45,6 +48,12 @@ describe('TelegramCommandRouter', () => {
     mockProjectStore.getActiveProjectId.mockReturnValue(null)
     mockProjectStore.setActiveProjectId.mockImplementation((id) => {
       mockProjectStore.getActiveProjectId.mockReturnValue(id)
+    })
+    mockTerminalManager.getNotificationTail.mockImplementation((id) => {
+      const live = mockTerminalManager.getSessions().find(
+        (session: { id: string; outputBuffer?: string }) => session.id === id,
+      )
+      return live?.outputBuffer ?? mockTerminalManager.getExitedSession(id)?.outputBuffer
     })
     router = new TelegramCommandRouter(
       mockTerminalManager as unknown as TerminalManager,
@@ -136,20 +145,20 @@ describe('TelegramCommandRouter', () => {
       mockTerminalManager.list.mockReturnValue([
         { id: 'uuid-1', title: 'term1', cwd: '/tmp', isClaudeMode: false, createdAt: new Date() }
       ] as Terminal[])
-      mockTerminalManager.destroy.mockReturnValue(true)
+      mockTerminalManager.destroyAsync.mockResolvedValue(true)
 
       await router.handle('/kill 1')
-      expect(mockTerminalManager.destroy).toHaveBeenCalledWith('uuid-1')
+      expect(mockTerminalManager.destroyAsync).toHaveBeenCalledWith('uuid-1')
     })
 
     it('destroys terminal by title', async () => {
       mockTerminalManager.list.mockReturnValue([
         { id: 'uuid-1', title: 'Terminal 3', cwd: '/tmp', isClaudeMode: false, createdAt: new Date() }
       ] as Terminal[])
-      mockTerminalManager.destroy.mockReturnValue(true)
+      mockTerminalManager.destroyAsync.mockResolvedValue(true)
 
       await router.handle('/kill Terminal 3')
-      expect(mockTerminalManager.destroy).toHaveBeenCalledWith('uuid-1')
+      expect(mockTerminalManager.destroyAsync).toHaveBeenCalledWith('uuid-1')
     })
 
     it('uses active project scope when resolving index', async () => {
@@ -163,10 +172,10 @@ describe('TelegramCommandRouter', () => {
         { id: 'uuid-1', title: 'Terminal 1', cwd: '/frontend', projectId: 'proj-1', isClaudeMode: false, createdAt: new Date() },
         { id: 'uuid-2', title: 'Terminal 2', cwd: '/backend', projectId: 'proj-2', isClaudeMode: false, createdAt: new Date() }
       ] as Terminal[])
-      mockTerminalManager.destroy.mockReturnValue(true)
+      mockTerminalManager.destroyAsync.mockResolvedValue(true)
 
       await router.handle('/kill 1')
-      expect(mockTerminalManager.destroy).toHaveBeenCalledWith('uuid-2')
+      expect(mockTerminalManager.destroyAsync).toHaveBeenCalledWith('uuid-2')
     })
   })
 

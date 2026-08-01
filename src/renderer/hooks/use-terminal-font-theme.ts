@@ -2,7 +2,7 @@
  * useTerminalFontTheme — manages font and color-theme subscriptions for xterm.
  *
  * Responsibilities:
- *   - Subscribe to colorTheme / themeMode / uiStyle / colorPreset changes,
+ *   - Subscribe to canonical colorTheme / themeMode changes,
  *     update terminal.options.theme and reload WebGL addon if active
  *   - Subscribe to terminalFontFamily changes, update fontFamily option,
  *     then call applyFontMetrics + syncFontAfterLoad
@@ -17,7 +17,6 @@ import type { Terminal as XTerm } from '@xterm/xterm'
 import { useSettingsStore } from '../stores'
 import {
   getTerminalTheme,
-  TERMINAL_COLOR_PRESETS,
   TERMINAL_FONTS,
   getTerminalFontFamilyById
 } from '@shared/constants'
@@ -38,7 +37,7 @@ function getPrimaryTerminalFont(): string | null {
 }
 
 /**
- * Build the current xterm theme from settings (includes terminal-preset cursor when in Terminal UI mode).
+ * Build the current xterm theme from canonical settings.
  */
 export function getCurrentTerminalTheme() {
   const { pendingSettings } = useSettingsStore.getState()
@@ -46,16 +45,7 @@ export function getCurrentTerminalTheme() {
   const isDark =
     pendingSettings.themeMode === 'dark' ||
     (pendingSettings.themeMode === 'system' && prefersDark)
-  const baseTheme = getTerminalTheme(pendingSettings.colorTheme, isDark)
-
-  if (pendingSettings.uiStyle === 'terminal') {
-    const presetId = pendingSettings.terminalStyleOptions?.colorPreset ?? 'green'
-    const preset = TERMINAL_COLOR_PRESETS[presetId as keyof typeof TERMINAL_COLOR_PRESETS]
-    if (preset) {
-      return { ...baseTheme, cursor: preset.accent, cursorAccent: preset.bg }
-    }
-  }
-  return baseTheme
+  return getTerminalTheme(pendingSettings.colorTheme, isDark)
 }
 
 // ─── hook ─────────────────────────────────────────────────────────────────────
@@ -109,9 +99,7 @@ export function useTerminalFontTheme(params: UseTerminalFontThemeParams): {
 
       const themeChanged =
         state.pendingSettings.colorTheme !== prevState.pendingSettings.colorTheme ||
-        state.pendingSettings.themeMode !== prevState.pendingSettings.themeMode ||
-        state.pendingSettings.uiStyle !== prevState.pendingSettings.uiStyle ||
-        state.pendingSettings.terminalStyleOptions?.colorPreset !== prevState.pendingSettings.terminalStyleOptions?.colorPreset
+        state.pendingSettings.themeMode !== prevState.pendingSettings.themeMode
 
       if (!themeChanged) return
 
@@ -126,6 +114,27 @@ export function useTerminalFontTheme(params: UseTerminalFontThemeParams): {
       onWebGLReload()
     })
     return unsubscribe
+  }, [disposedRef, onWebGLReload, terminalRef])
+
+  // System mode must continue reacting after the settings value itself stops
+  // changing. Keep xterm in sync when the operating-system preference flips.
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleSystemThemeChange = () => {
+      if (
+        useSettingsStore.getState().pendingSettings.themeMode !== 'system' ||
+        !terminalRef.current ||
+        disposedRef.current
+      ) {
+        return
+      }
+
+      terminalRef.current.options.theme = getCurrentTerminalTheme()
+      onWebGLReload()
+    }
+
+    media.addEventListener('change', handleSystemThemeChange)
+    return () => media.removeEventListener('change', handleSystemThemeChange)
   }, [disposedRef, onWebGLReload, terminalRef])
 
   // ── Font-change subscription ──────────────────────────────────────────────

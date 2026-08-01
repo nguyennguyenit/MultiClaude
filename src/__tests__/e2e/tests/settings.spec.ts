@@ -30,16 +30,18 @@ test.describe('Settings Modal', () => {
     await expect(modalHeader).toBeVisible()
   })
 
-  test('modal displays all 4 tabs: Appearance, Terminals, Notifications, Updates', async ({ window }) => {
+  test('modal displays all six settings sections', async ({ window }) => {
     // Open settings modal
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(200)
 
-    // Verify all 4 tabs are visible using data-testid
+    // Verify the complete current information architecture.
     await expect(window.locator('[data-testid="settings-tab-appearance"]')).toBeVisible()
     await expect(window.locator('[data-testid="settings-tab-terminals"]')).toBeVisible()
     await expect(window.locator('[data-testid="settings-tab-notifications"]')).toBeVisible()
+    await expect(window.locator('[data-testid="settings-tab-diagnostics"]')).toBeVisible()
+    await expect(window.locator('[data-testid="settings-tab-agents-integrations"]')).toBeVisible()
     await expect(window.locator('[data-testid="settings-tab-updates"]')).toBeVisible()
   })
 
@@ -160,19 +162,9 @@ test.describe('Settings Modal', () => {
     const modal = window.locator('[data-testid="settings-modal"]')
     await expect(modal).toBeVisible()
 
-    // Make a change to enable Save button (toggle theme mode)
-    // Click a theme mode button (light/dark/system) that's not currently selected
-    const darkModeButton = window.locator('button:has-text("dark")').first()
-    const lightModeButton = window.locator('button:has-text("light")').first()
-
-    // Toggle to a different mode to create unsaved changes
-    if (await darkModeButton.isVisible()) {
-      await darkModeButton.click()
-      await window.waitForTimeout(100)
-    } else if (await lightModeButton.isVisible()) {
-      await lightModeButton.click()
-      await window.waitForTimeout(100)
-    }
+    const modeGroup = window.getByRole('group', { name: 'Appearance Mode' })
+    const lightModeButton = modeGroup.getByRole('button', { name: 'light', exact: true })
+    await lightModeButton.click()
 
     // Find and click Save Settings button using data-testid
     const saveButton = window.locator('[data-testid="settings-save-button"]')
@@ -224,16 +216,16 @@ test.describe('Settings Modal', () => {
     const saveButton = window.locator('[data-testid="settings-save-button"]')
     await expect(saveButton).toBeDisabled()
 
-    const soundToggle = window
-      .locator('p:has-text("Enable Sound")')
-      .locator('xpath=ancestor::div[2]')
-      .locator('[role="switch"]')
+    const notificationToggle = window.getByRole('switch', { name: 'On Task Complete' })
 
-    const initialState = await soundToggle.getAttribute('aria-checked')
-    await soundToggle.click()
+    const initialState = await notificationToggle.getAttribute('aria-checked')
+    await notificationToggle.click()
     await window.waitForTimeout(100)
 
-    await expect(soundToggle).toHaveAttribute('aria-checked', initialState === 'true' ? 'false' : 'true')
+    await expect(notificationToggle).toHaveAttribute(
+      'aria-checked',
+      initialState === 'true' ? 'false' : 'true'
+    )
     await expect(saveButton).toBeEnabled()
   })
 })

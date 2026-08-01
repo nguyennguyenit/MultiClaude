@@ -312,8 +312,8 @@ export const TerminalView = memo(function TerminalView({
         skipAppend: skipAppendRef.current,
         appendOutput
       })
-    })
-  }, [terminalId, write, appendOutput, onOutput])
+    }, () => refresh(false))
+  }, [terminalId, write, appendOutput, onOutput, refresh])
 
   // Focus when becomes active, blur when inactive
   // Note: scroll restoration and cursor are handled by visibility effect in use-terminal.ts

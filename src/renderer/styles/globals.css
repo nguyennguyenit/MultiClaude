@@ -58,6 +58,7 @@ button, input, select, textarea, optgroup, option {
   --text-secondary: rgba(192, 202, 245, 0.6);
   --text-muted: rgba(192, 202, 245, 0.4);
   --accent: #7aa2f7;
+  --on-accent: #0f172a;
   --border: #292e42;
   --hover: #292e42;
   --tab-bg: #16161e;
@@ -959,6 +960,12 @@ button, input, select, textarea, optgroup, option {
   flex-shrink: 0;
 }
 
+.pane-tab-provider-status {
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .pane-tab-title-group {
   display: flex;
   align-items: center;
@@ -1508,7 +1515,7 @@ button, input, select, textarea, optgroup, option {
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: clip-path 0.2s ease, opacity 0.2s ease;
   opacity: 0;
   pointer-events: none;
 }
@@ -1525,11 +1532,11 @@ button, input, select, textarea, optgroup, option {
   bottom: 0;
   width: var(--panel-width);
   border-left: 1px solid var(--border);
-  transform: translateX(100%);
+  clip-path: inset(0 0 0 100%);
 }
 
 .slide-panel-right.slide-panel-open {
-  transform: translateX(0);
+  clip-path: inset(0);
 }
 
 /* Portrait: slides from bottom */
@@ -1539,11 +1546,11 @@ button, input, select, textarea, optgroup, option {
   bottom: 0;
   height: 40%;
   border-top: 1px solid var(--border);
-  transform: translateY(100%);
+  clip-path: inset(100% 0 0);
 }
 
 .slide-panel-bottom.slide-panel-open {
-  transform: translateY(0);
+  clip-path: inset(0);
 }
 
 /* Panel header */
@@ -2788,10 +2795,6 @@ button, input, select, textarea, optgroup, option {
   background: var(--panel-secondary, rgba(255,255,255,0.03));
 }
 
-.context-header-warn {
-  border-color: rgba(251, 146, 60, 0.6);
-}
-
 .context-header-total {
   display: flex;
   align-items: baseline;
@@ -2809,19 +2812,6 @@ button, input, select, textarea, optgroup, option {
   font-size: 20px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-}
-
-.context-header-warn-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(251, 146, 60, 0.2);
-  color: #fb923c;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .context-header-session {
@@ -3075,7 +3065,7 @@ button, input, select, textarea, optgroup, option {
   opacity: 0.7;
 }
 
-/* Execution trace (Phase 4) */
+/* Tool activity */
 .exec-trace {
   margin-top: 16px;
   padding-top: 12px;
@@ -3132,8 +3122,7 @@ button, input, select, textarea, optgroup, option {
   letter-spacing: 0.5px;
 }
 
-.exec-trace-badge.agent-main { background: rgba(120, 180, 255, 0.2); color: #a8c8ff; }
-.exec-trace-badge.agent-subagent { background: rgba(200, 130, 255, 0.2); color: #d8a8ff; }
+.exec-trace-badge.activity-tools { background: rgba(120, 180, 255, 0.2); color: #a8c8ff; }
 
 .exec-trace-label {
   overflow: hidden;
@@ -3164,20 +3153,6 @@ button, input, select, textarea, optgroup, option {
 }
 
 .exec-trace-more { font-style: italic; }
-
-.exec-trace-subnote {
-  margin: 4px 0 0 24px;
-  font-size: 11px;
-  color: var(--color-fg-muted, #888);
-  font-style: italic;
-}
-
-.exec-trace-subnote code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
 
 /* Compaction timeline (Phase 5) */
 .compaction-timeline {
@@ -3236,28 +3211,19 @@ button, input, select, textarea, optgroup, option {
   background: #f87171;
 }
 
-.compaction-event.conf-low .compaction-marker {
-  background: transparent;
-  border: 2px dashed #f87171;
-  width: 8px;
-  height: 8px;
-  left: -18px;
-}
-
 .compaction-time {
   font-variant-numeric: tabular-nums;
   opacity: 0.6;
   font-size: 11px;
 }
 
-.compaction-delta {
+.compaction-source,
+.compaction-observed {
   font-variant-numeric: tabular-nums;
 }
 
-.compaction-drop {
-  font-variant-numeric: tabular-nums;
-  color: #f87171;
-  font-weight: 600;
+.compaction-observed {
+  color: var(--color-fg-muted, #999);
 }
 
 .compaction-detail {
@@ -3272,7 +3238,6 @@ button, input, select, textarea, optgroup, option {
 
 .compaction-detail p { margin: 0 0 4px 0; }
 .compaction-detail p:last-child { margin: 0; }
-.compaction-note { font-style: italic; opacity: 0.8; }
 
 /* Thinking viewer (Phase 6 — summary-only, signed) */
 .thinking-viewer {
@@ -3330,7 +3295,7 @@ button, input, select, textarea, optgroup, option {
 .thinking-row.is-open { background: var(--color-bg-active, rgba(100, 150, 255, 0.08)); }
 
 .thinking-turn { font-variant-numeric: tabular-nums; opacity: 0.6; min-width: 32px; }
-.thinking-count, .thinking-tokens { font-size: 11px; }
+.thinking-count { font-size: 11px; }
 .thinking-badge {
   font-size: 10px;
   padding: 1px 6px;

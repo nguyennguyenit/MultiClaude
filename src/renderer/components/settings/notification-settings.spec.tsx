@@ -77,6 +77,7 @@ describe('NotificationSettings — mobile-control hint', () => {
     render(<NotificationSettings onNavigateToMobile={() => {}} />)
     const hint = await screen.findByTestId('mobile-control-hint')
     expect(hint.textContent).toContain('enable Mobile Control')
+    expect(hint.textContent).toContain('Agents & Integrations')
   })
 
   it('hides the hint when mobile control IS running', async () => {

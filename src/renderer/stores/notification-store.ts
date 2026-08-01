@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { NotificationSettings, NotificationEvent, SoundPreset, RemoteControlStatus } from '@shared/types'
+import type { NotificationSettings, RemoteControlStatus } from '@shared/types'
 import { DEFAULT_NOTIFICATION_SETTINGS } from '@shared/constants'
 import { useAppStore } from './app-store'
 
@@ -14,19 +14,13 @@ interface NotificationState {
   saveSettings: () => Promise<void>
   cancelSettings: () => void
   refreshIntegrationSettings: () => Promise<void>
-  playSound: (type: 'success' | 'error' | 'info') => void
 }
-
-// Sound cache for reuse
-const soundCache = new Map<string, HTMLAudioElement>()
 
 function areNotificationSettingsEqual(a: NotificationSettings, b: NotificationSettings): boolean {
   return (
     a.onTaskComplete === b.onTaskComplete &&
     a.onTaskFailed === b.onTaskFailed &&
     a.onReviewNeeded === b.onReviewNeeded &&
-    a.soundEnabled === b.soundEnabled &&
-    a.soundPreset === b.soundPreset &&
     a.telegramEnabled === b.telegramEnabled &&
     a.telegramConfigured === b.telegramConfigured &&
     a.discordEnabled === b.discordEnabled &&
@@ -43,8 +37,6 @@ function getPersistableSettings(settings: NotificationSettings): Partial<Notific
     onTaskComplete: settings.onTaskComplete,
     onTaskFailed: settings.onTaskFailed,
     onReviewNeeded: settings.onReviewNeeded,
-    soundEnabled: settings.soundEnabled,
-    soundPreset: settings.soundPreset,
     telegramEnabled: settings.telegramEnabled,
     discordEnabled: settings.discordEnabled,
     outputMode: settings.outputMode,
@@ -52,16 +44,6 @@ function getPersistableSettings(settings: NotificationSettings): Partial<Notific
     includeTaskSummary: settings.includeTaskSummary,
     remoteControlEnabled: settings.remoteControlEnabled
   }
-}
-
-function getSound(preset: SoundPreset, type: string): HTMLAudioElement {
-  const key = `${preset}-${type}`
-  if (!soundCache.has(key)) {
-    const audio = new Audio(`/sounds/${preset}-${type}.mp3`)
-    audio.preload = 'auto'
-    soundCache.set(key, audio)
-  }
-  return soundCache.get(key)!
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
@@ -138,42 +120,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     } catch (error) {
       console.error('Failed to refresh notification integrations:', error)
     }
-  },
-
-  playSound: (type) => {
-    const { savedSettings } = get()
-    if (!savedSettings.soundEnabled) return
-
-    try {
-      const audio = getSound(savedSettings.soundPreset, type)
-      audio.currentTime = 0
-      audio.play().catch(() => {})
-    } catch {
-      // Ignore sound errors
-    }
   }
 }))
 
 // Setup notification event listener - call once in App
 export function setupNotificationListener(): () => void {
-  const handleEvent = (event: NotificationEvent) => {
-    const { playSound } = useNotificationStore.getState()
-
-    switch (event.type) {
-      case 'taskComplete':
-        playSound('success')
-        break
-      case 'taskFailed':
-        playSound('error')
-        break
-      case 'reviewNeeded':
-        playSound('info')
-        break
-    }
-  }
-
-  const cleanupEvent = window.electron.notification.onEvent(handleEvent)
-
   // Listen for remote control status changes
   const cleanupRemoteStatus = window.electron.notification.onRemoteControlStatus((status) => {
     useNotificationStore.setState({ remoteControlStatus: status })
@@ -190,7 +141,6 @@ export function setupNotificationListener(): () => void {
   })
 
   return () => {
-    cleanupEvent()
     cleanupRemoteStatus()
     cleanupPaneStatus()
   }

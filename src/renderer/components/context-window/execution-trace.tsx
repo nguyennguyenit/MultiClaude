@@ -1,22 +1,22 @@
 import { useState } from 'react'
-import type { TraceNode } from '@shared/types'
+import type { ToolActivityGroup } from '@shared/types'
 import { formatTokens } from '@shared/utils/format-tokens'
 
 interface Props {
-  nodes: TraceNode[]
+  nodes: ToolActivityGroup[]
 }
 
 export function ExecutionTrace({ nodes }: Props) {
   if (nodes.length === 0) {
     return (
       <div className="exec-trace-empty" data-testid="exec-trace-empty">
-        No subagent or tool activity in the most recent turn.
+        No tool activity in the most recent turn.
       </div>
     )
   }
   return (
     <div className="exec-trace">
-      <h4 className="exec-trace-title">Execution trace</h4>
+      <h4 className="exec-trace-title">Tool activity</h4>
       <div className="exec-trace-rows" role="list">
         {nodes.map((n) => (
           <ExecutionNode key={n.id} node={n} />
@@ -26,10 +26,10 @@ export function ExecutionTrace({ nodes }: Props) {
   )
 }
 
-function ExecutionNode({ node }: { node: TraceNode }) {
+function ExecutionNode({ node }: { node: ToolActivityGroup }) {
   const [open, setOpen] = useState(false)
-  const isMain = node.agentType === 'main'
-  const label = isMain ? `${node.toolCalls.length} tool calls` : (node.description ?? node.agentName ?? 'subagent')
+  const observedCallCount = node.toolCalls.length + (node.omittedCallCount ?? 0)
+  const label = `${observedCallCount} tool call${observedCallCount === 1 ? '' : 's'}`
   return (
     <div role="listitem" className="exec-trace-item">
       <button
@@ -39,16 +39,14 @@ function ExecutionNode({ node }: { node: TraceNode }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span className={`exec-trace-badge agent-${node.agentType}`}>
-          {node.agentName ?? node.agentType}
-        </span>
+        <span className="exec-trace-badge activity-tools">tools</span>
         <span className="exec-trace-label" title={label}>{label}</span>
         <span className="exec-trace-tokens">{formatTokens(node.tokens)}</span>
         {node.durationMs != null ? (
           <span className="exec-trace-duration">{Math.round(node.durationMs)}ms</span>
         ) : null}
       </button>
-      {open && isMain && node.toolCalls.length > 0 ? (
+      {open && node.toolCalls.length > 0 ? (
         <ul className="exec-trace-tools">
           {node.toolCalls.map((c) => (
             <li key={c.id} className="exec-trace-tool">
@@ -56,16 +54,10 @@ function ExecutionNode({ node }: { node: TraceNode }) {
               <span className="exec-trace-tool-tokens">{formatTokens(c.tokens)}</span>
             </li>
           ))}
-          {node.depthCapped && node.deeperCount ? (
-            <li className="exec-trace-more">+{node.deeperCount} more (truncated)</li>
+          {node.truncated && node.omittedCallCount ? (
+            <li className="exec-trace-more">+{node.omittedCallCount} more (truncated)</li>
           ) : null}
         </ul>
-      ) : null}
-      {open && !isMain ? (
-        <div className="exec-trace-subnote">
-          Subagent inner trace not co-watched yet — open the agent log under
-          <code> ~/.claude/projects/{'<'}sessionId{'>'}/subagents/</code> for details.
-        </div>
       ) : null}
     </div>
   )
