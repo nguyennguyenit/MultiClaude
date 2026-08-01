@@ -12,11 +12,7 @@ import type { TaskEvent } from '@shared/types'
 // plain text — which is exactly the signal content-hash dedup uses.
 const __filename = fileURLToPath(import.meta.url)
 const __testDirname = path.dirname(__filename)
-const REDRAW_FIXTURE_PATH = path.resolve(
-  __testDirname,
-  '..', '..', '..', '..',
-  'plans/20260417-1850-fix-review-needed-false-trigger/fixtures/redraw-sample.txt'
-)
+const REDRAW_FIXTURE_PATH = path.resolve(__testDirname, 'fixtures/redraw-sample.txt')
 
 function loadRedrawChunks(): [string, string] {
   const raw = fs.readFileSync(REDRAW_FIXTURE_PATH, 'utf-8')

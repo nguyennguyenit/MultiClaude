@@ -42,6 +42,7 @@ test.describe('Terminal Stream Correctness', () => {
         const canonical = 'ansi' in snapshot ? snapshot : null
         const deliveredText = chunks.map(chunk => chunk.data).join('')
         const occurrences = (text: string, value: string) => text.split(value).length - 1
+        const canonicalText = canonical?.ansi ?? ''
         return {
           markerSeen: chunks.some(chunk => chunk.data.includes(marker)),
           afterResizeMarkerSeen: chunks.some(chunk => chunk.data.includes(afterResizeMarker)),
@@ -51,8 +52,10 @@ test.describe('Terminal Stream Correctness', () => {
           watermark: canonical?.watermark ?? 0,
           markerSequence: chunks.find(chunk => chunk.data.includes(marker))?.sequence ?? 0,
           afterResizeSequence: chunks.find(chunk => chunk.data.includes(afterResizeMarker))?.sequence ?? 0,
-          markerCount: occurrences(deliveredText, marker),
-          afterResizeMarkerCount: occurrences(deliveredText, afterResizeMarker),
+          deliveredMarkerCount: occurrences(deliveredText, marker),
+          deliveredAfterResizeMarkerCount: occurrences(deliveredText, afterResizeMarker),
+          canonicalMarkerCount: occurrences(canonicalText, marker),
+          canonicalAfterResizeMarkerCount: occurrences(canonicalText, afterResizeMarker),
           destroyed: await api.destroy(terminal.id),
         }
       } finally {
@@ -62,8 +65,12 @@ test.describe('Terminal Stream Correctness', () => {
 
     expect(result.markerSeen).toBe(true)
     expect(result.afterResizeMarkerSeen).toBe(true)
-    expect(result.markerCount).toBe(1)
-    expect(result.afterResizeMarkerCount).toBe(1)
+    // ConPTY may repaint prior screen content after resize, so raw PTY bytes can
+    // contain a marker more than once without duplicating an output envelope.
+    expect(result.deliveredMarkerCount).toBeGreaterThanOrEqual(1)
+    expect(result.deliveredAfterResizeMarkerCount).toBeGreaterThanOrEqual(1)
+    expect(result.canonicalMarkerCount).toBe(1)
+    expect(result.canonicalAfterResizeMarkerCount).toBe(1)
     expect(result.epochs).toHaveLength(1)
     expect(result.sequences).toEqual(
       Array.from({ length: result.sequences.at(-1) ?? 0 }, (_, index) => index + 1),
