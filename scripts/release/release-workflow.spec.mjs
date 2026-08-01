@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const workflow = fs.readFileSync(path.join(repositoryRoot, '.github/workflows/release.yml'), 'utf8')
+const packageJson = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'))
 
 test('runs the AppImage smoke without requiring FUSE on the hosted runner', () => {
   assert.match(
@@ -14,26 +15,21 @@ test('runs the AppImage smoke without requiring FUSE on the hosted runner', () =
   )
 })
 
-test('fails fast when production macOS release credentials are absent', () => {
-  const validationStart = workflow.indexOf('- name: Validate macOS release credentials')
-  const installStart = workflow.indexOf('- name: Install dependencies')
-  const buildStart = workflow.indexOf('- name: Build, sign, and notarize (macOS)')
+test('keeps macOS releases compatible with the previous ad-hoc signing contract', () => {
+  assert.match(workflow, /- name: Build with manifests \(all platforms\)[\s\S]*?run: npm run build:ci/)
+  assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: false/)
+  assert.match(packageJson.scripts['build:ci'], /-c\.mac\.identity=-/)
 
-  assert.notEqual(validationStart, -1)
-  assert.ok(validationStart < installStart)
-  assert.ok(installStart < buildStart)
-
-  const validationStep = workflow.slice(validationStart, buildStart)
-  for (const name of [
-    'CSC_LINK',
-    'CSC_KEY_PASSWORD',
+  for (const productionOnlySetting of [
+    'MAC_CSC_LINK',
+    'MAC_CSC_KEY_PASSWORD',
     'APPLE_ID',
     'APPLE_APP_SPECIFIC_PASSWORD',
     'APPLE_TEAM_ID',
+    'build:release:mac',
+    'spctl --assess',
+    'xcrun stapler validate',
   ]) {
-    assert.match(validationStep, new RegExp(`\\b${name}\\b`))
+    assert.doesNotMatch(workflow, new RegExp(productionOnlySetting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
-  assert.match(validationStep, /if \[ -z "\$\{!name:-\}" \]/)
-  assert.match(validationStep, /Missing required macOS release credentials/)
-  assert.match(validationStep, /exit 1/)
 })
