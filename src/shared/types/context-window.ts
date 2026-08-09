@@ -60,29 +60,27 @@ export interface ThinkingBlock {
   count: number
   /** First 16 chars of each block's signature, for traceability. */
   signatures: string[]
-  /** Coarse token estimate derived from signature payload size. */
-  approxTokens: number
 }
 
 /**
- * Auto-compaction event. `confidence: high` means we saw an explicit
- * summary marker in JSONL; `low` means we inferred it from a sudden
- * token drop and the user did not issue /clear.
+ * Auto-compaction event backed by an explicit provider signal.
+ * Token totals observed at the signal are context only; they do not claim
+ * a before/after delta because the provider does not expose that boundary.
  */
 export interface CompactionEvent {
   id: string
   timestamp: number
-  beforeTokens: number
-  afterTokens: number
+  observedTokens?: number
   /** Number of turns folded into the compact summary, when knowable. */
   compactedTurnCount?: number
   /** First N chars of the compact summary content. */
   summary?: string
-  confidence: 'high' | 'low'
+  confidence: 'high'
+  source: 'summary' | 'compact-boundary'
 }
 
 /**
- * One inner tool call grouped under a TraceNode (Read/Edit/Bash/etc).
+ * One observed tool invocation (Read/Edit/Bash/Agent/etc.).
  * Token count attributes the matching `tool_result` payload back to its
  * `tool_use_id`.
  */
@@ -93,21 +91,17 @@ export interface TraceToolCall {
 }
 
 /**
- * Tree node for the execution-trace section. Fallback mode (no subagent
- * log co-watching) emits a single 'main' node aggregating all non-Agent
- * tool calls plus one 'subagent' node per `Agent` tool_use.
+ * Flat per-turn tool activity group. `Agent` is an observed tool invocation;
+ * it does not imply that a nested agent trace was joined or inspected.
  */
-export interface TraceNode {
+export interface ToolActivityGroup {
   id: string
-  agentType: 'main' | 'subagent'
-  agentName?: string
-  description?: string
   tokens: number
   durationMs?: number
   toolCalls: TraceToolCall[]
-  children: TraceNode[]
-  depthCapped?: boolean
-  deeperCount?: number
+  truncated?: boolean
+  /** Number of observed calls omitted from `toolCalls` after its cap. */
+  omittedCallCount?: number
 }
 
 /** Lightweight per-turn summary streamed on the hot IPC channel (~300ms debounce). */
@@ -119,10 +113,11 @@ export interface TurnDeltaSummary {
   totalDelta: number
   perCategoryTokens: Record<ContextCategory, number>
   /**
-   * Execution trace for this turn. Empty when no Agent or non-Agent tool
-   * calls were observed. Populated only when the analyzer's tracker is on.
+   * Tool activity for this turn. The `trace` field name is retained for IPC
+   * compatibility; its payload is flat. Empty when no tool calls were observed.
+   * Populated only when the analyzer's tracker is on.
    */
-  trace?: TraceNode[]
+  trace?: ToolActivityGroup[]
 }
 
 /** One newly-injected item within a category for a turn. */

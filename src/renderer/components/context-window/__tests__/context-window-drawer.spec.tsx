@@ -59,6 +59,8 @@ describe('ContextWindowDrawer', () => {
     expect(screen.getByText('CLAUDE.md')).toBeTruthy()
     expect(screen.getByText('Tool output')).toBeTruthy()
     expect(screen.getByText('User messages')).toBeTruthy()
+    expect(screen.getByText('Cumulative estimate')).toBeTruthy()
+    expect(screen.getByTitle(/not provider-reported active context usage/i)).toBeTruthy()
   })
 
   it('closing the drawer sets isOpen false via close button', () => {

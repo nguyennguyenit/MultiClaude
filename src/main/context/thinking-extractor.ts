@@ -1,5 +1,4 @@
 import type { ThinkingBlock } from '@shared/types/context-window'
-import { estimateTokens } from '@shared/utils/estimate-tokens'
 
 const HISTORY_CAP = 30
 const SIG_PREFIX_LEN = 16
@@ -8,15 +7,13 @@ interface PendingTurn {
   turnId: number
   timestamp: number
   signatures: string[]
-  approxTokens: number
 }
 
 /**
  * Per-session extractor for extended-thinking blocks. Claude Code v2.1+
  * persists thinking signature-only (no readable text); we capture counts,
- * redacted signature prefixes, and a coarse token estimate so the drawer
- * can show the user *that* thinking happened even if the content isn't
- * available to render.
+ * redacted signature prefixes so the drawer can show the user *that*
+ * thinking happened without treating opaque signature bytes as token volume.
  */
 export class ThinkingExtractor {
   private readonly blocks: ThinkingBlock[] = []
@@ -32,11 +29,9 @@ export class ThinkingExtractor {
       if (!sig) continue
       if (!this.pending || this.pending.turnId !== turnId) {
         this.flushTurn()
-        this.pending = { turnId, timestamp, signatures: [], approxTokens: 0 }
+        this.pending = { turnId, timestamp, signatures: [] }
       }
       this.pending.signatures.push(sig.slice(0, SIG_PREFIX_LEN))
-      // Signature length is a rough proxy for thinking depth.
-      this.pending.approxTokens += estimateTokens(sig)
     }
   }
 
@@ -50,8 +45,7 @@ export class ThinkingExtractor {
       turnId: p.turnId,
       timestamp: p.timestamp,
       count: p.signatures.length,
-      signatures: p.signatures,
-      approxTokens: p.approxTokens
+      signatures: p.signatures
     })
     if (this.blocks.length > HISTORY_CAP) this.blocks.shift()
   }

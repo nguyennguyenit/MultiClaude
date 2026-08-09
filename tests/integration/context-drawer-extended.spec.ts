@@ -98,11 +98,14 @@ describe('Phase 8 integration: context drawer extended', () => {
     expect(s.turnDeltas).toBeDefined()
     expect(s.turnDeltas!.length).toBeGreaterThanOrEqual(3)
 
-    // Phase 4 — execution trace on at least one closed turn
+    // Flat tool activity on at least one closed turn. Agent calls remain tools;
+    // no nested-agent hierarchy is claimed without a correlated inner stream.
     const turn1 = s.turnDeltas!.find((t) => t.turnId === 1)
     expect(turn1?.trace).toBeDefined()
-    expect(turn1!.trace!.some((n) => n.agentType === 'main')).toBe(true)
-    expect(turn1!.trace!.some((n) => n.agentType === 'subagent' && n.agentName === 'researcher')).toBe(true)
+    expect(turn1!.trace).toHaveLength(1)
+    expect(turn1!.trace![0].toolCalls.map((call) => call.name)).toContain('Agent')
+    expect(turn1!.trace![0]).not.toHaveProperty('agentType')
+    expect(turn1!.trace![0]).not.toHaveProperty('children')
 
     // Phase 5 — high-confidence compaction event
     expect(s.compactionEvents).toBeDefined()

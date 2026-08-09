@@ -16,6 +16,3 @@ export const CATEGORY_META: Record<ContextCategory, CategoryMeta> = {
   'task-coordination': { label: 'Task coordination', color: 'var(--accent-orange, #fb923c)', order: 5 },
   'user-messages': { label: 'User messages', color: 'var(--accent-pink, #f472b6)', order: 6 }
 }
-
-/** Warn when total tokens cross this threshold (approximate 1M-ctx usage). */
-export const CONTEXT_WARNING_THRESHOLD = 200_000

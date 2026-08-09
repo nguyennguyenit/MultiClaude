@@ -10,7 +10,7 @@ export function CompactionTimeline({ events }: Props) {
   if (events.length === 0) {
     return (
       <div className="compaction-empty" data-testid="compaction-empty">
-        No compaction events yet — the context window has not been folded.
+        No explicit compaction event has been observed.
       </div>
     )
   }
@@ -26,11 +26,12 @@ export function CompactionTimeline({ events }: Props) {
 
 function CompactionRow({ event }: { event: CompactionEvent }) {
   const [open, setOpen] = useState(false)
-  const dropPct = event.beforeTokens > 0
-    ? Math.round(((event.beforeTokens - event.afterTokens) / event.beforeTokens) * 100)
-    : 0
   const time = new Date(event.timestamp).toLocaleTimeString()
-  const title = `${event.confidence === 'high' ? 'Compaction' : 'Estimated compaction (unverified)'} at ${time}`
+  const sourceLabel = {
+    summary: 'Explicit summary',
+    'compact-boundary': 'Explicit compact boundary'
+  }[event.source]
+  const title = `Compaction (${sourceLabel.toLowerCase()}) at ${time}`
   return (
     <li
       className={`compaction-event conf-${event.confidence}${open ? ' is-open' : ''}`}
@@ -40,15 +41,12 @@ function CompactionRow({ event }: { event: CompactionEvent }) {
     >
       <span className="compaction-marker" aria-hidden />
       <span className="compaction-time">{time}</span>
-      <span className="compaction-delta">
-        {formatTokens(event.beforeTokens)} → {formatTokens(event.afterTokens)}
-      </span>
-      <span className="compaction-drop">−{dropPct}%</span>
+      <span className="compaction-source">{sourceLabel}</span>
+      {event.observedTokens != null ? (
+        <span className="compaction-observed">{formatTokens(event.observedTokens)} observed</span>
+      ) : null}
       {open ? (
         <div className="compaction-detail">
-          {event.confidence === 'low' ? (
-            <p className="compaction-note">Inferred from a sudden token drop. No explicit summary line was observed.</p>
-          ) : null}
           {event.summary ? <p className="compaction-summary">{event.summary}</p> : null}
           {event.compactedTurnCount != null ? (
             <p className="compaction-turn-count">{event.compactedTurnCount} turns folded</p>

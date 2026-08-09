@@ -74,17 +74,27 @@ export interface JsonlLineSource {
   off?(event: 'jsonlLine', listener: (ev: JsonlLineEvent) => void): unknown
 }
 
+export interface ContextWindowAnalyzerOptions {
+  advancedEnabled?: boolean
+}
+
 export class ContextWindowAnalyzer extends EventEmitter {
   private sessions: Map<string, SessionState> = new Map()
   private sweepTimer: NodeJS.Timeout | null = null
   private readonly mdReader: ClaudeMdReader
   private readonly source: JsonlLineSource
+  private readonly advancedEnabled: boolean
   private readonly onLineBound: (ev: JsonlLineEvent) => void
 
-  constructor(source: JsonlLineSource, mdReader: ClaudeMdReader = new ClaudeMdReader()) {
+  constructor(
+    source: JsonlLineSource,
+    mdReader: ClaudeMdReader = new ClaudeMdReader(),
+    options: ContextWindowAnalyzerOptions = {}
+  ) {
     super()
     this.source = source
     this.mdReader = mdReader
+    this.advancedEnabled = options.advancedEnabled ?? true
     this.onLineBound = (ev: JsonlLineEvent) => this.handleLine(ev)
     source.on('jsonlLine', this.onLineBound)
     this.sweepTimer = setInterval(() => this.sweepStale(), SWEEP_INTERVAL_MS)
@@ -97,6 +107,7 @@ export class ContextWindowAnalyzer extends EventEmitter {
   }
 
   getTurnDetail(sessionId: string, turnId: number): TurnDeltaDetail | null {
+    if (!this.advancedEnabled) return null
     return this.sessions.get(sessionId)?.tracker.getDetail(turnId) ?? null
   }
 
@@ -125,17 +136,19 @@ export class ContextWindowAnalyzer extends EventEmitter {
       const shapedLine = line as Parameters<typeof categorizeLine>[0]
       // Turn boundary: a `user` line carrying user-authored text (not a
       // tool_result-only payload) opens a new turn. Close the previous one.
-      if (isUserTextLine(shapedLine)) {
+      if (this.advancedEnabled && isUserTextLine(shapedLine)) {
         if (state.currentTurnId > 0) {
           this.closeTurn(state)
         }
         state.currentTurnId += 1
         state.traceBuilder = new ExecutionTraceBuilder()
       }
-      this.feedTraceBuilder(state, shapedLine)
+      if (this.advancedEnabled) this.feedTraceBuilder(state, shapedLine)
       // Compaction signals run on every line, even when no category hits
       // (summary lines carry zero hits but ARE the explicit signal).
-      const compactEvent = state.compactionDetector.recordLine(shapedLine as object)
+      const compactEvent = this.advancedEnabled
+        ? state.compactionDetector.recordLine(shapedLine as object)
+        : null
       const hits = categorizeLine(shapedLine, state.detector, state.registry)
       if (hits.length === 0 && !compactEvent) return
       for (const h of hits) {
@@ -144,7 +157,7 @@ export class ContextWindowAnalyzer extends EventEmitter {
         bucket.chars += h.chars
         bucket.itemCount += 1
         state.snapshot.total += h.tokens
-        if (state.currentTurnId > 0) {
+        if (this.advancedEnabled && state.currentTurnId > 0) {
           state.tracker.recordItem(state.currentTurnId, h.category, {
             label: h.label ?? h.category,
             tokens: h.tokens,
@@ -155,12 +168,15 @@ export class ContextWindowAnalyzer extends EventEmitter {
       state.snapshot.updatedAt = Date.now()
       // Refresh turnDeltas pointer (cheap: same array reference, but include
       // a defensive copy of the latest summary into snapshot for IPC clone)
-      state.snapshot.turnDeltas = state.tracker.getSummaries().slice()
+      if (this.advancedEnabled) {
+        state.snapshot.turnDeltas = state.tracker.getSummaries().slice()
 
-      // Sudden-drop heuristic; explicit markers were already recorded above.
-      state.compactionDetector.recordTotalTokens(state.snapshot.total, state.snapshot.updatedAt)
-      state.snapshot.compactionEvents = state.compactionDetector.getEvents().slice()
-      state.snapshot.thinkingBlocks = state.thinkingExtractor.getBlocks().slice()
+        // Preserve the observed total as context for future explicit signals;
+        // token movement alone never implies compaction.
+        state.compactionDetector.recordTotalTokens(state.snapshot.total, state.snapshot.updatedAt)
+        state.snapshot.compactionEvents = state.compactionDetector.getEvents().slice()
+        state.snapshot.thinkingBlocks = state.thinkingExtractor.getBlocks().slice()
+      }
 
       this.scheduleEmit(state)
     } catch (err) {

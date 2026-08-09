@@ -10,6 +10,7 @@ import { TurnInjectionDiff } from './turn-injection-diff'
 import { ExecutionTrace } from './execution-trace'
 import { CompactionTimeline } from './compaction-timeline'
 import { ThinkingViewer } from './thinking-viewer'
+import { AgentInsightsSummary } from './agent-insights-summary'
 import type { ContextCategory } from '@shared/types'
 
 const ORDERED_CATEGORIES: ContextCategory[] = (Object.keys(CATEGORY_META) as ContextCategory[])
@@ -24,6 +25,13 @@ export function ContextWindowDrawer() {
     const t = s.terminals.find((x) => x.id === s.activeTerminalId)
     return t?.claudeSessionId ?? null
   })
+  const activeBinding = useAppStore((s) =>
+    s.activeTerminalId ? s.agentBindings[s.activeTerminalId] : undefined
+  )
+  const managedSnapshot = useContextWindowStore((s) => activeBinding
+    ? s.insightSnapshots[`${activeBinding.session.provider}:${activeBinding.session.id}`]
+    : undefined
+  )
 
   const { snapshot: snap, isStale } = useContextSnapshot(activeSessionId)
   const total = snap?.total ?? 0
@@ -57,22 +65,31 @@ export function ContextWindowDrawer() {
     <SlidePanel
       isOpen={isOpen}
       onClose={() => setOpen(false)}
-      title="Context window"
+      title="Agent Insights"
       headerExtra={staleChip}
     >
       <aside
         role="complementary"
-        aria-label="Claude context window breakdown"
+        aria-label="Agent insights and context window breakdown"
         className="context-window-body"
         data-testid="context-window-body"
       >
         {advancedEnabled ? <PaneSwitcherHeader /> : null}
-        {!activeSessionId || !snap ? (
+        {activeBinding && !managedSnapshot ? (
           <div className="context-empty" data-testid="context-empty">
-            No Claude session in the active pane yet.
+            Waiting for {activeBinding.session.provider} insight events.
+          </div>
+        ) : activeBinding?.session.provider === 'codex' && managedSnapshot ? (
+          <AgentInsightsSummary snapshot={managedSnapshot} advancedEnabled={advancedEnabled} />
+        ) : !activeSessionId || !snap ? (
+          <div className="context-empty" data-testid="context-empty">
+            No managed Claude or Codex session in the active pane yet.
           </div>
         ) : (
           <>
+            {managedSnapshot ? (
+              <AgentInsightsSummary snapshot={managedSnapshot} advancedEnabled={false} />
+            ) : null}
             <ContextWindowHeader total={total} sessionId={activeSessionId} />
             <div className="context-rows" role="list">
               {rows.map((r) => (

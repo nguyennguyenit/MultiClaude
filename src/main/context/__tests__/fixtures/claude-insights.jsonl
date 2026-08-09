@@ -1,0 +1,4 @@
+{"type":"user","message":{"content":"redacted request"}}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"redacted reasoning"},{"type":"tool_use","id":"tool-redacted","name":"Read","input":{"file_path":"redacted.ts"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-redacted","content":"redacted result"}]}}
+{"type":"summary","summary":"redacted compaction summary"}

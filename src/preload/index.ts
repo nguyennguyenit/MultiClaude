@@ -26,8 +26,17 @@ import type {
   WindowsShell,
   WindowState,
   RemoteControlStatus,
-  ContextSnapshot
+  ContextSnapshot,
+  TerminalOutputChunk,
+  TerminalSnapshot,
+  TerminalPlatformDiagnostic,
+  AgentEvent,
+  AgentProvider,
+  AgentProviderReadiness,
+  AgentSessionBinding,
+  ExternalSessionRef,
 } from '@shared/types'
+import type { AgentApprovalDecision } from '@main/agent/agent-adapter'
 
 // Type-safe API for renderer
 export interface ElectronAPI {
@@ -40,17 +49,14 @@ export interface ElectronAPI {
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     detectWsl: () => Promise<WslInfo>
     getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
+    getNativeCapability: () => Promise<import('@main/terminal/native-terminal-capability').NativeTerminalCapability>
     loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
     savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
-    getSnapshot: (terminalId: string) => Promise<{ data: string; cols: number; rows: number }>
-    /**
-     * Part F: Rebuild the headless mirror from the raw PTY transcript at current dimensions.
-     * Call this before getSnapshot to ensure the snapshot is free of xterm reflow artifacts
-     * (blank gaps caused by ANSI erase sequences running at a different column width than
-     * the one at which output was originally produced).
-     */
+    getSnapshot: (terminalId: string) => Promise<TerminalSnapshot>
+    getDiagnostics: () => Promise<TerminalPlatformDiagnostic[]>
+    /** Diagnostic-only raw-tail rebuild. Normal resize and refresh never call this. */
     rebuildHeadless: (terminalId: string) => Promise<void>
-    onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
+    onOutput: (callback: (data: TerminalOutputChunk) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
@@ -59,6 +65,36 @@ export interface ElectronAPI {
     onClaudeSessionIdChanged: (callback: (data: { terminalId: string; sessionId: string | undefined }) => void) => () => void
     /** Phase 4: subscribe to system-resume IPC events. Returns unsubscribe closure. */
     onSystemResumed: (callback: () => void) => () => void
+  }
+  agent: {
+    getReadiness: () => Promise<Partial<Record<AgentProvider, AgentProviderReadiness>>>
+    getBinding: (terminalId: string) => Promise<AgentSessionBinding | undefined>
+    start: (request: {
+      provider: AgentProvider
+      terminalId: string
+      cwd: string
+      projectId?: string
+    }) => Promise<AgentSessionBinding>
+    resume: (request: {
+      session: ExternalSessionRef
+      terminalId: string
+      cwd: string
+      projectId?: string
+    }) => Promise<AgentSessionBinding>
+    send: (terminalId: string, input: string) => Promise<void>
+    interrupt: (terminalId: string) => Promise<void>
+    approve: (
+      terminalId: string,
+      approvalId: string,
+      decision: AgentApprovalDecision
+    ) => Promise<void>
+    onEvent: (callback: (event: AgentEvent) => void) => () => void
+    onBindingChanged: (callback: (binding: AgentSessionBinding) => void) => () => void
+    onBindingRemoved: (callback: (binding: AgentSessionBinding) => void) => () => void
+  }
+  agentInsights: {
+    getSnapshot: (terminalId: string) => Promise<import('@shared/types').AgentInsightsSnapshot | undefined>
+    onUpdated: (callback: (snapshot: import('@shared/types').AgentInsightsSnapshot) => void) => () => void
   }
   project: {
     list: () => Promise<Project[]>
@@ -239,11 +275,15 @@ const api: ElectronAPI = {
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
     detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
     getAvailableShells: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SHELLS),
+    getNativeCapability: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_NATIVE_CAPABILITY),
     loadPaneTree: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, projectId),
     savePaneTree: (projectId, tree) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, { projectId, tree }),
     getSnapshot: (terminalId) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, terminalId) as
-        Promise<{ data: string; cols: number; rows: number }>,
+        Promise<TerminalSnapshot>,
+    getDiagnostics: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_DIAGNOSTICS) as
+        Promise<TerminalPlatformDiagnostic[]>,
     rebuildHeadless: (terminalId) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_REBUILD_HEADLESS, terminalId) as Promise<void>,
     onOutput: (callback) => {
@@ -287,6 +327,46 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED, listener)
     }
+  },
+  agent: {
+    getReadiness: () => ipcRenderer.invoke(IPC_CHANNELS.AGENT_GET_READINESS),
+    getBinding: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_GET_BINDING, { terminalId }),
+    start: (request) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_START, request),
+    resume: (request) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_RESUME, request),
+    send: (terminalId, input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_SEND, { terminalId, input }),
+    interrupt: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_INTERRUPT, { terminalId }),
+    approve: (terminalId, approvalId, decision) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPROVE, { terminalId, approvalId, decision }),
+    onEvent: (callback) => {
+      const listener = (_: IpcRendererEvent, event: AgentEvent) => callback(event)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, listener)
+    },
+    onBindingChanged: (callback) => {
+      const listener = (_: IpcRendererEvent, binding: AgentSessionBinding) => callback(binding)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_BINDING_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_BINDING_CHANGED, listener)
+    },
+    onBindingRemoved: (callback) => {
+      const listener = (_: IpcRendererEvent, binding: AgentSessionBinding) => callback(binding)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_BINDING_REMOVED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_BINDING_REMOVED, listener)
+    },
+  },
+  agentInsights: {
+    getSnapshot: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_INSIGHTS_GET, { terminalId }),
+    onUpdated: (callback) => {
+      const listener = (
+        _: IpcRendererEvent,
+        snapshot: import('@shared/types').AgentInsightsSnapshot
+      ) => callback(snapshot)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_INSIGHTS_UPDATED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_INSIGHTS_UPDATED, listener)
+    },
   },
   project: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_LIST),
