@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events'
+import { createHash } from 'crypto'
 import type { TaskEvent, NotificationEventType, AgentType } from '@shared/types'
-import { ENHANCED_DETECTION_PATTERNS } from '@shared/constants'
+import { ENHANCED_DETECTION_PATTERNS, REVIEW_PROMPT_PATTERN } from '@shared/constants'
 import { generateTaskEventId, MAX_REGEX_INPUT_LENGTH } from './parser-utils'
 import { cleanTerminalOutput } from './terminal-output-cleaner'
 
@@ -14,8 +15,16 @@ import { cleanTerminalOutput } from './terminal-output-cleaner'
  *
  * Maintains a rolling buffer of recent lines per terminal to extract
  * meaningful context (tool name, question) from surrounding output.
+ *
+ * False-trigger defense (redraw/resize):
+ *  - Tight REVIEW_PATTERN rejects loose keywords (`approve`, `waiting for input`)
+ *    that match unrelated shell output during SIGWINCH redraws.
+ *  - Per-terminal content-hash map dedupes repeated emissions of the SAME
+ *    prompt within HASH_TTL_MS (60s). Hash input prefers the tool-approval
+ *    line so a redraw that re-orders `[Y/n]` vs the approval body still hashes
+ *    identically. See hash-contract comment in output-parser.spec.ts.
  */
-const REVIEW_PATTERN = /\[Y\/n\]|\(y\/N\)|approve|allow\s+(?:this\s+)?tool|waiting\s+for\s+(?:your\s+)?(?:input|response|confirmation)/i
+const REVIEW_PATTERN = REVIEW_PROMPT_PATTERN
 
 /** Matches "Allow `tool` to run" or "Allow tool to run" patterns */
 const TOOL_APPROVAL_PATTERN = /[Aa]llow\s+[`']?(\w[\w-]*)[`']?\s+to\s+(?:run|execute)/
@@ -23,11 +32,16 @@ const TOOL_APPROVAL_PATTERN = /[Aa]llow\s+[`']?(\w[\w-]*)[`']?\s+to\s+(?:run|exe
 /** Lines to keep per terminal for context extraction */
 const BUFFER_SIZE = 5
 
+/** How long a content hash suppresses duplicate emissions per terminal */
+const HASH_TTL_MS = 60_000
+
 export class PlainTextParser extends EventEmitter {
   private debounceMap: Map<string, number> = new Map()
   private readonly debounceMs = 5000
   /** Rolling buffer of recent clean lines per terminal */
   private lineBuffers: Map<string, string[]> = new Map()
+  /** Per-terminal dedupe memory: last emitted reviewNeeded content hash + timestamp */
+  private lastEventHash: Map<string, { hash: string; time: number }> = new Map()
 
   parse(terminalId: string, data: string, projectName: string, agentType?: AgentType): void {
     const safeData = data.length > MAX_REGEX_INPUT_LENGTH
@@ -48,17 +62,24 @@ export class PlainTextParser extends EventEmitter {
 
     if (!REVIEW_PATTERN.test(cleanData)) return
 
-    const key = `${terminalId}:reviewNeeded`
-    const now = Date.now()
-    if (now - (this.debounceMap.get(key) ?? 0) <= this.debounceMs) return
+    const taskName = this.extractContext(terminalId)
+    const promptLine = this.firstMatchingLine(cleanData)
+    const hash = createHash('sha1')
+      .update(`${taskName}|${promptLine}`)
+      .digest('hex')
+      .slice(0, 16)
 
-    this.debounceMap.set(key, now)
+    const now = Date.now()
+    const prev = this.lastEventHash.get(terminalId)
+    if (prev && prev.hash === hash && (now - prev.time) < HASH_TTL_MS) return
+
+    this.lastEventHash.set(terminalId, { hash, time: now })
 
     const event: TaskEvent = {
       id: generateTaskEventId(terminalId, 'reviewNeeded', 'approval'),
       terminalId,
       type: 'reviewNeeded',
-      taskName: this.extractContext(terminalId),
+      taskName,
       projectName,
       timestamp: now
     }
@@ -147,8 +168,27 @@ export class PlainTextParser extends EventEmitter {
     return 'Waiting for approval'
   }
 
+  /**
+   * Pick a stable line from cleaned data to feed the dedup hash.
+   * Priority: tool-approval line (e.g. `Allow \`bash\` to run ...`) when present,
+   * else first REVIEW_PATTERN line. The tool-approval preference keeps the hash
+   * stable even when a redraw chunk writes `[Y/n]` and the body text in reverse
+   * order (ANSI stripping preserves write-order, not render-order).
+   */
+  private firstMatchingLine(cleanData: string): string {
+    let firstPatternLine = ''
+    for (const rawLine of cleanData.split('\n')) {
+      const line = rawLine.trim()
+      if (!line) continue
+      if (TOOL_APPROVAL_PATTERN.test(line)) return line.slice(0, 200)
+      if (!firstPatternLine && REVIEW_PATTERN.test(line)) firstPatternLine = line.slice(0, 200)
+    }
+    return firstPatternLine
+  }
+
   clearTerminal(terminalId: string): void {
     this.lineBuffers.delete(terminalId)
+    this.lastEventHash.delete(terminalId)
     for (const key of this.debounceMap.keys()) {
       if (key.startsWith(`${terminalId}:`)) this.debounceMap.delete(key)
     }
@@ -158,6 +198,9 @@ export class PlainTextParser extends EventEmitter {
     const now = Date.now()
     for (const [key, time] of this.debounceMap) {
       if (now - time > 60000) this.debounceMap.delete(key)
+    }
+    for (const [tid, rec] of this.lastEventHash) {
+      if (now - rec.time > HASH_TTL_MS * 2) this.lastEventHash.delete(tid)
     }
   }
 }

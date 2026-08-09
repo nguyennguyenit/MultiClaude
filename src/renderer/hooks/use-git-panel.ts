@@ -68,6 +68,8 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
 
   // Guard against concurrent refresh calls (prevents pile-up when git is slow)
   const isRefreshingRef = useRef(false)
+  // Last seen HEAD commit hash — skip heavy refreshAll fetches when unchanged
+  const lastCommitHashRef = useRef<string | null>(null)
 
   // Refresh file status
   const refresh = useCallback(async () => {
@@ -89,21 +91,34 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
 
   // Refresh all data (branches, log, stash, branch diff)
   // Shares isRefreshingRef with refresh() to prevent concurrent git operations
+  // Short-circuits heavy fetches when HEAD commit hash is unchanged
   const refreshAll = useCallback(async () => {
     if (!projectPath || !enabled || isRefreshingRef.current) return
     isRefreshingRef.current = true
     setIsLoading(true)
     try {
-      const [status, fileStatus, branchList, log, stash, diff] = await Promise.all([
+      // Stage 1: cheap fetches that must always update (files/status change without new commits)
+      const [status, fileStatus, log] = await Promise.all([
         window.electron.git.status(projectPath),
         window.electron.git.fileStatus(projectPath),
-        window.electron.git.branches(projectPath),
-        window.electron.git.log(projectPath, 50),
-        window.electron.git.stashList(projectPath),
-        window.electron.git.diffBranch(projectPath, baseBranchRef.current)
+        window.electron.git.log(projectPath, 50)
       ])
       setGitStatus(status)
       setFiles(fileStatus)
+
+      const newHash = log[0]?.hash ?? null
+      const firstRun = lastCommitHashRef.current === null
+      const commitChanged = firstRun || newHash !== lastCommitHashRef.current
+
+      // Skip heavy fetches when last commit is unchanged
+      if (!commitChanged) return
+
+      // Stage 2: heavy fetches only when HEAD moved
+      const [branchList, stash, diff] = await Promise.all([
+        window.electron.git.branches(projectPath),
+        window.electron.git.stashList(projectPath),
+        window.electron.git.diffBranch(projectPath, baseBranchRef.current)
+      ])
       setBranches(branchList)
       setLogEntries(log)
       setStashEntries(stash)
@@ -112,6 +127,7 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
       if (diff.baseBranch && diff.baseBranch !== baseBranchRef.current) {
         setBaseBranch(diff.baseBranch)
       }
+      lastCommitHashRef.current = newHash
     } finally {
       setIsLoading(false)
       isRefreshingRef.current = false
@@ -248,6 +264,8 @@ export function useGitPanel({ projectPath, enabled = true }: UseGitPanelOptions)
   useEffect(() => {
     if (!enabled || !projectPath) return
 
+    // Reset last-commit cache so first refreshAll for this project always hydrates fully
+    lastCommitHashRef.current = null
     refreshAll()
     const interval = setInterval(refresh, 5000)
     return () => clearInterval(interval)

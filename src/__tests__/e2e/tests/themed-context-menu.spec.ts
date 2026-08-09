@@ -13,13 +13,13 @@ test.describe('Themed Context Menu', () => {
   })
 
   test('right-click on terminal opens themed menu with Paste item', async ({ window }) => {
-    const count = await window.locator('.terminal-pane').count()
+    const count = await window.locator('[data-terminal-id]').count()
     if (count === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
-    const pane = window.locator('.terminal-pane').first()
+    const pane = window.locator('[data-terminal-id]').first()
     await pane.click({ button: 'right' })
     await window.waitForTimeout(WAIT_TIMES.SHORT)
 
@@ -29,13 +29,13 @@ test.describe('Themed Context Menu', () => {
   })
 
   test('Escape closes the menu', async ({ window }) => {
-    const count = await window.locator('.terminal-pane').count()
+    const count = await window.locator('[data-terminal-id]').count()
     if (count === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
-    const pane = window.locator('.terminal-pane').first()
+    const pane = window.locator('[data-terminal-id]').first()
     await pane.click({ button: 'right' })
     await window.waitForTimeout(WAIT_TIMES.SHORT)
     await window.keyboard.press('Escape')
@@ -46,13 +46,13 @@ test.describe('Themed Context Menu', () => {
   })
 
   test('menu background matches --bg-primary CSS variable', async ({ window }) => {
-    const count = await window.locator('.terminal-pane').count()
+    const count = await window.locator('[data-terminal-id]').count()
     if (count === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
-    const pane = window.locator('.terminal-pane').first()
+    const pane = window.locator('[data-terminal-id]').first()
     await pane.click({ button: 'right' })
     await window.waitForTimeout(WAIT_TIMES.SHORT)
 

@@ -41,11 +41,72 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build with manifests (no auto-publish)
+      - name: Verify types, lint, and unit tests
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run test:benchmarks
+          npm run test:release
+
+      - name: Build with manifests (all platforms)
         run: npm run build:ci
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Verify cross-process terminal stream (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:ui -- --grep "Terminal Stream Correctness"
+
+      - name: Verify cross-process terminal stream (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run test:ui -- --grep "Terminal Stream Correctness"
+
+      - name: Verify packaged application starts (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:package-smoke
+
+      - name: Verify packaged application starts (Windows)
+        if: runner.os == 'Windows'
+        run: npm run test:package-smoke
+
+      - name: Verify mounted DMG application starts (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          DMG_PATH="$(find release -maxdepth 1 -name '*.dmg' -print -quit)"
+          if [ -z "$DMG_PATH" ]; then echo "DMG artifact not found"; exit 1; fi
+          MOUNT_POINT="$(mktemp -d)"
+          cleanup() { hdiutil detach "$MOUNT_POINT" || true; rmdir "$MOUNT_POINT" || true; }
+          trap cleanup EXIT
+          hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_POINT" "$DMG_PATH"
+          npm run test:package-smoke -- --executable="$MOUNT_POINT/MultiClaude.app/Contents/MacOS/MultiClaude"
+
+      - name: Verify AppImage artifact starts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          APPIMAGE_PATH="$(find release -maxdepth 1 -name '*.AppImage' -print -quit)"
+          if [ -z "$APPIMAGE_PATH" ]; then echo "AppImage artifact not found"; exit 1; fi
+          chmod +x "$APPIMAGE_PATH"
+          set +e
+          timeout 15s xvfb-run -a "$APPIMAGE_PATH" --appimage-extract-and-run --no-sandbox
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 124 ]; then echo "AppImage exited before smoke window (status $STATUS)"; exit "$STATUS"; fi
+
+      - name: Verify portable EXE artifact starts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $portable = Get-ChildItem release -Filter '*Portable*.exe' | Select-Object -First 1
+          if (-not $portable) { throw 'Portable EXE artifact not found' }
+          $before = @(Get-Process MultiClaude -ErrorAction SilentlyContinue | ForEach-Object Id)
+          $launcher = Start-Process $portable.FullName -PassThru
+          Start-Sleep -Seconds 12
+          $started = @(Get-Process MultiClaude -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id })
+          if ($started.Count -eq 0) { throw 'Portable EXE did not start MultiClaude' }
+          $started | Stop-Process -Force
+          if (-not $launcher.HasExited) { Stop-Process -Id $launcher.Id -Force }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

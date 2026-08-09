@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, dialog, shell, app, screen } from 'electron'
+import { shouldForwardResume } from '../utils/resume-debounce-helper'
 import { readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -10,9 +11,12 @@ import type { GitHeadWatcher } from '../git/git-head-watcher'
 import type { ProjectStore } from '../project/project-store'
 import type { SettingsStore } from '../settings'
 import type { NotificationManager } from '../notification'
+import type { AgentRegistry } from '../agent/agent-registry'
 import { saveClipboardImage } from '../clipboard/clipboard-handler'
 import { detectWsl } from '../terminal/wsl-detector'
+import { getNativeTerminalCapability } from '../terminal/native-terminal-capability'
 import { checkForUpdatesManually, getUpdateState, downloadUpdate, installUpdate } from '../updater'
+import { readMediaDataUrl } from './media-read-data-url-handler'
 
 interface Managers {
   terminalManager: TerminalManager
@@ -21,6 +25,7 @@ interface Managers {
   projectStore: ProjectStore
   settingsStore: SettingsStore
   notificationManager: NotificationManager
+  agentRegistry?: AgentRegistry
 }
 
 // Pattern to detect git branch changes from terminal output
@@ -60,7 +65,15 @@ function getWindowState(window: BrowserWindow): WindowState {
 }
 
 export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
-  const { terminalManager, gitManager, gitHeadWatcher, projectStore, settingsStore, notificationManager } = managers
+  const {
+    terminalManager,
+    gitManager,
+    gitHeadWatcher,
+    projectStore,
+    settingsStore,
+    notificationManager,
+    agentRegistry,
+  } = managers
   const emitWindowState = () => {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.WINDOW_STATE_CHANGED, getWindowState(window))
@@ -84,9 +97,10 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   // Forward terminal output to renderer + notification detection
-  terminalManager.on('output', ({ terminalId, data }) => {
+  terminalManager.on('output', (chunk: import('@shared/types').TerminalOutputChunk) => {
+    const { terminalId, data } = chunk
     if (!window.isDestroyed()) {
-      window.webContents.send(IPC_CHANNELS.TERMINAL_OUTPUT, { terminalId, data })
+      window.webContents.send(IPC_CHANNELS.TERMINAL_OUTPUT, chunk)
       // Detect git branch changes (from git checkout, git switch commands)
       if (GIT_BRANCH_CHANGE_PATTERN.test(data)) {
         const terminal = terminalManager.get(terminalId)
@@ -105,6 +119,13 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     }
     // Notify for non-Claude agent exits (codex/gemini/aider)
     notificationManager.handleAgentExit(terminalId, exitCode)
+  })
+
+  // Forward Claude session id changes (for context-window drawer binding)
+  terminalManager.on('claudeSessionIdChanged', ({ terminalId, sessionId }: { terminalId: string; sessionId: string | undefined }) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, { terminalId, sessionId })
+    }
   })
 
   // Forward agent detection to renderer for badge display
@@ -126,6 +147,50 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.TERMINAL_STATE_CHANGE, { terminalId, isClaudeMode })
     }
+  })
+
+  // Phase 4: forward system-resumed event to all BrowserWindows with debounce.
+  // powerMonitor on macOS double-fires; shouldForwardResume() blocks the second
+  // fire within a 2000ms window. A 200ms settle delay gives PTYs time to flush
+  // buffered output before the renderer triggers snapshot replay.
+  //
+  // LIFECYCLE NOTE: this listener is never explicitly removed. Safe because
+  // registerIpcHandlers is called exactly once per TerminalManager instance,
+  // and the TerminalManager is re-instantiated when the BrowserWindow is
+  // recreated. If that assumption changes, add an off() in a shutdown hook.
+  terminalManager.on('terminal-resumed', () => {
+    if (!shouldForwardResume(Date.now())) return
+    setTimeout(() => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED)
+        }
+      }
+    }, 200)
+  })
+
+  // ── DEBUG ONLY: simulate suspend/resume cycle without real lockscreen ────
+  // Toggles systemSuspended on TerminalManager for `durationMs`, then emits
+  // resume + sends 'system-resumed' to renderer (mirrors real powerMonitor flow).
+  // Used to repro "missing chars after lockscreen" bug in seconds.
+  // Call from renderer DevTools:
+  //   await window.electron.debug.simulateSuspend(5000)
+  // During the 5s window, run a command in the pane (e.g. `seq 1 5000`); if the
+  // bug repros, the output that arrived during the window will be missing.
+  safeHandle('debug:simulate-suspend', async (_, durationMs: number) => {
+    const ms = Math.max(500, Math.min(60_000, Number(durationMs) || 5000))
+    console.log(`[debug] simulate-suspend: ${ms}ms window`)
+    terminalManager.emit('system-suspend')
+    await new Promise(resolve => setTimeout(resolve, ms))
+    terminalManager.emit('system-resume')
+    setTimeout(() => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED)
+        }
+      }
+    }, 200)
+    return { ok: true, windowMs: ms }
   })
 
   // Forward terminal created events (e.g. from Telegram /new command) to renderer
@@ -166,7 +231,12 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   safeHandle(IPC_CHANNELS.TERMINAL_DESTROY, async (_, id: string) => {
     notificationManager.clearTerminal(id)
-    return terminalManager.destroyAsync(id)
+    const destroyed = await terminalManager.destroyAsync(id)
+    if (destroyed) {
+      projectStore.removeTerminalFromSession(id)
+      terminalManager.forgetTerminalHistory(id)
+    }
+    return destroyed
   })
 
   safeOn(IPC_CHANNELS.TERMINAL_INPUT, (_, { terminalId, data }) => {
@@ -181,8 +251,33 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return terminalManager.list()
   })
 
-  safeHandle(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, async (_, { terminalId, sessionId }) => {
-    return terminalManager.invokeClaudeCode(terminalId, sessionId)
+  safeHandle(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, async (event, { terminalId, sessionId }) => {
+    if (!agentRegistry) return terminalManager.invokeClaudeCode(terminalId, sessionId)
+    const terminal = terminalManager.get(terminalId)
+    if (!terminal) return false
+    try {
+      if (sessionId) {
+        await agentRegistry.resume({
+          session: { provider: 'claude', id: sessionId },
+          terminalId,
+          projectId: terminal.projectId,
+          cwd: terminal.cwd,
+          webContentsId: event.sender.id,
+        })
+      } else {
+        await agentRegistry.start({
+          provider: 'claude',
+          terminalId,
+          projectId: terminal.projectId,
+          cwd: terminal.cwd,
+          webContentsId: event.sender.id,
+        })
+      }
+      return true
+    } catch (error) {
+      console.warn('[handlers] Managed Claude launch failed:', (error as Error).message)
+      return false
+    }
   })
 
   // WSL detection handler (Windows only)
@@ -196,6 +291,7 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   // Shell list handler — cached at startup, returns same promise on subsequent calls
   safeHandle(IPC_CHANNELS.TERMINAL_GET_SHELLS, () => terminalManager.getAvailableShells())
+  safeHandle(IPC_CHANNELS.TERMINAL_GET_NATIVE_CAPABILITY, () => getNativeTerminalCapability())
 
   safeHandle(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, async (_, projectId: string) => {
     if (typeof projectId !== 'string' || !projectId) return null
@@ -209,6 +305,31 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     if (!payload || typeof payload.projectId !== 'string' || !payload.projectId) return
     projectStore.savePaneTree(payload.projectId, payload.tree ?? null)
   })
+
+  safeHandle(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, async (_e, terminalId: string) => {
+    const snapshot = await terminalManager.getSnapshot(terminalId)
+    return snapshot
+  })
+
+  safeHandle(IPC_CHANNELS.TERMINAL_GET_DIAGNOSTICS, () => {
+    const settings = settingsStore.getSettings()
+    const capability = getNativeTerminalCapability()
+    return terminalManager.getDiagnostics().map(diagnostic => {
+      const binding = agentRegistry?.getByTerminal(diagnostic.terminalId)
+      const requestedNativeFallback = settings.terminalEngine === 'ghostty' && !capability.available
+      return {
+        ...diagnostic,
+        provider: binding?.session.provider ?? diagnostic.provider,
+        engine: settings.terminalEngine,
+        fallbackReason: diagnostic.fallbackReason
+          ?? (requestedNativeFallback ? capability.reason : null),
+      }
+    }) satisfies import('@shared/types').TerminalPlatformDiagnostic[]
+  })
+
+  // Diagnostic-only fallback; normal resize and refresh use the canonical mirror.
+  safeHandle(IPC_CHANNELS.TERMINAL_REBUILD_HEADLESS, (_e, terminalId: string) =>
+    terminalManager.rebuildHeadless(terminalId))
 
   // Project handlers
   safeHandle(IPC_CHANNELS.PROJECT_LIST, async () => {
@@ -243,7 +364,37 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
   })
 
   safeHandle(IPC_CHANNELS.PROJECT_DELETE, async (_, id: string) => {
-    return projectStore.deleteProject(id)
+    const liveTerminalIds = terminalManager.list()
+      .filter(terminal => terminal.projectId === id)
+      .map(terminal => terminal.id)
+    const terminalIds = new Set([
+      ...liveTerminalIds,
+      ...(projectStore.getSession()?.terminals ?? [])
+        .filter(terminal => terminal.projectId === id)
+        .map(terminal => terminal.id),
+    ])
+    // Main owns deletion safety too: renderer callers normally close these
+    // first, but startup cleanup and other IPC clients may delete directly.
+    for (const terminalId of liveTerminalIds) {
+      notificationManager.clearTerminal(terminalId)
+      await terminalManager.destroyAsync(terminalId)
+      terminalManager.forgetTerminalHistory(terminalId)
+    }
+    const deleted = projectStore.deleteProject(id)
+    if (deleted) {
+      for (const terminalId of terminalIds) notificationManager.clearTerminal(terminalId)
+      terminalManager.forgetProjectHistory(id)
+    }
+    return deleted
+  })
+
+  safeHandle(IPC_CHANNELS.PROJECT_REORDER, async (_, { sourceId, targetIndex }: { sourceId: string; targetIndex: number }) => {
+    const projects = projectStore.reorderProjects(sourceId, targetIndex)
+    return projects.map(p => ({
+      ...p,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+      updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt
+    }))
   })
 
   safeHandle(IPC_CHANNELS.PROJECT_SET_ACTIVE, async (_, id: string | null) => {
@@ -676,6 +827,11 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
     return false
   })
 
+  // Thumbnail data URL for DOM rendering (attachment strip)
+  safeHandle(IPC_CHANNELS.MEDIA_READ_DATA_URL, (_, filePath: string) => {
+    return readMediaDataUrl(filePath)
+  })
+
   // List screenshot files sorted by modification time (newest first)
   safeHandle(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS, () => {
     const screenshotDir = join(tmpdir(), 'multiClaude-screenshots')
@@ -743,7 +899,9 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
       if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
         throw new Error('Invalid settings: must be a non-array object')
       }
-      return settingsStore.setSettings(settings)
+      const updated = settingsStore.setSettings(settings)
+      terminalManager.setSettings(updated)
+      return updated
     } catch (error) {
       console.error('[handlers] Failed to set settings:', error)
       throw error
@@ -752,7 +910,9 @@ export function registerIpcHandlers(window: BrowserWindow, managers: Managers) {
 
   safeHandle(IPC_CHANNELS.SETTINGS_RESET, () => {
     try {
-      return settingsStore.resetSettings()
+      const reset = settingsStore.resetSettings()
+      terminalManager.setSettings(reset)
+      return reset
     } catch (error) {
       console.error('[handlers] Failed to reset settings:', error)
       throw error

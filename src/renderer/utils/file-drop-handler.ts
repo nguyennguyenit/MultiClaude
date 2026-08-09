@@ -11,7 +11,7 @@
  */
 
 import { useAppStore } from '../stores'
-import { joinPathsForTerminal } from './terminal-path-utils'
+import { insertFilePathsIntoTerminal } from './insert-file-paths'
 
 const TERMINAL_DROP_TARGET_SELECTOR = '[data-terminal-id]'
 
@@ -86,9 +86,14 @@ export function resolvePreferredDropTerminalId(activeTerminalId: string | null, 
 }
 
 export function writePathsToTerminal(terminalId: string, paths: string[]): void {
-  const input = joinPathsForTerminal(paths)
-  if (!input) return
-  window.electron.terminal.write(terminalId, input)
+  if (paths.length === 0) return
+  // Shared entry-point so IPC / document-level drops route through the same
+  // media-aware flow as the per-terminal drop hook: image/video paths are
+  // queued for flush-on-Enter (and mirrored into the attachment strip)
+  // while non-media paths are written straight to the PTY. Writing raw
+  // paths directly here previously bypassed Claude-mode prompt hygiene and
+  // made Claude Code echo stray [Image N] text below its status bar.
+  insertFilePathsIntoTerminal(terminalId, paths)
 }
 
 /**

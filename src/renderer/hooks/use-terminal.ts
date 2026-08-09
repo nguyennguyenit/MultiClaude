@@ -11,17 +11,19 @@ import { useEffect, useRef, useCallback } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
+import { resumeAndFlush as resumeTerminalOutput } from '../utils/terminal-output-dispatcher'
 import { useTerminalWebGL } from './use-terminal-webgl'
 import { useTerminalFontTheme } from './use-terminal-font-theme'
 import { useTerminalKeyboard } from './use-terminal-keyboard'
 import { useTerminalClipboard } from './use-terminal-clipboard'
 import { useTerminalVisibility } from './use-terminal-visibility'
 import { useTerminalInit } from './use-terminal-init'
+import { useTerminalScrollback } from './use-terminal-scrollback'
 import { useTerminalScroll } from './use-terminal-scroll'
 import { useTerminalFit } from './use-terminal-fit'
 import { useTerminalDebug } from './use-terminal-debug'
-import { unregisterDisplayWriter } from '../stores/display-writer-registry'
 import type { ViewportEventListener } from './terminal-hook-types'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 
@@ -45,6 +47,7 @@ export function useTerminal({
   // ── Shared refs ────────────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
+  const surfaceRef = useRef<TerminalSurface | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
   const isActiveRef = useRef(isActive)
@@ -67,9 +70,9 @@ export function useTerminal({
   const {
     write, scrollToTop, scrollToBottom, followLiveOutput,
     syncViewportState, clearUserViewportInteraction, markUserViewportInteraction,
-    onWriteParsed, isAtBottom, hasScrollback,
+    isAtBottom, hasScrollback,
   } = useTerminalScroll({
-    terminalRef, disposedRef, isHiddenRef, scrollMachineRef,
+    terminalRef, surfaceRef, disposedRef, isHiddenRef, scrollMachineRef,
     userViewportInteractingRef, processKeyboardEnhancementOutput,
   })
 
@@ -84,14 +87,14 @@ export function useTerminal({
 
   const { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal } =
     useTerminalWebGL({
-      terminalRef, disposedRef, terminalId, isActiveRef, isHiddenRef,
+      terminalRef, surfaceRef, disposedRef, terminalId, isActiveRef, isHiddenRef,
       onRefresh: (n) => refreshFnRef.current?.(n),
       onRefreshVisibleRows: refreshVisibleRows,
       performFit: (r) => performFitRef.current(r),
     })
 
   const { performFit, cancelScheduledFit, fit } = useTerminalFit({
-    terminalRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
+    terminalRef, surfaceRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
   })
   // Wire the ref so WebGL hook can call performFit
   performFitRef.current = performFit
@@ -108,7 +111,7 @@ export function useTerminal({
   })
 
   const { attachClipboardListeners, getCtrlVHandler, followLiveOutputRef } =
-    useTerminalClipboard({ terminalId })
+    useTerminalClipboard({ terminalId, surfaceRef })
   useEffect(() => { followLiveOutputRef.current = followLiveOutput }, [followLiveOutput, followLiveOutputRef])
 
   useTerminalVisibility({
@@ -116,14 +119,16 @@ export function useTerminal({
     webglLoadingRef, scrollMachineRef, performFit, reconcileWebGL, clearTextureAtlas,
   })
 
+  useTerminalScrollback({ terminalRef, disposedRef })
+
   const { initTerminal } = useTerminalInit({
-    terminalRef, fitAddonRef, disposedRef, containerRef, terminalId,
+    terminalRef, surfaceRef, fitAddonRef, disposedRef, containerRef, terminalId,
     initialOutput, initialViewportY, isActiveRef, isHiddenRef, scrollMachineRef,
     userViewportInteractingRef, viewportListenersRef, scrollDisposableRef,
     syncViewportState, clearUserViewportInteraction, markUserViewportInteraction,
     shouldSendEnhancedEnter, attachClipboardListeners, getCtrlVHandler,
     followLiveOutput, reconcileWebGL, syncFontAfterLoad, registerTerminalDebugHandle,
-    onWriteParsed, onResize,
+    onResize,
   })
 
   // ── isActive / isHidden prop sync + debounced WebGL toggle ────────────────
@@ -144,29 +149,37 @@ export function useTerminal({
   useEffect(() => {
     disposedRef.current = false
     const scrollMachine = scrollMachineRef.current
+    const paneTerminalId = terminalId
     return () => {
       disposedRef.current = true
+      // Drain any pause state set by initTerminal in case unmount races ahead
+      // of snapshot-apply (prevents stuck pausedBuffer entry).
+      resumeTerminalOutput(paneTerminalId)
       scrollMachine.reset()
       clearUserViewportInteraction()
       cancelScheduledFit()
 
       const terminal = terminalRef.current
+      const surface = surfaceRef.current
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
       const viewportListeners = viewportListenersRef.current
 
-      terminalRef.current = null; fitAddonRef.current = null; webglAddonRef.current = null
+      terminalRef.current = null; surfaceRef.current = null; fitAddonRef.current = null; webglAddonRef.current = null
       scrollDisposableRef.current = null; viewportListenersRef.current = null
       unregisterTerminalDebugHandle()
-      unregisterDisplayWriter(terminalId)
 
-      for (const l of viewportListeners ?? []) l.target.removeEventListener(l.type, l.handler)
+      for (const l of viewportListeners ?? []) {
+        l.target.removeEventListener(l.type, l.handler, l.capture)
+      }
 
       setTimeout(() => {
         try {
           scrollDisposable?.dispose()
-          webglAddon?.dispose(); fitAddon?.dispose(); terminal?.dispose()
+          webglAddon?.dispose(); fitAddon?.dispose()
+          if (surface) surface.dispose()
+          else terminal?.dispose()
         } catch { /* may already be disposed */ }
       }, TERMINAL_DISPOSE_DELAY)
     }
@@ -174,12 +187,29 @@ export function useTerminal({
   }, [cancelScheduledFit, clearUserViewportInteraction, unregisterTerminalDebugHandle])
 
   // ── Public API ─────────────────────────────────────────────────────────────
-  const focus = useCallback(() => { terminalRef.current?.focus() }, [])
+  // Focus the hidden helper textarea directly with preventScroll so the browser
+  // does not auto-scroll the viewport to the cursor when user focused the pane
+  // while scrolled up (e.g. mid text-selection for copy). Fall back to
+  // terminal.focus() if textarea is not yet attached (pre-mount edge case).
+  const focus = useCallback(() => {
+    const t = terminalRef.current
+    if (!t) return
+    if (t.textarea) t.textarea.focus({ preventScroll: true })
+    else surfaceRef.current?.focus()
+  }, [])
   const blur = useCallback(() => { terminalRef.current?.blur() }, [])
   const showCursor = useCallback(() => {
-    if (!terminalRef.current || disposedRef.current) return
-    terminalRef.current.focus()
+    const t = terminalRef.current
+    if (!t || disposedRef.current) return
+    if (t.textarea) t.textarea.focus({ preventScroll: true })
+    else t.focus()
   }, [])
+  const restoreActiveRender = useCallback(() => {
+    const t = terminalRef.current
+    if (!t || disposedRef.current) return
+    clearTextureAtlas()
+    if (!performFit(false)) refreshVisibleRows()
+  }, [clearTextureAtlas, performFit, refreshVisibleRows])
   const clear = useCallback(() => { terminalRef.current?.clear() }, [])
   const getViewportSnapshot = useCallback(() => {
     const t = terminalRef.current
@@ -188,7 +218,7 @@ export function useTerminal({
   }, [])
 
   return {
-    containerRef, initTerminal, write, fit, focus, blur, showCursor, clear,
+    containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, clear,
     scrollToTop, scrollToBottom, isAtBottom, hasScrollback,
     refresh, getViewportSnapshot, terminalRef
   }

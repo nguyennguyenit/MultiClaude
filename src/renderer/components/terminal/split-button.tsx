@@ -41,7 +41,9 @@ export function SplitButton({
         onClick={onAddTerminal}
         disabled={atLimit}
       >
-        +
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 3V15M3 9H15" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+        </svg>
       </button>
       <div className="split-button-divider" aria-hidden="true" />
       <button
@@ -54,7 +56,9 @@ export function SplitButton({
         onClick={openSplitDropdown}
         disabled={splitDisabled}
       >
-        ▾
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
     </div>
   )

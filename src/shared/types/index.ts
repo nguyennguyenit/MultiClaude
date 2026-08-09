@@ -1,7 +1,13 @@
 import type { PaneTree } from './pane-tree'
+import type { AgentType } from './agent-provider'
 
-// Agent type detected from terminal command input
-export type AgentType = 'claude' | 'codex' | 'gemini' | 'aider' | 'generic'
+export * from './agent-provider'
+export * from './agent-session'
+export * from './agent-event'
+export * from './agent-insights'
+
+/** Per-terminal task lifecycle state derived from notification events. */
+export type TerminalTaskStatus = 'idle' | 'running' | 'review' | 'done' | 'failed'
 
 // Terminal types
 export interface Terminal {
@@ -16,6 +22,8 @@ export interface Terminal {
   allowTitleUpdate?: boolean
   /** Detected CLI agent type running in this terminal */
   agentType?: AgentType
+  /** Task lifecycle derived from notification events; undefined ≡ 'idle'. */
+  taskStatus?: TerminalTaskStatus
 }
 
 export interface TerminalState {
@@ -188,19 +196,13 @@ export type ColorTheme =
 
 // Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
 export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
+export type TerminalEngine = 'xterm' | 'ghostty'
 
 // UI Style types for Terminal/TUI mode
-export type UiStyle = 'modern' | 'terminal'
 export type TerminalColorPreset = 'green' | 'blue' | 'white'
 export type TerminalFontId = 'system' | 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
 // App/UI font (non-terminal) - sans-serif fonts for the main interface
 export type AppFontId = 'system' | 'inter' | 'geist' | 'plus-jakarta-sans' | 'roboto' | 'ubuntu' | 'segoe-ui'
-
-export interface TerminalStyleOptions {
-  colorPreset: TerminalColorPreset
-  fontFamily: TerminalFontId
-  useBorderChars: boolean
-}
 
 // WSL detection types (Windows only)
 export interface WslDistro {
@@ -225,6 +227,7 @@ export interface ShellInfo {
   name: string          // display name: 'zsh', 'fish', 'bash', 'Command Prompt', etc.
   isDefault: boolean    // true if this matches the user's login shell / default Windows shell
   kind: 'unix' | 'cmd' | 'powershell' | 'wsl'  // discriminant — no name-matching needed
+  distro?: string       // WSL distribution name when kind === 'wsl'
 }
 
 // Options for creating a new terminal
@@ -260,26 +263,40 @@ export interface ColorThemeDefinition {
 }
 
 export interface AppSettings {
+  settingsSchemaVersion: number
+  terminalEngine: TerminalEngine
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
   terminalRenderMode: TerminalRenderMode
   gpuRendererForClaudeTerminals?: boolean
-  glassmorphismEnabled: boolean
+  /**
+   * Number of lines xterm.js keeps in the scrollback buffer.
+   * Higher values let the user scroll further back but use more memory
+   * (~1–2KB per line). Range: 1000–200000. Default: 20000.
+   */
+  scrollbackLines?: number
   // Terminal content font family (xterm)
   terminalFontFamily: TerminalFontId
   // Windows-only: default shell for new terminals
-  windowsShell?: WindowsShell
   // Cross-platform: persisted default shell selection
   defaultShell?: ShellInfo
   // Legacy fields - kept optional for backward compat with saved settings + hook
   themeMode?: ThemeMode
   // Main app/UI font family (non-terminal)
   modernFontFamily?: AppFontId
-  // Legacy: UI style (terminal/modern toggle - removed in VibeTerminal reskin)
-  uiStyle?: UiStyle
-  terminalStyleOptions?: TerminalStyleOptions
-  // Legacy: Activity Bar state (removed in VibeTerminal reskin)
-  activityBarState?: ActivityBarState
+  /**
+   * Toggle the context-window breakdown feature (drawer + main analyzer).
+   * Startup-only: a restart is required for changes to take effect.
+   * Default: true.
+   */
+  enableContextWindow?: boolean
+  /**
+   * Toggle the advanced context-window features (turn-injection diff,
+   * tool activity, compaction timeline, extended thinking viewer).
+   * Startup-only. Default: channel-aware — true on beta/rc/alpha channel,
+   * false on stable. See src/main/settings/settings-store.ts channel detect.
+   */
+  enableContextWindowAdvanced?: boolean
 }
 
 // GitHub Issues/PRs types
@@ -312,3 +329,7 @@ export * from './update'
 
 // Pane tree layout types
 export * from './pane-tree'
+
+// Context window breakdown types
+export * from './context-window'
+export * from './terminal-stream'

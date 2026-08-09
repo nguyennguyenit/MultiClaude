@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, test, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Project } from '@shared/types'
 
 // Mock assets
@@ -34,7 +36,8 @@ const baseProps = {
   activeProjectId: null,
   onSelectProject: vi.fn(),
   onAddProject: vi.fn(),
-  onDeleteProject: vi.fn()
+  onDeleteProject: vi.fn(),
+  onReorderProjects: vi.fn()
 }
 
 // Deferred import after mocks are set up
@@ -46,6 +49,15 @@ beforeAll(async () => {
 })
 
 describe('Toolbar', () => {
+  beforeEach(() => {
+    vi.stubGlobal('electron', {
+      window: {
+        getState: vi.fn(async () => ({ isMaximized: false, isFullScreen: false, isExpanded: false })),
+        onStateChanged: vi.fn(() => vi.fn())
+      }
+    })
+  })
+
   test('renders project tabs container', () => {
     const html = renderToStaticMarkup(<Toolbar {...baseProps} />)
     expect(html).toContain('data-testid="project-tabs-container"')
@@ -101,6 +113,65 @@ describe('Toolbar', () => {
       <Toolbar {...baseProps} projects={[mockProject]} />
     )
     expect(html).toContain(`Remove project ${mockProject.name}`)
+  })
+
+  test('project tabs use pointer-driven reordering state', () => {
+    const html = renderToStaticMarkup(
+      <Toolbar {...baseProps} projects={[mockProject]} />
+    )
+    expect(html).toContain(`data-testid="project-tab-${mockProject.id}"`)
+  })
+
+  test('dropping a dragged project tab calls reorder callback', () => {
+    const projects = [
+      { ...mockProject, id: 'proj-1', name: 'Project 1' },
+      { ...mockProject, id: 'proj-2', name: 'Project 2' },
+      { ...mockProject, id: 'proj-3', name: 'Project 3' }
+    ]
+    const onReorderProjects = vi.fn()
+
+    render(
+      <Toolbar
+        {...baseProps}
+        projects={projects}
+        onReorderProjects={onReorderProjects}
+      />
+    )
+
+    const firstTab = screen.getByTestId('project-tab-proj-1')
+    const thirdTab = screen.getByTestId('project-tab-proj-3')
+
+    fireEvent.pointerDown(firstTab, { button: 0 })
+    fireEvent.pointerEnter(thirdTab)
+    fireEvent.pointerUp(thirdTab)
+
+    expect(onReorderProjects).toHaveBeenCalledWith('proj-1', 2)
+  })
+
+  test('clears project drag state when pointer is released outside tabs', () => {
+    const projects = [
+      { ...mockProject, id: 'proj-1', name: 'Project 1' },
+      { ...mockProject, id: 'proj-2', name: 'Project 2' }
+    ]
+    const onReorderProjects = vi.fn()
+
+    render(
+      <Toolbar
+        {...baseProps}
+        projects={projects}
+        onReorderProjects={onReorderProjects}
+      />
+    )
+
+    const firstTab = screen.getByTestId('project-tab-proj-1')
+    const secondTab = screen.getByTestId('project-tab-proj-2')
+
+    fireEvent.pointerDown(firstTab, { button: 0 })
+    fireEvent.pointerUp(window)
+    fireEvent.pointerEnter(secondTab)
+    fireEvent.pointerUp(secondTab)
+
+    expect(onReorderProjects).not.toHaveBeenCalled()
   })
 
   test('project tabs container is inside toolbar element', () => {

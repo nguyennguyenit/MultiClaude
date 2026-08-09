@@ -205,11 +205,13 @@ export class TelegramCommandRouter {
     }
 
     const index = terminals.findIndex(term => term.id === resolved.terminal?.id) + 1
-    const ok = this.terminalManager.destroy(resolved.terminal.id)
+    const ok = await this.terminalManager.destroyAsync(resolved.terminal.id)
     if (!ok) {
       await this.sendReply(`Failed to kill terminal ${index}`)
       return
     }
+    this.projectStore.removeTerminalFromSession(resolved.terminal.id)
+    this.terminalManager.forgetTerminalHistory(resolved.terminal.id)
 
     await this.sendReply(`🗑️ Terminal ${index} \\(${this.esc(resolved.terminal.title)}\\) killed`)
   }
@@ -566,8 +568,19 @@ export class TelegramCommandRouter {
     }
 
     // Fallback: terminal may have exited after notification was sent
-    const resolvedId = terminal?.id ?? terminalId
-    const ghost = terminal ? null : this.terminalManager.getExitedSession(resolvedId)
+    let resolvedId = terminal?.id ?? terminalId
+    let ghost = terminal ? null : this.terminalManager.getExitedSession(resolvedId) ?? null
+
+    // Final fallback: callback_data carried a Claude session UUID for an already-exited
+    // terminal. Ghost cache is keyed by internal id, so resolve via claudeSessionId.
+    if (!terminal && !ghost) {
+      const match = this.terminalManager.findByClaudeSessionId(terminalId)
+      if (match) {
+        resolvedId = match.id
+        ghost = this.terminalManager.getExitedSession(match.id) ?? null
+      }
+    }
+
     if (!terminal && !ghost) {
       await this.sendReply('📄 Session ended — no cached output available\\.')
       return
@@ -771,22 +784,17 @@ export class TelegramCommandRouter {
   }
 
   private getTerminalOutput(terminalId: string, lineCount: number): string | null {
-    const sessions = this.terminalManager.getSessions()
-    const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
-    if (!session?.outputBuffer) return null
+    const liveTail = this.terminalManager.getNotificationTail(terminalId)
+    if (!liveTail) return null
 
-    const lines = cleanTerminalOutput(session.outputBuffer).split('\n')
+    const lines = cleanTerminalOutput(liveTail).split('\n')
     const tail = lines.slice(-lineCount)
     return tail.length > 0 ? tail.join('\n') : null
   }
 
   /** Returns raw output buffer for smart summary (no pre-cleaning, formatter handles it) */
   private getRawTerminalOutput(terminalId: string): string | null {
-    const sessions = this.terminalManager.getSessions()
-    const session = sessions.find((s: { id: string; outputBuffer?: string }) => s.id === terminalId)
-    if (session?.outputBuffer) return session.outputBuffer
-    // Fallback: exited terminal ghost cache
-    return this.terminalManager.getExitedSession(terminalId)?.outputBuffer ?? null
+    return this.terminalManager.getNotificationTail(terminalId) ?? null
   }
 
   private esc(text: string): string {

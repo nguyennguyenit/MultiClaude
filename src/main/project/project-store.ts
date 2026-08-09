@@ -111,8 +111,23 @@ export class ProjectStore {
 
     // Clean up associated terminal layout
     this.deleteTerminalLayout(id)
+    this.removeProjectFromSession(id)
 
     return true
+  }
+
+  reorderProjects(sourceId: string, targetIndex: number): Project[] {
+    const projects = this.getProjects()
+    const sourceIndex = projects.findIndex(p => p.id === sourceId)
+    if (sourceIndex === -1) return projects
+    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= projects.length) return projects
+    if (sourceIndex === targetIndex) return projects
+
+    const reordered = [...projects]
+    const [moved] = reordered.splice(sourceIndex, 1)
+    reordered.splice(targetIndex, 0, moved)
+    this.store.set('projects', reordered)
+    return reordered
   }
 
   getActiveProjectId(): string | null {
@@ -134,6 +149,36 @@ export class ProjectStore {
 
   clearSession(): void {
     this.store.set('session', null)
+  }
+
+  removeTerminalFromSession(terminalId: string): void {
+    const session = this.getSession()
+    if (!session) return
+    const terminals = session.terminals.filter(terminal => terminal.id !== terminalId)
+    if (terminals.length === session.terminals.length) return
+    this.saveSession({
+      ...session,
+      terminals,
+      activeTerminalId: session.activeTerminalId === terminalId ? null : session.activeTerminalId,
+    })
+  }
+
+  removeProjectFromSession(projectId: string): void {
+    const session = this.getSession()
+    if (!session) return
+    const removedIds = new Set(
+      session.terminals
+        .filter(terminal => terminal.projectId === projectId)
+        .map(terminal => terminal.id),
+    )
+    if (removedIds.size === 0) return
+    this.saveSession({
+      ...session,
+      terminals: session.terminals.filter(terminal => !removedIds.has(terminal.id)),
+      activeTerminalId: session.activeTerminalId && removedIds.has(session.activeTerminalId)
+        ? null
+        : session.activeTerminalId,
+    })
   }
 
   // Terminal layout methods

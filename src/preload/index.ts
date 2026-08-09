@@ -25,8 +25,18 @@ import type {
   WslInfo,
   WindowsShell,
   WindowState,
-  RemoteControlStatus
+  RemoteControlStatus,
+  ContextSnapshot,
+  TerminalOutputChunk,
+  TerminalSnapshot,
+  TerminalPlatformDiagnostic,
+  AgentEvent,
+  AgentProvider,
+  AgentProviderReadiness,
+  AgentSessionBinding,
+  ExternalSessionRef,
 } from '@shared/types'
+import type { AgentApprovalDecision } from '@main/agent/agent-adapter'
 
 // Type-safe API for renderer
 export interface ElectronAPI {
@@ -39,20 +49,59 @@ export interface ElectronAPI {
     invokeClaude: (terminalId: string, sessionId?: string) => Promise<boolean>
     detectWsl: () => Promise<WslInfo>
     getAvailableShells: () => Promise<import('@shared/types').ShellInfo[]>
+    getNativeCapability: () => Promise<import('@main/terminal/native-terminal-capability').NativeTerminalCapability>
     loadPaneTree: (projectId: string) => Promise<import('@shared/types').PaneTree | null>
     savePaneTree: (projectId: string, tree: import('@shared/types').PaneTree | null) => Promise<void>
-    onOutput: (callback: (data: { terminalId: string; data: string }) => void) => () => void
+    getSnapshot: (terminalId: string) => Promise<TerminalSnapshot>
+    getDiagnostics: () => Promise<TerminalPlatformDiagnostic[]>
+    /** Diagnostic-only raw-tail rebuild. Normal resize and refresh never call this. */
+    rebuildHeadless: (terminalId: string) => Promise<void>
+    onOutput: (callback: (data: TerminalOutputChunk) => void) => () => void
     onExit: (callback: (data: { terminalId: string; exitCode: number }) => void) => () => void
     onTitleChange: (callback: (data: { terminalId: string; title: string }) => void) => () => void
     onStateChange: (callback: (data: { terminalId: string; isClaudeMode: boolean }) => void) => () => void
     onCreated: (callback: (terminal: Terminal) => void) => () => void
     onAgentDetected: (callback: (data: { terminalId: string; agentType: string }) => void) => () => void
+    onClaudeSessionIdChanged: (callback: (data: { terminalId: string; sessionId: string | undefined }) => void) => () => void
+    /** Phase 4: subscribe to system-resume IPC events. Returns unsubscribe closure. */
+    onSystemResumed: (callback: () => void) => () => void
+  }
+  agent: {
+    getReadiness: () => Promise<Partial<Record<AgentProvider, AgentProviderReadiness>>>
+    getBinding: (terminalId: string) => Promise<AgentSessionBinding | undefined>
+    start: (request: {
+      provider: AgentProvider
+      terminalId: string
+      cwd: string
+      projectId?: string
+    }) => Promise<AgentSessionBinding>
+    resume: (request: {
+      session: ExternalSessionRef
+      terminalId: string
+      cwd: string
+      projectId?: string
+    }) => Promise<AgentSessionBinding>
+    send: (terminalId: string, input: string) => Promise<void>
+    interrupt: (terminalId: string) => Promise<void>
+    approve: (
+      terminalId: string,
+      approvalId: string,
+      decision: AgentApprovalDecision
+    ) => Promise<void>
+    onEvent: (callback: (event: AgentEvent) => void) => () => void
+    onBindingChanged: (callback: (binding: AgentSessionBinding) => void) => () => void
+    onBindingRemoved: (callback: (binding: AgentSessionBinding) => void) => () => void
+  }
+  agentInsights: {
+    getSnapshot: (terminalId: string) => Promise<import('@shared/types').AgentInsightsSnapshot | undefined>
+    onUpdated: (callback: (snapshot: import('@shared/types').AgentInsightsSnapshot) => void) => () => void
   }
   project: {
     list: () => Promise<Project[]>
     create: (project: { name: string; path: string }) => Promise<Project>
     update: (id: string, updates: Partial<Project>) => Promise<Project | null>
     delete: (id: string) => Promise<boolean>
+    reorder: (sourceId: string, targetIndex: number) => Promise<Project[]>
     setActive: (id: string | null) => Promise<boolean>
     openFolder: () => Promise<string | null>
     checkFolder: (cwd: string) => Promise<{ exists: boolean; isEmpty: boolean; isGitRepo: boolean; fileCount: number }>
@@ -128,6 +177,9 @@ export interface ElectronAPI {
     setActiveTerminal: (terminalId: string | null) => void
     onRemoteControlStatus: (callback: (status: RemoteControlStatus) => void) => () => void
     getRemoteControlStatus: () => Promise<RemoteControlStatus>
+    onPaneStatusChanged: (
+      callback: (payload: { terminalId: string; status: import('@shared/types').TerminalTaskStatus }) => void
+    ) => () => void
   }
   telegram: {
     startPairing: (botToken: string) => Promise<{
@@ -163,6 +215,7 @@ export interface ElectronAPI {
   }
   media: {
     open: (filePath: string) => Promise<boolean>
+    readDataUrl: (filePath: string) => Promise<string | null>
   }
   filePicker: {
     open: () => Promise<string[] | null>
@@ -198,6 +251,18 @@ export interface ElectronAPI {
     close: () => Promise<void>
   }
   onFileDrop: (callback: (filePath: string) => void) => () => void
+  context: {
+    getSnapshot: (sessionId: string) => Promise<ContextSnapshot | null>
+    onSnapshot: (callback: (snap: ContextSnapshot) => void) => () => void
+    getTurnDetail: (
+      sessionId: string,
+      turnId: number
+    ) => Promise<import('@shared/types/context-window').TurnDeltaDetail | null>
+  }
+  /** DEBUG ONLY — manually fake suspend/resume for repro testing */
+  debug: {
+    simulateSuspend: (durationMs: number) => Promise<{ ok: boolean; windowMs: number }>
+  }
 }
 
 const api: ElectronAPI = {
@@ -210,8 +275,17 @@ const api: ElectronAPI = {
     invokeClaude: (terminalId, sessionId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_INVOKE_CLAUDE, { terminalId, sessionId }),
     detectWsl: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DETECT_WSL),
     getAvailableShells: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SHELLS),
+    getNativeCapability: () => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_NATIVE_CAPABILITY),
     loadPaneTree: (projectId) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LOAD_PANE_TREE, projectId),
     savePaneTree: (projectId, tree) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_SAVE_PANE_TREE, { projectId, tree }),
+    getSnapshot: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SNAPSHOT, terminalId) as
+        Promise<TerminalSnapshot>,
+    getDiagnostics: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_DIAGNOSTICS) as
+        Promise<TerminalPlatformDiagnostic[]>,
+    rebuildHeadless: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_REBUILD_HEADLESS, terminalId) as Promise<void>,
     onOutput: (callback) => {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_OUTPUT, listener)
@@ -241,13 +315,65 @@ const api: ElectronAPI = {
       const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_AGENT_DETECTED, listener)
+    },
+    onClaudeSessionIdChanged: (callback) => {
+      const listener = (_: IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_CLAUDE_SESSION_ID_CHANGED, listener)
+    },
+    onSystemResumed: (callback) => {
+      // IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED carries no payload — callback takes no args
+      const listener = () => callback()
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_SYSTEM_RESUMED, listener)
     }
+  },
+  agent: {
+    getReadiness: () => ipcRenderer.invoke(IPC_CHANNELS.AGENT_GET_READINESS),
+    getBinding: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_GET_BINDING, { terminalId }),
+    start: (request) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_START, request),
+    resume: (request) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_RESUME, request),
+    send: (terminalId, input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_SEND, { terminalId, input }),
+    interrupt: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_INTERRUPT, { terminalId }),
+    approve: (terminalId, approvalId, decision) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPROVE, { terminalId, approvalId, decision }),
+    onEvent: (callback) => {
+      const listener = (_: IpcRendererEvent, event: AgentEvent) => callback(event)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, listener)
+    },
+    onBindingChanged: (callback) => {
+      const listener = (_: IpcRendererEvent, binding: AgentSessionBinding) => callback(binding)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_BINDING_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_BINDING_CHANGED, listener)
+    },
+    onBindingRemoved: (callback) => {
+      const listener = (_: IpcRendererEvent, binding: AgentSessionBinding) => callback(binding)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_BINDING_REMOVED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_BINDING_REMOVED, listener)
+    },
+  },
+  agentInsights: {
+    getSnapshot: (terminalId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_INSIGHTS_GET, { terminalId }),
+    onUpdated: (callback) => {
+      const listener = (
+        _: IpcRendererEvent,
+        snapshot: import('@shared/types').AgentInsightsSnapshot
+      ) => callback(snapshot)
+      ipcRenderer.on(IPC_CHANNELS.AGENT_INSIGHTS_UPDATED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AGENT_INSIGHTS_UPDATED, listener)
+    },
   },
   project: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_LIST),
     create: (project) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_CREATE, project),
     update: (id, updates) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_UPDATE, { id, updates }),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_DELETE, id),
+    reorder: (sourceId, targetIndex) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_REORDER, { sourceId, targetIndex }),
     setActive: (id) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_SET_ACTIVE, id),
     openFolder: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_OPEN_FOLDER),
     checkFolder: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.PROJECT_CHECK_FOLDER, cwd)
@@ -336,7 +462,17 @@ const api: ElectronAPI = {
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS, handler)
     },
-    getRemoteControlStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS)
+    getRemoteControlStatus: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_REMOTE_CONTROL_STATUS),
+    onPaneStatusChanged: (
+      callback: (payload: { terminalId: string; status: import('@shared/types').TerminalTaskStatus }) => void
+    ) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        payload: { terminalId: string; status: import('@shared/types').TerminalTaskStatus }
+      ) => callback(payload)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_PANE_STATUS_CHANGED, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_PANE_STATUS_CHANGED, handler)
+    }
   },
   telegram: {
     startPairing: (botToken: string) => ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_START_PAIRING, { botToken }),
@@ -386,7 +522,8 @@ const api: ElectronAPI = {
     listScreenshots: () => ipcRenderer.invoke(IPC_CHANNELS.IMAGE_LIST_SCREENSHOTS)
   },
   media: {
-    open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_OPEN, filePath)
+    open: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_OPEN, filePath),
+    readDataUrl: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MEDIA_READ_DATA_URL, filePath)
   },
   filePicker: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.FILE_PICKER_OPEN)
@@ -426,6 +563,19 @@ const api: ElectronAPI = {
     const listener = (_: unknown, data: { filePath: string }) => callback(data.filePath)
     ipcRenderer.on('file-dropped', listener)
     return () => ipcRenderer.removeListener('file-dropped', listener)
+  },
+  context: {
+    getSnapshot: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET, sessionId),
+    onSnapshot: (callback) => {
+      const listener = (_: IpcRendererEvent, snap: ContextSnapshot) => callback(snap)
+      ipcRenderer.on(IPC_CHANNELS.CONTEXT_SNAPSHOT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTEXT_SNAPSHOT, listener)
+    },
+    getTurnDetail: (sessionId, turnId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_GET_TURN_DETAIL, sessionId, turnId)
+  },
+  debug: {
+    simulateSuspend: (durationMs) => ipcRenderer.invoke('debug:simulate-suspend', durationMs)
   }
 }
 

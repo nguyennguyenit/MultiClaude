@@ -29,6 +29,9 @@ export class TerminalScrollMachine {
   isWriting = false
   hiddenViewportIntent: UserScrollIntent | null = null
   pendingUserScrollIntent: UserScrollIntent | null = null
+  /** Persistent user-selected reading position across sequential output batches. */
+  readingViewportIntent: UserScrollIntent | null = null
+  userScrollDirection: 'up' | 'down' | null = null
   followOutputOnNextWrite = false
   pendingWriteSnapshot: PendingWriteSnapshot | null = null
   /** Last known viewport Y for project-switch scroll restore. Updated by syncViewportState. */
@@ -153,6 +156,8 @@ export class TerminalScrollMachine {
     this.isWriting = false
     this.hiddenViewportIntent = null
     this.pendingUserScrollIntent = null
+    this.readingViewportIntent = null
+    this.userScrollDirection = null
     this.followOutputOnNextWrite = false
     this.pendingWriteSnapshot = null
     this.savedViewportY = null

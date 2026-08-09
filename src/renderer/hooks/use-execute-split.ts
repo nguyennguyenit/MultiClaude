@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react'
 import type { PaneSplitDirection, ShellInfo, Terminal, WindowsShell } from '@shared/types'
+import { beginRendererCreate } from '../utils/renderer-create-tracker'
 import { closeLeafAndCollapse, findLeaf, splitLeaf } from '@shared/utils/pane-tree'
 import { usePaneTreeStore } from '../stores/pane-tree-store'
 
@@ -35,7 +36,7 @@ export interface ExecuteSplitDeps {
   terminalLimit: number
   terminalCount: number
   selectedShell: ShellInfo | null
-  windowsShellFallback?: WindowsShell
+  defaultShellFallback?: ShellInfo
   addTerminal: (terminal: Terminal) => void
   notifyLimit: (limit: number) => void
   notifyError: (message: string) => void
@@ -78,7 +79,7 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
     terminalLimit,
     terminalCount,
     selectedShell,
-    windowsShellFallback,
+    defaultShellFallback,
     addTerminal,
     notifyLimit,
     notifyError,
@@ -110,19 +111,23 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       if (!create) return
 
       inFlightRef.current += 1
+      const releaseRendererCreate = beginRendererCreate()
       const createPromise = create({
         cwd: projectPath,
         projectId: projectId ?? undefined,
         shellPath: isUnix ? selectedShell?.path : undefined,
         shell: isWin
           ? toWindowsShell(selectedShell)
-          : windowsShellFallback
+          : defaultShellFallback && defaultShellFallback.kind !== 'unix'
+            ? toWindowsShell(defaultShellFallback)
+            : undefined
       })
       let terminal: Terminal
       try {
         const result = await createWithTimeout(createPromise, CREATE_TIMEOUT_MS)
         if (result === CREATE_TIMEOUT_SENTINEL) {
           inFlightRef.current -= 1
+          releaseRendererCreate()
           notifyError('Terminal creation timed out. Please try again.')
           // If main eventually answers after we gave up, the PTY is alive on
           // the main side — destroy it so we don't leak a phantom pane via
@@ -139,6 +144,7 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
         terminal = result
       } catch (err) {
         inFlightRef.current -= 1
+        releaseRendererCreate()
         console.error('[useExecuteSplit] create terminal failed:', err)
         notifyError('Failed to create terminal. Please try again.')
         return
@@ -174,13 +180,18 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
           // else: both source AND active are gone — let reconcile auto-append.
         }
       }
+
+      // Release AFTER setTree so the global onCreated broadcast handler still
+      // sees us as in-flight if it fires between the IPC return and our
+      // setTree call (the very race this counter exists to defend against).
+      releaseRendererCreate()
     },
     [
       activeTerminalId,
       terminalCount,
       terminalLimit,
       selectedShell,
-      windowsShellFallback,
+      defaultShellFallback,
       projectId,
       projectPath,
       addTerminal,

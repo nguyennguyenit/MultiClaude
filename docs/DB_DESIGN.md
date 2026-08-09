@@ -163,11 +163,12 @@ interface SettingsStoreSchema {
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `themeMode` | `'light' \| 'dark' \| 'system'` | `'system'` | Color mode preference |
-| `colorTheme` | ColorTheme | `'default'` | Color theme selection |
+| `colorTheme` | ColorTheme | `'tokyo-night'` | Color theme selection |
 | `terminalLimit` | TerminalLimit | `{ preset: 9 }` | Max terminals per project |
 | `terminalRenderMode` | `'performance' \| 'balanced' \| 'quality'` | `'balanced'` | WebGL rendering mode |
 | `glassmorphismEnabled` | boolean | `true` | Glass effect toggle |
 | `windowsShell` | WindowsShell | undefined | Default shell (Windows) |
+| `enableContextWindow` | boolean | `true` | Context analyzer enabled (startup-only) |
 
 #### E-07: TerminalLimit
 
@@ -184,20 +185,17 @@ interface SettingsStoreSchema {
 | `{ type: 'powershell' }` | - | PowerShell |
 | `{ type: 'wsl', distro: string }` | distro name | WSL distribution |
 
-### ColorTheme Values
+### ColorTheme Values (Unified VibeTerminal Themes)
 
-| ID | Name |
-|----|------|
-| `default` | Default Blue |
-| `dusk` | Dusk Purple |
-| `lime` | Lime Green |
-| `ocean` | Ocean Teal |
-| `retro` | Retro Orange |
-| `neo` | Neo Pink |
-| `forest` | Forest Green |
-| `neon-cyber` | Neon Cyber |
-| `pro-dark` | Pro Dark |
-| `vibrant` | Vibrant |
+VibeTerminal uses 5 curated themes (each includes UI colors + full ANSI 16-color palette for xterm):
+
+| ID | Name | Background |
+|----|------|------------|
+| `tokyo-night` | Tokyo Night | #1a1b26 |
+| `catppuccin` | Catppuccin Mocha | #1e1e2e |
+| `dracula` | Dracula | #282a36 |
+| `rose-pine` | Rosé Pine | #191724 |
+| `pro-dark` | Pro Dark | #0d1117 |
 
 ## 5. Data Operations
 
@@ -210,6 +208,7 @@ interface SettingsStoreSchema {
 | `addProject(project)` | `Omit<Project, 'id' \| 'createdAt' \| 'updatedAt'>` | `Project` | Create project |
 | `updateProject(id, updates)` | `id, Partial<Project>` | `Project \| null` | Update project |
 | `deleteProject(id)` | `id: string` | `boolean` | Delete project |
+| `reorderProjects(sourceId, targetIndex)` | `sourceId: string, targetIndex: number` | `Project[]` | Persist project tab order by reordering the `projects` array |
 | `getActiveProjectId()` | - | `string \| null` | Get active project |
 | `setActiveProjectId(id)` | `id: string \| null` | void | Set active project |
 | `saveSession(session)` | `AppSession` | void | Save session state |

@@ -41,10 +41,12 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | on | `terminal:title-change` | - | `{ terminalId, title }` | 🔄 |
 | invoke | `terminal:load-pane-tree` | `projectId: string` | `PaneTree \| null` | ✅ |
 | invoke | `terminal:save-pane-tree` | `{ projectId, tree: PaneTree \| null }` | void | ✅ |
+| invoke | `terminal:get-snapshot` | `terminalId: string` | `string \| null` | ✅ |
+| on | `terminal:system-resumed` | - | void | ✅ |
 
-> `terminal:show-context-menu` removed — right-click is now a themed React Portal menu in renderer; no IPC round-trip.
->
-> `savePaneTree` runs recursive shape validation on payload (rejects malformed input without throwing); on-read migration in `loadPaneTree` bumps legacy flat layouts to `schemaVersion: 2`.
+> `terminal:show-context-menu` removed — right-click is now a themed React Portal menu in renderer.
+> `terminal:get-snapshot` returns serialized @xterm/headless state (SerializeAddon) or `null`.
+> `savePaneTree` runs recursive shape validation; `loadPaneTree` applies on-read migration (schemaVersion 2).
 
 ### Project Module
 
@@ -107,6 +109,16 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | invoke | `github:list-issues` | `projectPath, state?` | `{ success, data: GitHubIssue[], error? }` | 🔄 |
 | invoke | `github:list-prs` | `projectPath, state?` | `{ success, data: GitHubPR[], error? }` | 🔄 |
 
+### Context Window Module
+
+| Method | Channel | Parameters | Returns | Status |
+|--------|---------|------------|---------|--------|
+| invoke | `context:get` | `sessionId: string` | `ContextSnapshot \| null` | ✅ |
+| on | `context:snapshot` | - | `{ sessionId, snapshot: ContextSnapshot }` | ✅ |
+
+> `context:get` returns real-time breakdown by 6 categories (claude-md, mentioned-file, tool-output, thinking-text, task-coordination, user-messages).
+> `context:snapshot` broadcast emitted at 300ms debounce, per-session 1h TTL.
+
 ### Notification Module
 
 | Method | Channel | Parameters | Returns | Status |
@@ -155,7 +167,7 @@ MultiClaude is an Electron desktop app. All "API" calls are IPC (Inter-Process C
 | invoke | `clipboard:save-image` | `base64Data: string` | `string \| null` | 🔄 |
 | invoke | `image:open` | `filePath: string` | `boolean` | 🔄 |
 | invoke | `image:delete` | `filePath: string` | `boolean` | 🔄 |
-| invoke | `image:read-base64` | `filePath: string` | `string \| null` | 🔄 |
+| invoke | `media:read-data-url` | `filePath: string` | `string \| null` (data URL) | ✅ |
 | invoke | `file-picker:open` | - | `string[] \| null` | 🔄 |
 
 ## 4. Type Definitions

@@ -25,6 +25,11 @@ interface TrackedFile {
  * Watches Claude Code JSONL transcript files under ~/.claude/projects/.
  * Emits 'taskEvent' when Claude finishes a turn and is waiting for user input.
  *
+ * Immune to PTY redraw / SIGWINCH / resize noise — JSONL transcript is watched
+ * at the file level and only processes newly appended bytes. Terminal resize
+ * does not write anything to the transcript, so this path cannot false-trigger
+ * on redraws (unlike the PTY-output text-pattern path in plain-text-parser.ts).
+ *
  * Workflow:
  *  1. `register(cwd)` → watches ~/.claude/projects/<hash>/ for new .jsonl files
  *  2. On new/changed .jsonl: reads only newly appended bytes (byte-offset tracking)
@@ -162,6 +167,24 @@ export class ClaudeLogWatcher extends EventEmitter {
       const event = this.parser.parseLines(lines, filePath)
       if (event) {
         this.emit('taskEvent', event)
+      }
+      // Additive: emit each parsed JSONL line for context-window analyzer.
+      // Errors isolated so a malformed line can't break the taskEvent path.
+      for (const raw of lines) {
+        const trimmed = raw.trim()
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed) as { sessionId?: string; cwd?: string }
+          if (!parsed || typeof parsed !== 'object') continue
+          this.emit('jsonlLine', {
+            sessionId: parsed.sessionId,
+            cwd: parsed.cwd,
+            line: parsed,
+            filePath
+          })
+        } catch {
+          // skip malformed
+        }
       }
     } catch {
       // File may have been deleted or truncated — reset offset

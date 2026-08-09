@@ -23,6 +23,7 @@ interface ToolbarProps {
   onSelectProject: (id: string | null) => void
   onAddProject: () => void
   onDeleteProject: (id: string) => void
+  onReorderProjects: (sourceId: string, targetIndex: number) => void
 }
 
 function IconGitHub() {
@@ -49,6 +50,11 @@ function ToolbarProjectTab({
   isActive,
   onSelect,
   onDelete,
+  onReorder,
+  draggedProjectId,
+  dropTargetProjectId,
+  setDraggedProjectId,
+  setDropTargetProjectId,
   scrollContainerRef
 }: {
   project: Project
@@ -56,9 +62,16 @@ function ToolbarProjectTab({
   isActive: boolean
   onSelect: (id: string) => void
   onDelete: (id: string) => void
+  onReorder: (sourceId: string, targetIndex: number) => void
+  draggedProjectId: string | null
+  dropTargetProjectId: string | null
+  setDraggedProjectId: (id: string | null) => void
+  setDropTargetProjectId: (id: string | null) => void
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const isDragging = draggedProjectId === project.id
+  const isDropTarget = dropTargetProjectId === project.id && draggedProjectId !== project.id
 
   useEffect(() => {
     if (isActive && ref.current && scrollContainerRef.current) {
@@ -81,8 +94,28 @@ function ToolbarProjectTab({
   return (
     <div
       ref={ref}
-      className={`toolbar-tab${isActive ? ' active' : ''}`}
+      className={`toolbar-tab${isActive ? ' active' : ''}${isDragging ? ' dragging' : ''}${isDropTarget ? ' drop-target' : ''}`}
       data-testid={`project-tab-${project.id}`}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        setDraggedProjectId(project.id)
+      }}
+      onPointerEnter={() => {
+        if (!draggedProjectId || draggedProjectId === project.id) return
+        setDropTargetProjectId(project.id)
+      }}
+      onPointerUp={() => {
+        if (!draggedProjectId) return
+        const sourceId = draggedProjectId
+        setDraggedProjectId(null)
+        setDropTargetProjectId(null)
+        if (sourceId === project.id) return
+        onReorder(sourceId, index)
+      }}
+      onPointerCancel={() => {
+        setDraggedProjectId(null)
+        setDropTargetProjectId(null)
+      }}
     >
       {index < 9 && <span className="toolbar-tab-badge">{index + 1}</span>}
       <button
@@ -96,6 +129,8 @@ function ToolbarProjectTab({
       <button
         type="button"
         className="toolbar-tab-delete"
+        draggable={false}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); onDelete(project.id) }}
         aria-label={`Remove project ${project.name}`}
       >
@@ -119,12 +154,15 @@ export function Toolbar({
   activeProjectId,
   onSelectProject,
   onAddProject,
-  onDeleteProject
+  onDeleteProject,
+  onReorderProjects
 }: ToolbarProps) {
   const [windowState, setWindowState] = useState(DEFAULT_WINDOW_STATE)
   const tabsRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null)
+  const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null)
 
   const checkOverflow = useCallback(() => {
     const el = tabsRef.current
@@ -174,6 +212,20 @@ export function Toolbar({
     }
   }, [])
 
+  useEffect(() => {
+    const clearProjectDragState = () => {
+      setDraggedProjectId(null)
+      setDropTargetProjectId(null)
+    }
+
+    window.addEventListener('pointerup', clearProjectDragState)
+    window.addEventListener('pointercancel', clearProjectDragState)
+    return () => {
+      window.removeEventListener('pointerup', clearProjectDragState)
+      window.removeEventListener('pointercancel', clearProjectDragState)
+    }
+  }, [])
+
   return (
     <div className="toolbar">
       {/* Drag region sits behind interactive elements */}
@@ -204,6 +256,11 @@ export function Toolbar({
               isActive={p.id === activeProjectId}
               onSelect={onSelectProject}
               onDelete={onDeleteProject}
+              onReorder={onReorderProjects}
+              draggedProjectId={draggedProjectId}
+              dropTargetProjectId={dropTargetProjectId}
+              setDraggedProjectId={setDraggedProjectId}
+              setDropTargetProjectId={setDropTargetProjectId}
               scrollContainerRef={tabsRef}
             />
           ))}

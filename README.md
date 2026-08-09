@@ -15,19 +15,20 @@
   </p>
 </div>
 
-**MultiClaude** is a desktop workspace for running Claude Code in parallel. It lets you manage configurable terminal limits (preset or custom), keep project-scoped layouts, work with Git and GitHub without leaving the app, and receive task notifications across macOS, Windows, and Linux.
+**MultiClaude** v3.5.5 is a desktop workspace for running agent CLIs in parallel. It lets you manage configurable terminal limits (preset or custom), keep project-scoped layouts, work with Git and GitHub without leaving the app, receive task notifications across macOS, Windows, and Linux, and inspect source-labeled agent usage where a managed provider session is available.
 
-Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, repo operations, and intelligent terminal management than a raw shell setup.
+Built for developers who want the speed of Claude Code in a local terminal, but with better project switching, session persistence, repo operations, intelligent terminal management, and context intelligence than a raw shell setup.
 
 ## What Makes It Different
 
-- **Parallel Claude Code Workspaces**: Run with configurable terminal limits (2, 4, 9, or custom) in an auto-split grid that scales from focused single-terminal work to broad multi-agent runs.
-- **Project-Scoped Persistence**: Each project keeps its own terminal layout, active sessions, and window state so context survives app restarts and repo switching.
-- **Smart Terminal Rendering**: Three rendering modes (Performance/Balanced/Quality) with GPU controls and Claude-safe mode to optimize for speed or visual quality.
+- **Parallel Agent Workspaces**: Run Claude Code, Codex, and other terminal tools with configurable terminal limits (2, 4, 9, or custom) in a resizable pane tree (tmux/iTerm-style splits).
+- **Project-Scoped Persistence**: Each project keeps its own pane tree layout, active sessions, and window state so context survives app restarts and repo switching.
+- **Exact-Once Terminal Rendering**: Sequenced output plus epoch/watermark snapshots protect refresh, remount, resize, and resume; if the canonical mirror is unavailable, the renderer keeps the bounded live stream active instead of accepting an invalid snapshot.
+- **Provider-Neutral Agent Insights**: The managed-agent boundary supports Claude and Codex projections, while the UI exposes only available usage, tool, compaction, and reasoning capabilities with explicit source, precision, confidence, and unavailable states.
 - **Git + GitHub Inside the App**: Visual git status, staging, branches, stash, history, GitHub auth via `gh`, remote repo creation, plus issue and pull request views.
-- **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks.
-- **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths, clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
-- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal color palettes, and light/dark/system appearance without requiring a backend service.
+- **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks; multi-agent detection included.
+- **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths with thumbnail preview strip (80×60 tiles), clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
+- **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal ANSI palettes, and light/dark/system appearance without requiring a backend service.
 
 ## Ecosystem
 
@@ -85,8 +86,8 @@ npm run build
 |-------|------------|
 | Desktop | Electron 33 |
 | Frontend | React 19 + TypeScript |
-| Terminal | node-pty + xterm.js |
-| Styling | Tailwind CSS 3 |
+| Terminal | node-pty + xterm.js v6 + @xterm/headless v6 |
+| Styling | Tailwind CSS 4 |
 | State | Zustand |
 | Persistence | electron-store |
 | Git | simple-git + gh CLI |
@@ -116,7 +117,7 @@ src/
 
 - Node.js 24+
 - GitHub CLI (`gh`) for GitHub integration
-- Claude Code CLI for running Claude
+- Claude Code CLI for the current in-app Start Claude flow; Codex CLI can also run in terminal panes while its managed renderer workflow remains capability-gated
 - **Windows**: PowerShell (pwsh) is preferred; cmd is available as fallback
 - **Windows WSL**: If using WSL shell, you must install a Linux distribution:
   ```powershell
@@ -132,7 +133,7 @@ src/
 
 1. **Add Project**: Click the + button in the sidebar to add a project folder
 2. **Create Terminal**: Click the + button in the terminal tab bar
-3. **Start Claude**: Click "Start Claude" to invoke Claude Code in the active terminal
+3. **Start Claude**: Click "Start Claude" in the active terminal, or launch another CLI directly from the shell
 4. **Git Integration**: Use the Git panel in sidebar for staging, commits, branches
 
 ### Keyboard Shortcuts
@@ -152,6 +153,7 @@ src/
 | Copy | Right-click → Copy |
 | Paste | Right-click → Paste or Ctrl+V |
 | Paste Image | Ctrl+V (clipboard image > temp file > insert path) |
+| Undo Draft Input | Ctrl+Z while composing (falls through to shell when no draft undo exists) |
 | Insert File Path | Drag-and-drop file |
 
 > **Note:** All shortcuts work regardless of terminal focus. On macOS, Cmd replaces Ctrl (Alt shortcuts unchanged).
@@ -177,6 +179,10 @@ Configure in Settings > Terminals:
 | Performance | No WebGL, best for many terminals |
 | Balanced | WebGL on active terminal only (default) |
 | Quality | WebGL always enabled, best visuals |
+
+Settings > Diagnostics includes a privacy-safe terminal stream report with the
+detected provider, selected engine, backend availability, last sequence and
+committed watermark, and any fallback reason. It never includes terminal text.
 
 ## Documentation
 
@@ -214,7 +220,10 @@ Release flow:
 2. Review the preview output, confirm the version/release type, and approve execution.
 3. Re-run preview with the chosen version/release type when the command asks for them, then approve execution.
 4. The command creates a draft GitHub release, pushes the tag, dispatches `.github/workflows/release.yml` via `workflow_dispatch` for the exact tag, and waits for CI assets to upload into that draft.
-5. Publish the draft manually on GitHub after the assets land.
+5. CI launches each packaged app and exercises an xterm PTY/snapshot. The macOS
+   job additionally requires the configured Developer ID and Apple notarization
+   secrets, then verifies the signature, Gatekeeper assessment, and stapled ticket.
+6. Publish the draft manually on GitHub after the assets land.
 
 Notes:
 

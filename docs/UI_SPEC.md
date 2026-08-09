@@ -16,7 +16,7 @@ MultiClaude is a desktop application with a minimal terminal aesthetic (VibeTerm
 | ID | Screen | Route/State | Component | Description |
 |----|--------|-------------|-----------|-------------|
 | S-01 | Welcome | `activeProjectId = null` | `WelcomeScreen` | No project selected |
-| S-02 | Terminal View | `activeProjectId != null` | `TerminalGrid` | Main terminal workspace |
+| S-02 | Terminal View | `activeProjectId != null` | `TerminalGrid` | Main terminal workspace + context analyzer drawer |
 | S-03 | Git Slide Panel | `activePanel = 'git'` | `GitPanel` | Git operations (slide from right/bottom) |
 | S-04 | GitHub Slide Panel | `activePanel = 'github'` | `GitHubPanel` | GitHub Issues/PRs (slide from right/bottom) |
 | S-05 | Settings Slide Panel | `activePanel = 'settings'` | `SettingsPanel` | App configuration (slide from right/bottom) |
@@ -30,7 +30,7 @@ App
 │   └── ProjectDropdown
 ├── MainContent (flex 1, overflow hidden)
 │   ├── [No Project] → WelcomeScreen
-│   └── [Has Project] → TerminalGrid
+│   └── [Has Project] → TerminalGrid + ContextWindowDrawer
 │       ├── TerminalPane[]
 │       │   ├── TerminalView (xterm.js)
 │       │   └── Bottom Tab Bar (terminal title)
@@ -93,6 +93,7 @@ App
 | Action | Handler | Result |
 |--------|---------|--------|
 | Click "Add Project" | `handleAddProject` | Opens folder picker, creates project |
+| Drag project tab | `handleReorderProjects` | Persists project order; badges and Alt+1-9 follow new order |
 
 **Source**: `src/renderer/components/welcome-screen.tsx`
 
@@ -233,6 +234,7 @@ Each theme includes:
 | `Ctrl+W` | Close active terminal | Global |
 | `Ctrl+G` | Toggle GitHub panel | Global |
 | `Ctrl+V` | Paste or paste image as file path | Terminal focused |
+| `Ctrl+Z` | Undo unsubmitted draft input; falls through to shell when no draft undo exists | Terminal focused |
 | `Enter` | Save terminal title | During title edit |
 | `Escape` | Cancel terminal title edit | During title edit |
 

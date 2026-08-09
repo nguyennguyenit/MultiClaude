@@ -37,7 +37,13 @@ describe('shortcut-utils', () => {
       metaKey: true,
       key: 'n',
       code: 'KeyN'
-    }))).toEqual({ type: 'new-terminal' })
+    }))).toEqual({ type: 'new-terminal', layout: 'vertical' })
+
+    expect(getGlobalShortcut(createEvent({
+      metaKey: true,
+      key: 't',
+      code: 'KeyT'
+    }))).toEqual({ type: 'new-terminal', layout: 'balanced' })
 
     expect(getGlobalShortcut(createEvent({
       ctrlKey: true,

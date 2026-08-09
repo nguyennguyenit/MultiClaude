@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 import { PANE_RATIO_MAX, PANE_RATIO_MIN, type SplitOrientation } from '@shared/types'
+import { setPaneDragging } from '../utils/pane-drag-state'
 
 export interface UsePaneResizeParams {
   orientation: SplitOrientation
@@ -108,18 +109,45 @@ export function usePaneResize({
         // Some environments (jsdom, exotic pointer types) may throw; ignore.
       }
 
+      // Suspend fit() in every pane until the drag ends. Rapid xterm reflow
+      // at narrow widths leaves orphan wrapped rows in scrollback.
+      setPaneDragging(true)
+
+      // rAF-coalesce ratio updates so React/Zustand state churn (and the
+      // ResizeObserver → fit() → SIGWINCH chain it triggers in every pane) is
+      // capped at the display refresh rate. Without this, fast pointermove
+      // bursts can fire 100+ Hz on high-poll-rate trackpads, drowning the
+      // renderer in re-flow work and making the drag feel like it lags behind
+      // the cursor.
+      let pendingRatio: number | null = null
+      let scheduledFrame: number | null = null
+      const flushPending = (): void => {
+        scheduledFrame = null
+        if (pendingRatio === null) return
+        const r = pendingRatio
+        pendingRatio = null
+        onRatioChangeRef.current(r)
+      }
       const onMove = (moveEvent: Event): void => {
         const pe = moveEvent as PointerEvent
         const rect = container.getBoundingClientRect()
         const size = orientationRef.current === 'row' ? rect.width : rect.height
         if (!size) return
         const delta = (axis === 'clientX' ? pe.clientX : pe.clientY) - startCoord
-        onRatioChangeRef.current(
-          clampRatioWithMinPx(initial + delta / size, size, minPanePxRef.current)
-        )
+        pendingRatio = clampRatioWithMinPx(initial + delta / size, size, minPanePxRef.current)
+        if (scheduledFrame === null) {
+          scheduledFrame = requestAnimationFrame(flushPending)
+        }
       }
 
       const cleanup = (): void => {
+        if (scheduledFrame !== null) {
+          cancelAnimationFrame(scheduledFrame)
+          scheduledFrame = null
+        }
+        // Commit any pending ratio so the final rest position isn't lost
+        // when pointerup races ahead of the queued rAF.
+        flushPending()
         target.removeEventListener('pointermove', onMove)
         target.removeEventListener('pointerup', onEnd)
         target.removeEventListener('pointercancel', onEnd)
@@ -128,6 +156,7 @@ export function usePaneResize({
         } catch {
           // ignore
         }
+        setPaneDragging(false)
         cleanupRef.current = null
       }
 

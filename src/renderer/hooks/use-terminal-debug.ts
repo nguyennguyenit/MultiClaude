@@ -21,6 +21,7 @@ interface TerminalDebugSnapshot {
   isAtBottom: boolean
   hiddenViewportIntent: UserScrollIntent | null
   pendingUserScrollIntent: UserScrollIntent | null
+  readingViewportIntent: UserScrollIntent | null
   domScrollTop: number | null
   domScrollHeight: number | null
   domClientHeight: number | null
@@ -54,7 +55,10 @@ export function useTerminalDebug(params: UseTerminalDebugParams): UseTerminalDeb
         const terminal = terminalRef.current
         if (!terminal) return null
         const buffer = terminal.buffer.active
-        const viewport = terminal.element?.querySelector('.xterm-viewport') as HTMLElement | null
+        const viewport = (
+          terminal.element?.querySelector('.xterm-scrollable-element')
+          ?? terminal.element?.querySelector('.xterm-viewport')
+        ) as HTMLElement | null
         return {
           baseY: buffer.baseY,
           viewportY: buffer.viewportY,
@@ -64,6 +68,7 @@ export function useTerminalDebug(params: UseTerminalDebugParams): UseTerminalDeb
           isAtBottom: scrollMachineRef.current.isAtBottom,
           hiddenViewportIntent: scrollMachineRef.current.hiddenViewportIntent,
           pendingUserScrollIntent: scrollMachineRef.current.pendingUserScrollIntent,
+          readingViewportIntent: scrollMachineRef.current.readingViewportIntent,
           domScrollTop: viewport?.scrollTop ?? null,
           domScrollHeight: viewport?.scrollHeight ?? null,
           domClientHeight: viewport?.clientHeight ?? null

@@ -152,6 +152,7 @@ describe('GitManager', () => {
         'RM lib/new.ts',
         'lib/old.ts',
         '?? notes.md',
+        '?? wiki/',
         ''
       ].join('\0'))
       mockGit.diff
@@ -165,7 +166,8 @@ describe('GitManager', () => {
         { path: 'src/app.ts', status: 'modified', staged: false, additions: 2, deletions: 1 },
         { path: 'lib/new.ts', status: 'renamed', staged: true, oldPath: 'lib/old.ts', additions: 3, deletions: 0 },
         { path: 'lib/new.ts', status: 'modified', staged: false, additions: 1, deletions: 0 },
-        { path: 'notes.md', status: 'untracked', staged: false }
+        { path: 'notes.md', status: 'untracked', staged: false },
+        { path: 'wiki', status: 'untracked', staged: false }
       ])
     })
   })

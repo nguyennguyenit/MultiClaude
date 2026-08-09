@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMediaToken, classifyMediaFile } from './media-classifier'
+import { classifyMediaFile } from './media-classifier'
 
 describe('classifyMediaFile', () => {
   it('classifies common image extensions', () => {
@@ -26,14 +26,5 @@ describe('classifyMediaFile', () => {
     expect(classifyMediaFile('file.txt')).toBeNull()
     expect(classifyMediaFile('noext')).toBeNull()
     expect(classifyMediaFile('')).toBeNull()
-  })
-})
-
-describe('buildMediaToken', () => {
-  it('builds image token', () => {
-    expect(buildMediaToken('image', 3)).toBe('[Image 3]')
-  })
-  it('builds video token', () => {
-    expect(buildMediaToken('video', 1)).toBe('[Video 1]')
   })
 })

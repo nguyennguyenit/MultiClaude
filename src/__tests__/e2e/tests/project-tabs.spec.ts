@@ -105,6 +105,83 @@ test.describe('Project Tabs', () => {
     // The UI selection mechanism is verified by other tests (keyboard shortcuts, overflow menu)
   })
 
+  test('project tabs can be reordered by drag and badges follow new order', async ({ window }) => {
+    const projects = mockProjects.slice(0, 3)
+    await injectMockProject(window, projects)
+    await window.waitForTimeout(300)
+
+    const createdProjects = await window.evaluate(async (projectData) => {
+      interface Project {
+        id: string
+        name: string
+        path: string
+      }
+      interface AppStoreState {
+        projects: Project[]
+        setProjects: (projects: Project[]) => void
+        setActiveProject: (id: string | null) => void
+      }
+      interface StoreApi {
+        getState: () => AppStoreState
+      }
+      const browserWindow = globalThis as unknown as {
+        __APP_STORE__?: StoreApi
+        electron: {
+          project: {
+            create: (project: { name: string; path: string }) => Promise<Project>
+          }
+        }
+      }
+      const store = browserWindow.__APP_STORE__
+      const created: Project[] = []
+      for (const project of projectData) {
+        created.push(await browserWindow.electron.project.create({
+          name: project.name,
+          path: project.path
+        }))
+      }
+      store?.getState().setProjects(created)
+      store?.getState().setActiveProject(created[0]?.id ?? null)
+      return created
+    }, projects)
+
+    await window.waitForSelector(`[data-testid="project-tab-${createdProjects[0].id}"]`, { timeout: 3000 })
+
+    await window
+      .locator(`[data-testid="project-tab-${createdProjects[0].id}"]`)
+      .dragTo(window.locator(`[data-testid="project-tab-${createdProjects[2].id}"]`))
+    await window.waitForTimeout(300)
+
+    const orderedIds = await window.evaluate(() => {
+      const store = (window as unknown as {
+        __APP_STORE__?: { getState: () => { projects: { id: string }[] } }
+      }).__APP_STORE__
+      return store?.getState().projects.map((project) => project.id) ?? []
+    })
+
+    expect(orderedIds).toEqual([createdProjects[1].id, createdProjects[2].id, createdProjects[0].id])
+    await expect(window.locator(`[data-testid="project-tab-${createdProjects[1].id}"] .toolbar-tab-badge`)).toHaveText('1')
+    await expect(window.locator(`[data-testid="project-tab-${createdProjects[2].id}"] .toolbar-tab-badge`)).toHaveText('2')
+    await expect(window.locator(`[data-testid="project-tab-${createdProjects[0].id}"] .toolbar-tab-badge`)).toHaveText('3')
+
+    await window.evaluate(() => {
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', {
+        key: '1',
+        code: 'Digit1',
+        altKey: true,
+        bubbles: true
+      }))
+    })
+    await window.waitForTimeout(200)
+    const activeProjectId = await window.evaluate(() => {
+      const store = (window as unknown as {
+        __APP_STORE__?: { getState: () => { activeProjectId: string | null } }
+      }).__APP_STORE__
+      return store?.getState().activeProjectId ?? null
+    })
+    expect(activeProjectId).toBe(createdProjects[1].id)
+  })
+
   test('project tabs container has proper layout', async ({ window }) => {
     // Inject projects
     await injectMockProject(window, mockProjects.slice(0, 3))

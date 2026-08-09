@@ -8,8 +8,11 @@
 | **Frontend** | React | ^19.x | UI components |
 | **Language** | TypeScript | ^5.x | Type safety |
 | **Build** | Vite | ^6.x | Fast bundling |
-| **Terminal** | node-pty | ^1.x | PTY process spawning |
-| **Terminal UI** | xterm.js | ^5.x | Terminal rendering |
+| **Terminal** | node-pty | ^1.x | PTY spawning with suspend/resume |
+| **Terminal UI** | xterm.js | ^6.x | Terminal rendering (v6) |
+| **Terminal Mirror** | @xterm/headless | ^6.x | Canonical visual state |
+| **Terminal Snapshot** | @xterm/addon-serialize | ^0.14.0+ | Serialize/restore state |
+| **Terminal WebGL** | @xterm/addon-webgl | ^0.18.0+ | GPU acceleration (xterm v6) |
 | **Styling** | Tailwind CSS | ^4.x | Utility-first CSS |
 | **Testing** | Vitest | ^4.x | Unit/integration testing |
 
@@ -57,19 +60,21 @@ multiclaude/
 ## Key Dependencies
 
 ### Main Process
-- `@lydell/node-pty`: PTY process spawning with suspend/resume support
-- `electron-store`: Persistence with validation firewall for settings
+- `@lydell/node-pty`: PTY spawning with suspend/resume (powerMonitor)
+- `@xterm/headless`: Canonical visual state mirror (per-PTY)
+- `electron-store`: Persistence with validation firewall (projects, settings, layouts)
 - `simple-git`: Git operations wrapper
-- `electron-updater`: Auto-update system
+- `electron-updater`: Auto-update system (GitHub Releases)
 
 ### Renderer Process (React 19)
-- `@xterm/xterm`: Terminal rendering with keyboard enhancements
+- `@xterm/xterm`: Terminal rendering v6 with keyboard enhancements
 - `@xterm/addon-fit`: Auto-resize with debounce
+- `@xterm/addon-serialize`: Snapshot serialization for warp-style refresh
 - `@xterm/addon-webgl`: GPU rendering (3 modes: Performance/Balanced/Quality)
-- `zustand`: State management (app + settings stores)
-- `tailwindcss`: Styling with CSS variable overrides
-- `@fontsource/*`: 10 font families with Nerd Font symbol fallbacks
-- **Terminal Features**: OSC parsing (escape sequences), output buffering with intelligent trim, smart scroll with scroll-to-bottom button
+- `zustand`: State management (app + settings + pane-tree + context stores)
+- `tailwindcss`: Styling with CSS variable overrides for 7 themes
+- `@fontsource/*`: Font families with Nerd Font symbol fallbacks
+- **Terminal Features**: OSC escape sequence parsing, output buffering with intelligent trim, smart scroll with scroll-to-bottom, rAF-coalesced divider drag, system resume recovery
 
 ### Shared
 - `@shared/types`: Terminal, Project, Settings, NotificationEvent, TerminalLimit, WindowsShell
@@ -105,37 +110,38 @@ multiclaude/
 ## Architecture Decisions
 
 1. **node-pty in Main Process**: Native module requires main process execution
-2. **IPC for Terminal Data**: Bidirectional streaming for PTY I/O and settings
-3. **electron-store Validation**: Firewall in main process validates all settings before persistence
-4. **Dual Settings Architecture**: Pending (preview) + Saved (disk) with deep equality checks
-5. **Terminal Limits**: Configurable per-app, per-project layout respects limit
-6. **System Suspend/Resume**: Pause PTY operations during system sleep to prevent SIGTRAP
-7. **Three Rendering Modes**: Performance (no GPU), Balanced (active only), Quality (always on)
-8. **Claude-safe Mode**: Experimental toggle to keep Claude terminals on canvas renderer
-9. **GitHub CLI for Auth**: Use `gh` CLI for OAuth (proven, maintained)
-10. **Terminal Limit Presets**: 2, 4, 9, or custom (1-99) to manage resource load
-11. **Windows Shell Selection**: cmd, PowerShell (pwsh), or WSL distros with validation
-12. **Smart Terminal Selection**: Remember lastActiveTerminalByProjectId for smooth workflow
+2. **@xterm/headless Mirror**: Canonical visual state before IPC broadcast (no render-order races)
+3. **IPC for Terminal Data**: Bidirectional streaming for PTY I/O, context, and settings
+4. **electron-store Validation**: Firewall in main process validates all settings before persistence
+5. **Dual Settings Architecture**: Pending (preview) + Saved (disk) with deep equality checks
+6. **Pane Tree Layout**: Binary split tree (tmux/iTerm-style) with schemaVersion 2 + migration
+7. **Terminal Limits**: Configurable per-app (2, 4, 9, custom 1-99), enforced at spawn
+8. **System Suspend/Resume**: powerMonitor pause + 2s debounce resync (prevents SIGTRAP)
+9. **rAF-Coalesced Divider**: Drag updates batched (eliminates 100Hz trackpad bursts)
+10. **Three Rendering Modes**: Performance (no GPU), Balanced (active only), Quality (always)
+11. **Claude-safe Mode**: Toggle to keep Claude terminals on canvas renderer (experimental)
+12. **GitHub CLI for Auth**: Use `gh` CLI for OAuth (proven, maintained)
+13. **Windows Shell Selection**: cmd, PowerShell, WSL distros with validation + UNC conversion
+14. **Context Window Analyzer**: 300ms debounce snapshot, 6-category breakdown, 1h TTL
 
-## Terminal Grid Layout
+## Terminal Pane Tree Layout
 
-The terminal grid auto-splits based on terminal count and respects configured limit:
+The terminal pane tree uses binary split layout (tmux/iTerm-style):
 
-| Terminals | Layout | Notes |
-|-----------|--------|-------|
-| 1 | 1x1 | Single full-size terminal |
-| 2 | 1x2 | Side-by-side |
-| 3-4 | 2x2 | 2x2 grid |
-| 5-6 | 2x3 | 2 rows x 3 cols |
-| 7-9 | 3x3 | 3x3 grid |
-| 10-12 | 3x4 | 3 rows x 4 cols |
+- **Single Terminal**: 1x1 full-size pane
+- **Two Terminals**: Split vertically (left/right) or horizontally (top/bottom) via context menu or hotkey
+- **N Terminals**: Recursive binary splits with resizable handles and configurable split direction
+- **Split Actions**: Ctrl+Shift+→/←/↓/↑ hotkeys; right-click context menu; split-button dropdown
+- **Resize**: Pointer capture on handle; rAF-coalesced updates; handles for accessibility (role="separator")
 
 **Terminal Limit**: Configured in Settings (Terminals tab), presets or custom 1-99
 - Limits max concurrent terminals per project
 - Prevents UI lag and resource exhaustion
-- Enforced at spawn time
+- Enforced at spawn time (rejects create if limit reached)
 
 **Components:**
-- `TerminalGrid`: Calculates dimensions respecting terminal limit; equal-split layout
-- `TerminalPane`: Pane wrapper with click-to-focus, resize observer, bottom tab bar
-- `TerminalView`: xterm.js + WebGL addon with theme colors and keyboard handling
+- `TerminalGrid`: Mounts all project grids, hides inactive ones
+- `PaneTreeNode`: Recursive flex renderer (split or pane)
+- `TerminalPane`: Pane wrapper with title, tabs, action buttons, attachment strip
+- `TerminalView`: xterm.js v6 + headless mirror + WebGL addon
+- `ResizeHandle`: rAF-coalesced divider with keyboard a11y

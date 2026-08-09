@@ -9,11 +9,14 @@ export interface ShortcutEventLike {
 
 import type { PaneSplitDirection } from '@shared/types'
 
+export type NewTerminalLayout = 'balanced' | 'vertical'
+
 export type GlobalShortcut =
   | { type: 'switch-project'; index: number }
-  | { type: 'new-terminal' }
+  | { type: 'new-terminal'; layout: NewTerminalLayout }
   | { type: 'close-terminal' }
   | { type: 'toggle-github-panel' }
+  | { type: 'toggle-context-window' }
   | { type: 'split-pane'; direction: PaneSplitDirection }
 
 const ARROW_TO_DIRECTION: Record<string, PaneSplitDirection> = {
@@ -46,15 +49,18 @@ export function getGlobalShortcut(event: ShortcutEventLike): GlobalShortcut | nu
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey) {
     const direction = ARROW_TO_DIRECTION[event.code ?? event.key]
     if (direction) return { type: 'split-pane', direction }
+    if (event.code === 'KeyC' || event.key.toLowerCase() === 'c') {
+      return { type: 'toggle-context-window' }
+    }
   }
 
   if ((event.ctrlKey || event.metaKey) && !event.altKey) {
     const normalizedKey = event.key.toLowerCase()
     switch (event.code) {
       case 'KeyN':
-        return { type: 'new-terminal' }
+        return { type: 'new-terminal', layout: 'vertical' }
       case 'KeyT':
-        return { type: 'new-terminal' }
+        return { type: 'new-terminal', layout: 'balanced' }
       case 'KeyW':
         return { type: 'close-terminal' }
       case 'KeyG':
@@ -63,8 +69,9 @@ export function getGlobalShortcut(event: ShortcutEventLike): GlobalShortcut | nu
 
     switch (normalizedKey) {
       case 'n':
+        return { type: 'new-terminal', layout: 'vertical' }
       case 't':
-        return { type: 'new-terminal' }
+        return { type: 'new-terminal', layout: 'balanced' }
       case 'w':
         return { type: 'close-terminal' }
       case 'g':

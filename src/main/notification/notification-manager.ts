@@ -2,7 +2,7 @@ import path from 'path'
 import { BrowserWindow, Notification } from 'electron'
 import { EventEmitter } from 'events'
 import Store from 'electron-store'
-import type { NotificationSettings, NotificationEventType, NotificationEvent, AgentType } from '@shared/types'
+import type { NotificationSettings, NotificationEventType, AgentType } from '@shared/types'
 import type { TaskEvent } from '@shared/types/notification-events'
 import { DEFAULT_NOTIFICATION_SETTINGS, IPC_CHANNELS, TASK_TRACKER_CLEANUP_INTERVAL_MS, AGENT_DISPLAY_NAMES } from '@shared/constants'
 import { SecureStorage } from './secure-storage'
@@ -19,18 +19,28 @@ import { pendingPermissionStore } from './pending-permission-store'
 import { ClaudeLogWatcher } from './claude-log-watcher'
 import { MobileControlManager, type MobileControlStatus } from './mobile-control-manager'
 import { generateTaskEventId } from './parser-utils'
-import type { RemoteControlStatus } from '@shared/types'
+import type { RemoteControlStatus, TerminalTaskStatus } from '@shared/types'
 import type { TerminalManager } from '../terminal/terminal-manager'
 import type { ProjectStore } from '../project/project-store'
+import { migrateNotificationSettings } from './notification-settings-migrations'
+
+function paneStatusForEvent(type: NotificationEventType): TerminalTaskStatus | null {
+  switch (type) {
+    case 'taskComplete': return 'done'
+    case 'taskFailed': return 'failed'
+    case 'reviewNeeded': return 'review'
+    default: return null
+  }
+}
 
 // Keys to persist (exclude computed fields like telegramConfigured/discordConfigured)
 type PersistableKey = 'onTaskComplete' | 'onTaskFailed' | 'onReviewNeeded' |
-  'soundEnabled' | 'soundPreset' | 'telegramEnabled' | 'discordEnabled' |
+  'telegramEnabled' | 'discordEnabled' |
   'outputMode' | 'notifyOnlyBackground' | 'includeTaskSummary' | 'remoteControlEnabled'
 
 const PERSISTABLE_KEYS: PersistableKey[] = [
   'onTaskComplete', 'onTaskFailed', 'onReviewNeeded',
-  'soundEnabled', 'soundPreset', 'telegramEnabled', 'discordEnabled',
+  'telegramEnabled', 'discordEnabled',
   'outputMode', 'notifyOnlyBackground', 'includeTaskSummary', 'remoteControlEnabled'
 ]
 
@@ -83,7 +93,13 @@ export class NotificationManager extends EventEmitter {
     this.logWatcher = new ClaudeLogWatcher()
 
     // Load persisted settings, merge with defaults and computed fields
-    const persisted = this.store.get('notificationSettings', {})
+    const rawPersisted = this.store.get('notificationSettings', {})
+    const persisted = migrateNotificationSettings(
+      rawPersisted as Record<string, unknown>
+    ) as Partial<NotificationSettings>
+    if (JSON.stringify(rawPersisted) !== JSON.stringify(persisted)) {
+      this.store.set('notificationSettings', persisted)
+    }
     this.settings = {
       ...DEFAULT_NOTIFICATION_SETTINGS,
       ...persisted,
@@ -103,11 +119,27 @@ export class NotificationManager extends EventEmitter {
       this.handleTaskEvent(event)
     })
 
+    // Eagerly bind sessionId ↔ terminal on the first JSONL line seen for a
+    // session. Without this the drawer stays empty until the first taskEvent
+    // fires (which never happens for text-only conversations, or when the user
+    // picks a session via `claude --resume` TUI picker with no uuid on argv).
+    // Accept lines without cwd (e.g. permission-mode / file-history-snapshot)
+    // — attachClaudeSession has a last-resort fallback that picks the most
+    // recently active Claude terminal when no cwd match is available.
+    this.logWatcher.on('jsonlLine', (ev: { sessionId?: string; cwd?: string }) => {
+      if (!ev.sessionId) return
+      // Always call attachClaudeSession — it idempotently returns the current
+      // holder when binding is healthy, but rebinds when the holder is stale
+      // (e.g. claude exited there and was resumed in a different terminal).
+      this.terminalManagerRef?.attachClaudeSession(ev.sessionId, ev.cwd ?? '')
+    })
+
     // Listen for task completion events from JSONL transcript watcher
     // JSONL events use Claude session ID as terminalId — translate to real terminal ID
     this.logWatcher.on('taskEvent', (event: TaskEvent) => {
-      // Hard gate: when mobile control is ON, hook path owns taskComplete/reviewNeeded
-      if (this.mobileControlEnabled && (event.type === 'taskComplete' || event.type === 'reviewNeeded')) return
+      // Always bind session_id to a terminal (even when mobile control owns notification
+      // emission) — otherwise the hook path cannot resolve session_id → terminalId and
+      // drops Stop/PermissionRequest events with `stop-no-terminal`.
       const match = this.terminalManagerRef?.findByClaudeSessionId(event.terminalId)
         ?? (event.cwd
           ? this.terminalManagerRef?.attachClaudeSession(event.terminalId, event.cwd)
@@ -116,6 +148,9 @@ export class NotificationManager extends EventEmitter {
         event.terminalId = match.id
       }
       event.agentType = 'claude'
+      // Hard gate: when mobile control is ON, hook path owns taskComplete/reviewNeeded
+      // emission to avoid duplicate notifications. Attachment above must still run.
+      if (this.mobileControlEnabled && (event.type === 'taskComplete' || event.type === 'reviewNeeded')) return
       this.handleTaskEvent(event)
     })
 
@@ -129,6 +164,12 @@ export class NotificationManager extends EventEmitter {
   setWindow(window: BrowserWindow): void {
     this.window = window
     this.focusDetector.setWindow(window)
+  }
+
+  /** Expose the JSONL watcher so other subsystems (context-window analyzer)
+   * can subscribe to `jsonlLine` events without reopening the same files. */
+  getLogWatcher(): ClaudeLogWatcher {
+    return this.logWatcher
   }
 
   /** Store references to managers for remote control command routing */
@@ -249,8 +290,12 @@ export class NotificationManager extends EventEmitter {
   /** Start or stop remote control based on settings */
   syncRemoteControl(): void {
     const settings = this.getSettings()
+    const enabled = settings.remoteControlEnabled
+      && settings.telegramEnabled
+      && settings.telegramConfigured
+    this.terminalManagerRef?.setNotificationTailEnabled(enabled)
 
-    if (settings.remoteControlEnabled && settings.telegramEnabled && settings.telegramConfigured) {
+    if (enabled) {
       this.startRemoteControl()
     } else {
       this.stopRemoteControl()
@@ -318,6 +363,16 @@ export class NotificationManager extends EventEmitter {
     this.poller = null
     this.commandRouter = null
     this.emitRemoteControlStatus('disconnected')
+  }
+
+  private emitPaneStatus(event: TaskEvent): void {
+    const status = paneStatusForEvent(event.type)
+    if (!status) return
+    if (!this.window || this.window.isDestroyed()) return
+    this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_PANE_STATUS_CHANGED, {
+      terminalId: event.terminalId,
+      status
+    })
   }
 
   private emitRemoteControlStatus(status: RemoteControlStatus): void {
@@ -479,6 +534,11 @@ export class NotificationManager extends EventEmitter {
   }
 
   private handleTaskEvent(event: TaskEvent): void {
+    // Pane-status broadcast runs independently of notification gating
+    // so the context-window switcher reflects lifecycle regardless of
+    // user's notification preferences.
+    this.emitPaneStatus(event)
+
     const settings = this.getSettings()
 
     // Check if event type is enabled
@@ -512,19 +572,6 @@ export class NotificationManager extends EventEmitter {
     const message = settings.includeTaskSummary
       ? `${event.projectName}: ${event.taskName}`
       : event.taskName
-
-    // Legacy NotificationEvent for renderer (sound playback)
-    const legacyEvent: NotificationEvent = {
-      type: event.type,
-      terminalId: event.terminalId,
-      message,
-      timestamp: event.timestamp
-    }
-
-    // Send to renderer for sound playback
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send(IPC_CHANNELS.NOTIFICATION_EVENT, legacyEvent)
-    }
 
     // Show native notification
     this.showNativeNotification(event.type, message)

@@ -42,6 +42,7 @@ plans/
 .claude/commands/
 .claude/settings.local.json
 .claude/session-state/
+.claude/scheduled_tasks.lock
 
 # Local feature planning folder
 new-feature/
@@ -68,3 +69,7 @@ IPA-WORKFLOW.md
 .superpowers/
 docs/superpowers/
 .claude/worktrees/
+
+# Local debug artifacts (video frame analysis, scratch captures)
+analysis/
+temp_frames/

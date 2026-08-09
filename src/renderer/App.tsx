@@ -10,20 +10,27 @@ import { SettingsModal } from './components/settings'
 import { SlidePanel } from './components/slide-panel'
 import { GitHubPanelContent } from './components/github-view/github-view'
 import { GitInitDialog, GitHubConnectDialog } from './components/github-setup'
-import { useAppStore, useImageStore, useNotificationStore, usePendingMediaStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener } from './stores'
+import { useAppStore, useNotificationStore, useSettingsStore, useToastStore, setupNotificationListener, setupUpdateListener, useContextWindowStore } from './stores'
+import { ContextWindowDrawer } from './components/context-window'
 import { useContextMenuStore } from './stores/context-menu-store'
-import { writeToDisplay } from './stores/display-writer-registry'
+import { insertFilePathsIntoTerminal } from './utils/insert-file-paths'
 import { useKeyboardShortcuts, TERMINAL_DISPOSE_DELAY } from './hooks'
 import { getCurrentTerminalTheme } from './hooks/use-terminal-font-theme'
 import { useExecuteSplit } from './hooks/use-execute-split'
 import { usePaneTreeStore, flushPaneTreeSaves } from './stores/pane-tree-store'
-import { closeLeafAndCollapse } from '@shared/utils/pane-tree'
+import { closeLeafAndCollapse, findLeaf } from '@shared/utils/pane-tree'
+import { beginRendererCreate, isRendererCreateInFlight } from './utils/renderer-create-tracker'
+import { buildEvenVerticalLayout, migrateFlatToTree } from '@shared/utils/pane-tree-migration'
+import type { NewTerminalLayout } from './utils/shortcut-utils'
 import { registerSplitHandlers } from './utils/terminal-context-actions'
-import { joinPathsForTerminal, shellInfoToWindowsShell } from './utils'
-import { buildMediaToken, classifyMediaFile } from './utils/media-classifier'
-import { formatPathForTerminal } from './utils/terminal-path-utils'
+import { shellInfoToWindowsShell } from './utils'
+import { resolveAppTheme } from './utils/app-theme'
 import { reconcileSavedDefaultShell } from './utils/default-shell-selection'
-import { attachTerminalOutputDispatcher } from './utils/terminal-output-dispatcher'
+import {
+  attachTerminalOutputDispatcher,
+  disposeTerminalOutputState,
+} from './utils/terminal-output-dispatcher'
+import { attachTerminalLifecycleDispatcher } from './utils/terminal-lifecycle-dispatcher'
 import { THEMES, APP_FONTS, getTerminalFontFamilyById } from '@shared/constants'
 import type { ShellInfo, Project } from '@shared/types'
 
@@ -37,6 +44,12 @@ function App() {
   const updateTerminalTitle = useAppStore((state) => state.updateTerminalTitle)
   const updateTerminalClaudeMode = useAppStore((state) => state.updateTerminalClaudeMode)
   const updateTerminalAgentType = useAppStore((state) => state.updateTerminalAgentType)
+  const updateTerminalClaudeSessionId = useAppStore((state) => state.updateTerminalClaudeSessionId)
+  const setAgentReadiness = useAppStore((state) => state.setAgentReadiness)
+  const setAgentBinding = useAppStore((state) => state.setAgentBinding)
+  const removeAgentBinding = useAppStore((state) => state.removeAgentBinding)
+  const setInsightSnapshot = useContextWindowStore((state) => state.setInsightSnapshot)
+  const removeInsightSnapshot = useContextWindowStore((state) => state.removeInsightSnapshot)
   const addProject = useAppStore((state) => state.addProject)
   const removeProject = useAppStore((state) => state.removeProject)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -45,6 +58,9 @@ function App() {
   const switchToProject = useAppStore((state) => state.switchToProject)
   const savedDefaultShell = useSettingsStore((state) => state.savedSettings.defaultShell)
   const setDefaultShell = useSettingsStore((state) => state.setDefaultShell)
+  const contextWindowEnabled = useSettingsStore(
+    (state) => state.savedSettings.enableContextWindow !== false
+  )
 
   // Active slide panel: 'github' | 'settings' | null
   const [activePanel, setActivePanel] = useState<string | null>(null)
@@ -119,6 +135,16 @@ function App() {
     removeProject(id)
   }, [terminals, removeProject, removeTerminal])
 
+  const handleReorderProjects = useCallback(async (sourceId: string, targetIndex: number) => {
+    try {
+      const reorderedProjects = await window.electron.project.reorder(sourceId, targetIndex)
+      setProjects(reorderedProjects)
+    } catch (err) {
+      console.error('[handleReorderProjects] Failed to reorder projects:', err)
+      useToastStore.getState().addToast('Failed to reorder projects. Please try again.', 'error')
+    }
+  }, [setProjects])
+
   // Handler: Switch to project with folder validation
   const handleSelectProject = useCallback(async (id: string | null) => {
     if (!id) {
@@ -147,8 +173,15 @@ function App() {
     prevProjectIdRef.current = id
   }, [projects, switchToProject, removeProject, setActiveProject, setActiveTerminal])
 
-  // Handler: Add new terminal in active project
-  const handleAddTerminal = useCallback(async (shell?: ShellInfo) => {
+  // Handler: Add new terminal in active project.
+  // `options.layout` rebuilds the pane tree after insertion so all panes stay
+  // evenly sized: 'balanced' → auto-grid (Ctrl+T / + button), 'vertical' →
+  // equal column stack (Ctrl+N). Rebuilding replaces reconcile's default
+  // right-split append, which otherwise keeps shrinking the rightmost pane.
+  const handleAddTerminal = useCallback(async (
+    shell?: ShellInfo,
+    options?: { layout?: NewTerminalLayout }
+  ) => {
     // Get fresh state to avoid stale closure
     const { terminals } = useAppStore.getState()
     const currentProjectTerminals = activeProjectId
@@ -173,17 +206,38 @@ function App() {
     const isUnixShell = effectiveShell?.kind === 'unix'
     const isWindowsShell = effectiveShell && !isUnixShell
 
+    const releaseRendererCreate = beginRendererCreate()
     try {
       const terminal = await window.electron.terminal.create({
         cwd: activeProject?.path,
         projectId: activeProject?.id,
         shellPath: isUnixShell ? effectiveShell.path : undefined,
-        shell: isWindowsShell ? shellInfoToWindowsShell(effectiveShell) : savedSettings.windowsShell,
+        shell: isWindowsShell
+          ? shellInfoToWindowsShell(effectiveShell)
+          : savedSettings.defaultShell && savedSettings.defaultShell.kind !== 'unix'
+            ? shellInfoToWindowsShell(savedSettings.defaultShell)
+            : undefined,
       })
       addTerminal(terminal)
+
+      // Rebuild the pane tree so every pane gets an even share.
+      if (activeProjectId) {
+        const layout: NewTerminalLayout = options?.layout ?? 'balanced'
+        const freshTerminals = useAppStore.getState().terminals
+        const leafIds = freshTerminals
+          .filter(t => t.projectId === activeProjectId)
+          .map(t => t.id)
+        const isPortrait = window.innerHeight > window.innerWidth
+        const nextTree = layout === 'vertical'
+          ? buildEvenVerticalLayout(leafIds)
+          : migrateFlatToTree(leafIds, isPortrait)
+        usePaneTreeStore.getState().setTree(activeProjectId, nextTree)
+      }
     } catch (err) {
       console.error('[handleAddTerminal] Failed to create terminal:', err)
       useToastStore.getState().addToast('Failed to create terminal. Please try again.', 'error')
+    } finally {
+      releaseRendererCreate()
     }
   }, [activeProject, activeProjectId, addTerminal, selectedShell])
 
@@ -208,27 +262,8 @@ function App() {
     }
   }, [activeTerminalId, removeTerminal, activeProjectId])
 
-  // Handler: Insert file path into terminal
   const handleInsertFilePath = useCallback((terminalId: string, paths: string[]) => {
-    const isClaudeMode = useAppStore.getState().terminals.find(t => t.id === terminalId)?.isClaudeMode
-    for (const filePath of paths) {
-      const mediaType = classifyMediaFile(filePath)
-      if (mediaType && !isClaudeMode) {
-        const entry = useImageStore.getState().addImage(terminalId, filePath, mediaType)
-        const token = buildMediaToken(mediaType, entry.index)
-        usePendingMediaStore.getState().push(terminalId, {
-          path: filePath,
-          displayLength: token.length
-        })
-        writeToDisplay(terminalId, token + ' ')
-      } else {
-        // Claude mode or non-media file: write path directly to PTY
-        if (mediaType) {
-          useImageStore.getState().addImage(terminalId, filePath, mediaType)
-        }
-        window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
-      }
-    }
+    insertFilePathsIntoTerminal(terminalId, paths)
   }, [])
 
   // Handler: Toggle YOLO mode (shows first-time warning dialog per project)
@@ -321,7 +356,7 @@ function App() {
     terminalLimit: effectiveLimit,
     terminalCount: visibleCount,
     selectedShell,
-    windowsShellFallback: pendingSettings.windowsShell,
+    defaultShellFallback: pendingSettings.defaultShell,
     addTerminal,
     notifyLimit: (limit) => {
       useToastStore.getState().addToast(
@@ -348,10 +383,11 @@ function App() {
 
   // Setup keyboard shortcuts
   useKeyboardShortcuts({
-    onAddTerminal: handleAddTerminal,
+    onAddTerminal: (opts) => void handleAddTerminal(undefined, opts),
     onCloseTerminal: handleCloseTerminal,
     onSelectProject: handleSelectProject,
     onToggleGitHubPanel: () => togglePanel('github'),
+    onToggleContextWindow: () => useContextWindowStore.getState().toggle(),
     // Always pass the handler — executeSplit's internal gate emits notifyLimit
     // uniformly, matching the xterm-focused hotkey path. Previously this was
     // gated by `canSplit`, which made the global hotkey silently no-op at limit.
@@ -425,21 +461,33 @@ function App() {
     const root = document.documentElement
     // Find theme by id, fall back to first (handles legacy theme IDs gracefully)
     const theme = THEMES.find(t => t.id === pendingSettings.colorTheme) ?? THEMES[0]
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
 
-    // Set new CSS variable system
-    root.style.setProperty('--bg-primary', theme.background)
-    root.style.setProperty('--bg-secondary', theme.tabBg)
-    root.style.setProperty('--bg-tertiary', theme.border)
-    root.style.setProperty('--text-primary', theme.foreground)
-    root.style.setProperty('--text-secondary', `${theme.foreground}99`)
-    root.style.setProperty('--text-muted', `${theme.foreground}66`)
-    root.style.setProperty('--accent', theme.accent)
-    root.style.setProperty('--border', theme.border)
-    root.style.setProperty('--hover', theme.hover)
-    root.style.setProperty('--tab-bg', theme.tabBg)
-    root.style.setProperty('--tab-active-bg', theme.tabActiveBg)
-    root.style.setProperty('--cursor', theme.cursor)
-    root.style.setProperty('--selection-bg', theme.selectionBg)
+    const applyTheme = () => {
+      const palette = resolveAppTheme(theme, pendingSettings.themeMode, media.matches)
+
+      root.dataset.themeMode = palette.mode
+      root.style.colorScheme = palette.mode
+      root.style.setProperty('--bg-primary', palette.background)
+      root.style.setProperty('--bg-secondary', palette.tabBg)
+      root.style.setProperty('--bg-tertiary', palette.border)
+      root.style.setProperty('--text-primary', palette.foreground)
+      root.style.setProperty('--text-secondary', palette.textSecondary)
+      root.style.setProperty('--text-muted', palette.textMuted)
+      root.style.setProperty('--accent', palette.accent)
+      root.style.setProperty('--on-accent', palette.onAccent)
+      root.style.setProperty('--border', palette.border)
+      root.style.setProperty('--hover', palette.hover)
+      root.style.setProperty('--tab-bg', palette.tabBg)
+      root.style.setProperty('--tab-active-bg', palette.tabActiveBg)
+      root.style.setProperty('--cursor', palette.cursor)
+      root.style.setProperty('--selection-bg', palette.selectionBg)
+    }
+
+    applyTheme()
+    if (pendingSettings.themeMode === 'system') {
+      media.addEventListener('change', applyTheme)
+    }
 
     // Set terminal font from settings (xterm uses this via use-terminal hook)
     const termFontId = pendingSettings.terminalFontFamily ?? 'jetbrains-mono'
@@ -453,20 +501,36 @@ function App() {
       root.style.setProperty('--modern-font', appFont.family)
       document.body.style.fontFamily = appFont.family
     }
-  }, [pendingSettings.colorTheme, pendingSettings.terminalFontFamily, pendingSettings.modernFontFamily])
+
+    return () => {
+      media.removeEventListener('change', applyTheme)
+    }
+  }, [
+    pendingSettings.colorTheme,
+    pendingSettings.themeMode,
+    pendingSettings.terminalFontFamily,
+    pendingSettings.modernFontFamily,
+  ])
 
   // Sync --terminal-bg CSS var whenever the xterm theme could change.
   // globals.css uses var(--terminal-bg) on .xterm + .xterm-viewport so every
   // terminal (including ones mounted before the change) picks it up without
   // needing a per-instance inline-style sync.
   useEffect(() => {
-    const bg = getCurrentTerminalTheme().background
-    if (bg) document.documentElement.style.setProperty('--terminal-bg', bg)
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const syncBackground = () => {
+      const bg = getCurrentTerminalTheme().background
+      if (bg) document.documentElement.style.setProperty('--terminal-bg', bg)
+    }
+
+    syncBackground()
+    if (pendingSettings.themeMode === 'system') {
+      media.addEventListener('change', syncBackground)
+    }
+    return () => media.removeEventListener('change', syncBackground)
   }, [
     pendingSettings.colorTheme,
     pendingSettings.themeMode,
-    pendingSettings.uiStyle,
-    pendingSettings.terminalStyleOptions?.colorPreset,
   ])
 
   // Load saved projects on mount and validate folder existence
@@ -514,10 +578,15 @@ function App() {
   // Handle terminal exit
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onExit(({ terminalId }) => {
+      disposeTerminalOutputState(terminalId)
       useAppStore.getState().removeTerminal(terminalId)
     })
     return unsubscribe
   }, [])
+
+  // Phase 4: attach lifecycle dispatcher BEFORE output dispatcher so any buffering
+  // that happens during snapshot replay doesn't race with resume fanout.
+  useEffect(() => attachTerminalLifecycleDispatcher(window.electron.terminal.onSystemResumed), [])
 
   useEffect(() => attachTerminalOutputDispatcher(window.electron.terminal.onOutput), [])
 
@@ -544,10 +613,86 @@ function App() {
     return unsubscribe
   }, [updateTerminalAgentType])
 
-  // Handle terminals created externally (e.g. via Telegram /new command)
+  useEffect(() => {
+    let active = true
+    void window.electron.agent.getReadiness().then((readiness) => {
+      if (active) setAgentReadiness(readiness)
+    })
+    const unsubscribeChanged = window.electron.agent.onBindingChanged((binding) => {
+      setAgentBinding(binding)
+      void window.electron.agentInsights.getSnapshot(binding.terminalId).then((snapshot) => {
+        if (snapshot) setInsightSnapshot(snapshot)
+      })
+    })
+    const unsubscribeRemoved = window.electron.agent.onBindingRemoved((binding) => {
+      removeAgentBinding(binding.terminalId)
+      removeInsightSnapshot(binding.session)
+    })
+    const unsubscribeInsights = window.electron.agentInsights.onUpdated(setInsightSnapshot)
+    return () => {
+      active = false
+      unsubscribeChanged()
+      unsubscribeRemoved()
+      unsubscribeInsights()
+    }
+  }, [removeAgentBinding, removeInsightSnapshot, setAgentBinding, setAgentReadiness, setInsightSnapshot])
+
+  useEffect(() => {
+    for (const terminal of terminals) {
+      void window.electron.agent.getBinding(terminal.id).then((binding) => {
+        if (binding) {
+          setAgentBinding(binding)
+          void window.electron.agentInsights.getSnapshot(terminal.id).then((snapshot) => {
+            if (snapshot) setInsightSnapshot(snapshot)
+          })
+        }
+      })
+    }
+  }, [setAgentBinding, setInsightSnapshot, terminals])
+
+  // Propagate Claude sessionId changes from main → renderer store (drives
+  // context-window drawer binding).
+  useEffect(() => {
+    const unsubscribe = window.electron.terminal.onClaudeSessionIdChanged(({ terminalId, sessionId }) => {
+      updateTerminalClaudeSessionId(terminalId, sessionId)
+    })
+    return unsubscribe
+  }, [updateTerminalClaudeSessionId])
+
+  // Handle terminals created externally (e.g. via Telegram /new command).
+  // Renderer-initiated splits (executeSplit / handleAddTerminal) ALSO trigger
+  // this broadcast — and the broadcast often races AHEAD of the renderer's
+  // own setTree call (the IPC reply and the broadcast are two separate channels
+  // arriving in any order). Two guards layer here:
+  //   1. isRendererCreateInFlight — set BEFORE the renderer's create IPC call,
+  //      cleared AFTER its setTree. If true, skip rebuild entirely; the
+  //      renderer-side handler owns geometry. This catches the broadcast-first
+  //      race that the findLeaf check below cannot, since the tree hasn't been
+  //      written yet at that moment.
+  //   2. findLeaf — defensive: if the terminal already lives in the tree (we
+  //      raced and lost), don't stomp it.
+  // Without (1), splitting right 4× produces "3 columns + 1 row underneath"
+  // because the broadcast reshapes to a 2×2 grid before executeSplit's split
+  // direction lands.
   useEffect(() => {
     const unsubscribe = window.electron.terminal.onCreated((terminal) => {
       addTerminal(terminal)
+
+      const projectId = terminal.projectId
+      if (!projectId) return
+
+      if (isRendererCreateInFlight()) return
+
+      const existingTree = usePaneTreeStore.getState().getTree(projectId)
+      if (existingTree && findLeaf(existingTree, terminal.id)) return
+
+      const freshTerminals = useAppStore.getState().terminals
+      const leafIds = freshTerminals
+        .filter(t => t.projectId === projectId)
+        .map(t => t.id)
+      const isPortrait = window.innerHeight > window.innerWidth
+      const nextTree = migrateFlatToTree(leafIds, isPortrait)
+      usePaneTreeStore.getState().setTree(projectId, nextTree)
     })
     return unsubscribe
   }, [addTerminal])
@@ -569,6 +714,10 @@ function App() {
 
       {/* Themed context menu (portal) */}
       <ThemedContextMenu />
+
+      {/* Per-turn context window breakdown drawer (Cmd/Ctrl+Shift+C).
+          Feature-flagged via AppSettings.enableContextWindow (startup-only). */}
+      {contextWindowEnabled && <ContextWindowDrawer />}
 
       {/* Settings modal */}
       <SettingsModal
@@ -632,6 +781,7 @@ function App() {
         onSelectProject={handleSelectProject}
         onAddProject={handleAddProject}
         onDeleteProject={handleDeleteProject}
+        onReorderProjects={handleReorderProjects}
       />
       <UpdateBanner />
 

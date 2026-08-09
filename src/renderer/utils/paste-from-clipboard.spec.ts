@@ -1,12 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { pasteFromClipboard } from './paste-from-clipboard'
-import { useAppStore, useImageStore, usePendingMediaStore } from '../stores'
-
-vi.mock('../stores/display-writer-registry', () => ({
-  writeToDisplay: vi.fn()
-}))
-import { writeToDisplay } from '../stores/display-writer-registry'
+import { useAppStore, useImageStore } from '../stores'
 
 function makeClipboardItem(type: string, blob: Blob): ClipboardItem {
   return {
@@ -23,7 +18,6 @@ describe('pasteFromClipboard', () => {
   beforeEach(() => {
     useAppStore.setState({ terminals: [] })
     useImageStore.setState({ images: {} })
-    usePendingMediaStore.getState().clear('t1')
 
     vi.stubGlobal('electron', {
       terminal: { write: vi.fn() },
@@ -55,6 +49,21 @@ describe('pasteFromClipboard', () => {
     expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', 'hello')
   })
 
+  it('reports pasted text payload for draft undo grouping', async () => {
+    const onTextWrite = vi.fn()
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([]),
+        readText: vi.fn().mockResolvedValue('hello')
+      }
+    })
+
+    await pasteFromClipboard('t1', undefined, undefined, onTextWrite)
+    await flushMicrotasks()
+
+    expect(onTextWrite).toHaveBeenCalledWith('hello')
+  })
+
   it('saves image via electron.clipboard.saveImage when clipboard has image', async () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
     vi.stubGlobal('navigator', {
@@ -70,7 +79,7 @@ describe('pasteFromClipboard', () => {
     expect(window.electron.clipboard.saveImage).toHaveBeenCalledWith('AAAA')
   })
 
-  it('writes path directly in Claude mode', async () => {
+  it('sends the clipboard image path to Claude via bracketed paste (Claude mode)', async () => {
     useAppStore.setState({
       terminals: [{ id: 't1', pid: 1, projectId: 'p1', createdAt: new Date(), isClaudeMode: true } as never]
     })
@@ -85,13 +94,12 @@ describe('pasteFromClipboard', () => {
     await pasteFromClipboard('t1')
     await flushMicrotasks()
 
-    expect(window.electron.terminal.write).toHaveBeenCalled()
-    const args = (window.electron.terminal.write as ReturnType<typeof vi.fn>).mock.calls[0]
-    expect(args[0]).toBe('t1')
-    expect(String(args[1])).toMatch(/pasted\.png/)
+    // Single plain write carrying the saved image path so Claude shows
+    // it inline in the prompt like typed text.
+    expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', '/tmp/pasted.png ')
   })
 
-  it('writes media token in non-Claude mode', async () => {
+  it('writes the clipboard image path straight to PTY in non-Claude mode', async () => {
     useAppStore.setState({
       terminals: [{ id: 't1', pid: 1, projectId: 'p1', createdAt: new Date(), isClaudeMode: false } as never]
     })
@@ -106,10 +114,28 @@ describe('pasteFromClipboard', () => {
     await pasteFromClipboard('t1')
     await flushMicrotasks()
 
-    expect(writeToDisplay).toHaveBeenCalled()
-    const call = (writeToDisplay as ReturnType<typeof vi.fn>).mock.calls[0]
-    expect(call[0]).toBe('t1')
-    expect(String(call[1])).toMatch(/\[Image 1\]/)
+    expect(window.electron.terminal.write).toHaveBeenCalledWith('t1', '/tmp/pasted.png ')
+    // Attachment strip still mirrors the image so the user can preview/remove.
+    expect(useImageStore.getState().getImages('t1')).toHaveLength(1)
+  })
+
+  it('reports pasted image path payload for draft undo grouping', async () => {
+    const onTextWrite = vi.fn()
+    useAppStore.setState({
+      terminals: [{ id: 't1', pid: 1, projectId: 'p1', createdAt: new Date(), isClaudeMode: false } as never]
+    })
+    const blob = new Blob([new Uint8Array([1])], { type: 'image/png' })
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        read: vi.fn().mockResolvedValue([makeClipboardItem('image/png', blob)]),
+        readText: vi.fn()
+      }
+    })
+
+    await pasteFromClipboard('t1', undefined, undefined, onTextWrite)
+    await flushMicrotasks()
+
+    expect(onTextWrite).toHaveBeenCalledWith('/tmp/pasted.png ')
   })
 
   it('falls back to readText when clipboard.read rejects', async () => {

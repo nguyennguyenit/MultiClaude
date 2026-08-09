@@ -7,8 +7,17 @@ import { GitHeadWatcher } from './git/git-head-watcher'
 import { ProjectStore } from './project/project-store'
 import { SettingsStore } from './settings'
 import { NotificationManager } from './notification'
+import { ContextWindowAnalyzer } from './context'
+import { registerContextHandlers } from './ipc/context-handlers'
 import { registerIpcHandlers } from './ipc/handlers'
 import { registerGitHubHandlers } from './ipc/github-handlers'
+import { registerAgentHandlers } from './ipc/agent-handlers'
+import { AgentRegistry } from './agent/agent-registry'
+import { ClaudeAdapter } from './agent/providers/claude-adapter'
+import { CodexAdapter } from './agent/providers/codex-adapter'
+import { CodexAppServerClient } from './agent/providers/codex-app-server-client'
+import { AgentInsightsService } from './agent-insights/agent-insights-service'
+import { registerAgentInsightsHandlers } from './ipc/agent-insights-handlers'
 import { initAutoUpdater } from './updater'
 
 // ES module compatibility for __dirname
@@ -23,6 +32,11 @@ let gitHeadWatcher: GitHeadWatcher | null = null
 let projectStore: ProjectStore | null = null
 let settingsStore: SettingsStore | null = null
 let notificationManager: NotificationManager | null = null
+let contextAnalyzer: ContextWindowAnalyzer | null = null
+let agentRegistry: AgentRegistry | null = null
+let unregisterAgentHandlers: (() => void) | null = null
+let agentInsightsService: AgentInsightsService | null = null
+let unregisterAgentInsightsHandlers: (() => void) | null = null
 
 // Vite dev server URL (injected by vite-plugin-electron)
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
@@ -48,8 +62,50 @@ function createWindow() {
   gitHeadWatcher = new GitHeadWatcher()
   projectStore = new ProjectStore()
   settingsStore = new SettingsStore()
+  terminalManager.setSettings(settingsStore.getSettings())
   notificationManager = new NotificationManager()
   notificationManager.setWindow(mainWindow)
+  agentRegistry = new AgentRegistry([
+    new ClaudeAdapter({
+      runtime: terminalManager,
+      source: notificationManager.getLogWatcher(),
+    }),
+    new CodexAdapter(new CodexAppServerClient()),
+  ])
+  unregisterAgentHandlers?.()
+  unregisterAgentHandlers = registerAgentHandlers(
+    agentRegistry,
+    (terminalId, webContentsId) => {
+      if (mainWindow?.webContents.id !== webContentsId) return undefined
+      const terminal = terminalManager?.get(terminalId)
+      return terminal ? { cwd: terminal.cwd, projectId: terminal.projectId } : undefined
+    }
+  )
+  agentInsightsService = new AgentInsightsService(agentRegistry, {
+    advancedEnabled: Boolean(settingsStore.getSettings().enableContextWindowAdvanced),
+  })
+  unregisterAgentInsightsHandlers?.()
+  unregisterAgentInsightsHandlers = registerAgentInsightsHandlers(agentInsightsService, agentRegistry)
+  terminalManager.on('exit', ({ terminalId }: { terminalId: string }) => {
+    void agentRegistry?.detach(terminalId, { dispose: true }).catch(error => {
+      console.warn('[agent-registry] Failed to detach exited terminal:', (error as Error).message)
+    })
+  })
+
+  // Context window analyzer (piggybacks on existing JSONL watcher).
+  // Gated by AppSettings.enableContextWindow (startup-only; restart to toggle).
+  const contextSettings = settingsStore.getSettings()
+  if (contextSettings.enableContextWindow !== false) {
+    contextAnalyzer = new ContextWindowAnalyzer(
+      notificationManager.getLogWatcher(),
+      undefined,
+      { advancedEnabled: Boolean(contextSettings.enableContextWindowAdvanced) }
+    )
+    contextAnalyzer.on('error', (err) => {
+      console.warn('[context-analyzer]', err)
+    })
+    registerContextHandlers(contextAnalyzer)
+  }
 
   // Kick off shell detection in the background (C3: stored as promise, no await needed)
   terminalManager.initializeShells()
@@ -61,7 +117,8 @@ function createWindow() {
     gitHeadWatcher,
     projectStore,
     settingsStore,
-    notificationManager
+    notificationManager,
+    agentRegistry
   })
 
   // Register GitHub-specific handlers
@@ -71,6 +128,9 @@ function createWindow() {
   initAutoUpdater(mainWindow)
 
   // Load the app
+  mainWindow.webContents.once('did-finish-load', () => {
+    settingsStore?.markMigrationHealthy()
+  })
   if (VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL)
     mainWindow.webContents.openDevTools()
@@ -91,6 +151,14 @@ function createWindow() {
   })
 
   mainWindow.on('closed', () => {
+    unregisterAgentInsightsHandlers?.()
+    unregisterAgentInsightsHandlers = null
+    agentInsightsService?.destroy()
+    agentInsightsService = null
+    unregisterAgentHandlers?.()
+    unregisterAgentHandlers = null
+    void agentRegistry?.dispose()
+    agentRegistry = null
     mainWindow = null
   })
 }
@@ -142,9 +210,21 @@ app.on('window-all-closed', async () => {
   }
 
   gitHeadWatcher?.destroy()
+  contextAnalyzer?.destroy()
   notificationManager?.destroy()
+  unregisterAgentInsightsHandlers?.()
+  unregisterAgentInsightsHandlers = null
+  agentInsightsService?.destroy()
+  agentInsightsService = null
+  unregisterAgentHandlers?.()
+  unregisterAgentHandlers = null
+  await agentRegistry?.dispose()
+  agentRegistry = null
 
-  if (process.platform !== 'darwin') {
+  // Production macOS apps stay resident after their final window closes.
+  // Isolated Electron E2E instances must exit so the next test can launch
+  // without inheriting a live background process.
+  if (process.platform !== 'darwin' || process.argv.includes('--e2e')) {
     app.quit()
   }
 })
@@ -153,9 +233,20 @@ app.on('window-all-closed', async () => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error)
   // Don't show dialog for PTY-related errors during suspend/resume
-  // These are expected when system wakes and FDs become invalid
-  if (error.message?.includes('pty') || error.message?.includes('EIO')) {
-    console.warn('[main] PTY error ignored (likely from suspend/resume):', error.message)
+  // These are expected when system wakes and FDs become invalid.
+  // "write EOF" / "write after end" fire async from node-pty stream when an
+  // IPC input/resize lands between pty.kill() and the onExit event — the
+  // terminal is gone but the error escapes try/catch because the underlying
+  // socket.write is async.
+  const msg = error.message ?? ''
+  if (
+    msg.includes('pty') ||
+    msg.includes('EIO') ||
+    msg.includes('write EOF') ||
+    msg.includes('write after end') ||
+    msg.includes('EPIPE')
+  ) {
+    console.warn('[main] PTY error ignored (closed stream or suspend/resume):', msg)
     return
   }
   dialog.showErrorBox('Error', error.message)

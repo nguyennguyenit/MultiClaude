@@ -40,3 +40,59 @@ describe('useImageStore - media type support', () => {
     expect(useImageStore.getState().getImages('t2')).toHaveLength(1)
   })
 })
+
+describe('useImageStore - removeImage', () => {
+  beforeEach(() => {
+    useImageStore.setState({ images: {} })
+  })
+
+  it('returns null when terminal has no entries', () => {
+    const removed = useImageStore.getState().removeImage('t1', '/foo.png')
+    expect(removed).toBeNull()
+  })
+
+  it('returns null when filePath not found', () => {
+    useImageStore.getState().addImage('t1', '/foo.png', 'image')
+    const removed = useImageStore.getState().removeImage('t1', '/missing.png')
+    expect(removed).toBeNull()
+    expect(useImageStore.getState().getImages('t1')).toHaveLength(1)
+  })
+
+  it('removes first matching entry and returns it', () => {
+    const added = useImageStore.getState().addImage('t1', '/foo.png', 'image')
+    const removed = useImageStore.getState().removeImage('t1', '/foo.png')
+    expect(removed).not.toBeNull()
+    expect(removed!.filePath).toBe('/foo.png')
+    expect(removed!.index).toBe(added.index)
+    expect(useImageStore.getState().getImages('t1')).toHaveLength(0)
+  })
+
+  it('with duplicates removes only first occurrence', () => {
+    const first = useImageStore.getState().addImage('t1', '/foo.png', 'image')
+    const second = useImageStore.getState().addImage('t1', '/foo.png', 'image')
+    const removed = useImageStore.getState().removeImage('t1', '/foo.png')
+    expect(removed!.timestamp).toBe(first.timestamp)
+    expect(removed!.index).toBe(first.index)
+    const remaining = useImageStore.getState().getImages('t1')
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].index).toBe(second.index)
+  })
+
+  it('preserves indices of remaining entries (no re-index)', () => {
+    useImageStore.getState().addImage('t1', '/a.png', 'image')
+    useImageStore.getState().addImage('t1', '/b.png', 'image')
+    useImageStore.getState().addImage('t1', '/c.png', 'image')
+    useImageStore.getState().removeImage('t1', '/a.png')
+    const remaining = useImageStore.getState().getImages('t1')
+    expect(remaining.map((e) => e.index)).toEqual([2, 3])
+    expect(remaining.map((e) => e.filePath)).toEqual(['/b.png', '/c.png'])
+  })
+
+  it('is isolated per terminalId', () => {
+    useImageStore.getState().addImage('t1', '/foo.png', 'image')
+    useImageStore.getState().addImage('t2', '/foo.png', 'image')
+    useImageStore.getState().removeImage('t1', '/foo.png')
+    expect(useImageStore.getState().getImages('t1')).toHaveLength(0)
+    expect(useImageStore.getState().getImages('t2')).toHaveLength(1)
+  })
+})

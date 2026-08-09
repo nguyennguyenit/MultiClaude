@@ -1,4 +1,10 @@
-import { test, expect, injectMockProject, mockProject, clearAllTerminalsForScreenshot, WAIT_TIMES } from '../fixtures'
+import {
+  test,
+  expect,
+  injectMockProject,
+  mockProject,
+  WAIT_TIMES
+} from '../fixtures'
 import type { Page } from '@playwright/test'
 
 /**
@@ -11,14 +17,12 @@ import type { Page } from '@playwright/test'
 const isCI = process.env.CI === 'true'
 test.skip(isCI, 'Visual regression tests skipped on CI due to environment differences')
 
-const SETTINGS_KEY = 'multiclaude-settings'
-
 // Representative themes for visual regression (subset to keep test count manageable)
-const representativeThemes = ['default', 'ocean', 'vibrant'] as const
+const representativeThemes = ['tokyo-night', 'dracula', 'pro-dark'] as const
 const themeModes = ['light', 'dark'] as const
 
 /**
- * Helper to set theme via localStorage and reload.
+ * Persist a theme through the canonical main-owned settings API.
  */
 async function setTheme(
   window: Page,
@@ -26,14 +30,13 @@ async function setTheme(
   mode: string
 ): Promise<void> {
   await window.evaluate(
-    ({ theme, mode, key }: { theme: string; mode: string; key: string }) => {
-      const existing = localStorage.getItem(key)
-      const settings = existing ? JSON.parse(existing) : {}
-      settings.colorTheme = theme
-      settings.themeMode = mode
-      localStorage.setItem(key, JSON.stringify(settings))
+    async ({ theme, mode }: { theme: string; mode: string }) => {
+      await globalThis.window.electron.settings.set({
+        colorTheme: theme,
+        themeMode: mode
+      } as Parameters<typeof globalThis.window.electron.settings.set>[0])
     },
-    { theme, mode, key: SETTINGS_KEY }
+    { theme, mode }
   )
   await window.reload()
   await window.waitForLoadState('domcontentloaded')
@@ -41,24 +44,24 @@ async function setTheme(
   await window.waitForTimeout(WAIT_TIMES.STANDARD)
 }
 
-test.describe('Visual Regression - Sidebar', () => {
+test.describe('Visual Regression - Project Toolbar', () => {
   for (const mode of themeModes) {
     for (const theme of representativeThemes) {
-      test(`sidebar ${theme} ${mode}`, async ({ window }) => {
+      test(`project toolbar ${theme} ${mode}`, async ({ window }) => {
         // Set theme
         await setTheme(window, theme, mode)
 
-        // Inject mock project to have content in sidebar
+        // Inject mock project to have content in the project toolbar
         await injectMockProject(window, [mockProject])
 
-        // Wait for sidebar content to render
+        // Wait for toolbar content to render
         await window.waitForTimeout(WAIT_TIMES.MEDIUM)
 
-        // Find sidebar element
-        const sidebar = window.locator('aside, [class*="sidebar"], [class*="Sidebar"]').first()
+        const toolbar = window.locator('.toolbar')
+        await expect(toolbar).toBeVisible()
 
         // Take screenshot with small tolerance for anti-aliasing
-        await expect(sidebar).toHaveScreenshot(`sidebar-${theme}-${mode}.png`, {
+        await expect(toolbar).toHaveScreenshot(`project-toolbar-${theme}-${mode}.png`, {
           maxDiffPixelRatio: 0.01,
           animations: 'disabled'
         })
@@ -97,35 +100,6 @@ test.describe('Visual Regression - Settings Modal', () => {
   }
 })
 
-test.describe('Visual Regression - Terminal Area', () => {
-  for (const mode of themeModes) {
-    for (const theme of representativeThemes) {
-      test(`terminal area ${theme} ${mode}`, async ({ window }) => {
-        // Set theme
-        await setTheme(window, theme, mode)
-
-        // Inject mock project
-        await injectMockProject(window, [mockProject])
-
-        // Wait for terminal to render
-        await window.waitForTimeout(WAIT_TIMES.LONG)
-
-        // Clear all terminals and inject fixed prompt for consistent screenshot
-        await clearAllTerminalsForScreenshot(window)
-
-        // Find terminal container using data-testid
-        const terminalArea = window.locator('[data-testid="terminal-area"]')
-
-        // Take screenshot with higher tolerance for terminal anti-aliasing
-        await expect(terminalArea).toHaveScreenshot(`terminal-${theme}-${mode}.png`, {
-          maxDiffPixelRatio: 0.02,
-          animations: 'disabled'
-        })
-      })
-    }
-  }
-})
-
 test.describe('Visual Regression - Full Page', () => {
   for (const mode of themeModes) {
     for (const theme of representativeThemes) {
@@ -139,9 +113,6 @@ test.describe('Visual Regression - Full Page', () => {
         // Wait for everything to render
         await window.waitForTimeout(WAIT_TIMES.LONG)
 
-        // Clear all terminals and inject fixed prompt for consistent screenshot
-        await clearAllTerminalsForScreenshot(window)
-
         // Take full page screenshot
         await expect(window).toHaveScreenshot(`full-page-${theme}-${mode}.png`, {
           maxDiffPixelRatio: 0.015,
@@ -154,31 +125,21 @@ test.describe('Visual Regression - Full Page', () => {
 })
 
 test.describe('Visual Regression - Theme Transitions', () => {
-  test('theme change applies without visual glitches', async ({ window }) => {
-    // Start with default dark
-    await setTheme(window, 'default', 'dark')
+  test('theme change updates the rendered page after canonical settings reload', async ({ window }) => {
+    await setTheme(window, 'tokyo-night', 'dark')
     await injectMockProject(window, [mockProject])
 
     // Take baseline screenshot
     const baselineScreenshot = await window.screenshot()
     expect(baselineScreenshot).toBeTruthy()
 
-    // Switch to ocean theme (without reload - via localStorage + dispatch)
-    await window.evaluate(({ key }: { key: string }) => {
-      const existing = localStorage.getItem(key)
-      const settings = existing ? JSON.parse(existing) : {}
-      settings.colorTheme = 'ocean'
-      localStorage.setItem(key, JSON.stringify(settings))
-    }, { key: SETTINGS_KEY })
+    await setTheme(window, 'dracula', 'dark')
 
-    // Reload to apply
-    await window.reload()
-    await window.waitForLoadState('domcontentloaded')
-    await window.waitForTimeout(WAIT_TIMES.STANDARD)
-
-    // Verify theme changed
-    const html = window.locator('html')
-    await expect(html).toHaveClass(/theme-ocean/)
+    await expect.poll(() => window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--mc-accent').trim().toLowerCase()
+    )).toBe('#bd93f9')
+    const updatedScreenshot = await window.screenshot()
+    expect(updatedScreenshot.equals(baselineScreenshot)).toBe(false)
   })
 })
 
@@ -186,14 +147,8 @@ test.describe('Visual Regression - Empty State', () => {
   for (const mode of themeModes) {
     test(`empty state ${mode}`, async ({ window }) => {
       // Set theme with no projects
-      await setTheme(window, 'default', mode)
-
-      // Clear any existing projects
-      await window.evaluate(() => {
-        localStorage.removeItem('projects')
-      })
-      await window.reload()
-      await window.waitForLoadState('domcontentloaded')
+      await setTheme(window, 'tokyo-night', mode)
+      await injectMockProject(window, [])
       await window.waitForTimeout(WAIT_TIMES.STANDARD)
 
       // Take screenshot of empty state

@@ -2,12 +2,14 @@ interface ToggleSwitchProps {
   checked: boolean
   onChange: (value: boolean) => void
   disabled?: boolean
+  ariaLabel?: string
 }
 
 export function ToggleSwitch({
   checked,
   onChange,
-  disabled = false
+  disabled = false,
+  ariaLabel,
 }: ToggleSwitchProps) {
   return (
     <button
@@ -15,6 +17,7 @@ export function ToggleSwitch({
       onClick={() => !disabled && onChange(!checked)}
       disabled={disabled}
       aria-checked={checked}
+      aria-label={ariaLabel}
       role="switch"
       style={{ backgroundColor: checked ? 'var(--mc-accent)' : 'var(--mc-bg-tertiary)' }}
       className={`

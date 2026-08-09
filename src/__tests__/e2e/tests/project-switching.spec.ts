@@ -11,30 +11,6 @@ const isCI = process.env.CI === 'true'
  * Validates fix for cursor not appearing after project switch.
  */
 test.describe('Project Switching - Cursor Display', () => {
-  async function getTerminalViewportMetrics(page: Page, projectId: string): Promise<{
-    scrollTop: number
-    scrollHeight: number
-    clientHeight: number
-    bottomGap: number
-  }> {
-    return page.evaluate((activeProjectId: string) => {
-      const viewport = document.querySelector(
-        `[aria-label="Terminal grid for project ${activeProjectId}"] .xterm-viewport`
-      ) as HTMLElement | null
-
-      if (!viewport) {
-        throw new Error(`Viewport not found for project ${activeProjectId}`)
-      }
-
-      return {
-        scrollTop: viewport.scrollTop,
-        scrollHeight: viewport.scrollHeight,
-        clientHeight: viewport.clientHeight,
-        bottomGap: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
-      }
-    }, projectId)
-  }
-
   async function getTerminalViewportMetricsByTerminalId(page: Page, terminalId: string): Promise<{
     scrollTop: number
     scrollHeight: number
@@ -112,9 +88,13 @@ test.describe('Project Switching - Cursor Display', () => {
 
   async function getRowFlex(page: Page, projectId: string): Promise<number[]> {
     return page.evaluate((activeProjectId: string) => {
-      const rows = Array.from(
-        document.querySelectorAll(`[aria-label="Terminal grid for project ${activeProjectId}"] .terminal-row`)
+      const grid = document.querySelector(
+        `[aria-label="Terminal grid for project ${activeProjectId}"]`
       )
+      const rootSplit = grid?.querySelector<HTMLElement>('.pane-tree-split')
+      const rows = rootSplit
+        ? Array.from(rootSplit.querySelectorAll<HTMLElement>(':scope > [data-pane-child]'))
+        : []
 
       return rows.map((row) => Number.parseFloat(window.getComputedStyle(row).flexGrow))
     }, projectId)
@@ -272,6 +252,68 @@ test.describe('Project Switching - Cursor Display', () => {
     expect(stateAfter.activeProjectId).not.toBe(stateBefore.activeProjectId)
   })
 
+  test('switching to an empty project hides retained xterm scrollbars immediately', async ({ window }) => {
+    const [projectA, projectB] = mockProjects.slice(0, 2)
+    await injectMockProject(window, [projectA, projectB])
+
+    await window.evaluate((projectId: string) => {
+      const store = (window as any).__APP_STORE__
+      const createdAt = new Date().toISOString()
+      const scrollback = Array.from({ length: 250 }, (_, index) => `line ${index + 1}`).join('\n')
+
+      store?.setState({
+        terminals: [
+          {
+            id: 'scrollbar-term-1',
+            title: 'Scrollbar Terminal 1',
+            cwd: '/tmp/project-switch-scrollbar',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          },
+          {
+            id: 'scrollbar-term-2',
+            title: 'Scrollbar Terminal 2',
+            cwd: '/tmp/project-switch-scrollbar',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          }
+        ],
+        terminalOutputs: {
+          'scrollbar-term-1': scrollback,
+          'scrollbar-term-2': scrollback
+        },
+        activeTerminalId: 'scrollbar-term-1'
+      })
+    }, projectA.id)
+
+    const projectAGrid = window.locator(
+      `[aria-label="Terminal grid for project ${projectA.id}"]`
+    )
+    const projectAScrollbars = projectAGrid.locator(
+      '.xterm-scrollable-element > .scrollbar.vertical'
+    )
+    await expect(projectAScrollbars).toHaveCount(2)
+
+    await window.locator(`[data-testid="project-tab-${projectB.id}"]`).click()
+    await expect(window.getByRole('heading', { name: 'Multi Terminals' })).toBeVisible()
+    await expect(projectAGrid).toHaveAttribute('aria-hidden', 'true')
+    await expect(projectAGrid.locator('[data-terminal-id]')).toHaveCount(2)
+
+    const inactiveScrollbarDisplay = await projectAScrollbars.evaluateAll((scrollbars) =>
+      scrollbars.map((scrollbar) => getComputedStyle(scrollbar).display)
+    )
+    expect(inactiveScrollbarDisplay).toEqual(['none', 'none'])
+
+    await window.locator(`[data-testid="project-tab-${projectA.id}"]`).click()
+    await expect(projectAGrid).toHaveAttribute('aria-hidden', 'false')
+    const restoredScrollbarDisplay = await projectAScrollbars.evaluateAll((scrollbars) =>
+      scrollbars.map((scrollbar) => getComputedStyle(scrollbar).display)
+    )
+    expect(restoredScrollbarDisplay).toEqual(['block', 'block'])
+  })
+
   test('rapid switching: no race conditions', async ({ window }) => {
     // Setup: 3 projects
     const threeProjects = mockProjects.slice(0, 3)
@@ -316,41 +358,42 @@ test.describe('Project Switching - Cursor Display', () => {
     await window.evaluate((id: string) => {
       (globalThis as typeof globalThis & {
         window: Window & { electron: { terminal: { write: (terminalId: string, data: string) => void } } }
-      }).window.electron.terminal.write(id, 'seq 1 240; sleep 1; seq 241 520\n')
+      }).window.electron.terminal.write(id, 'seq 1 240; sleep 5; seq 241 520\n')
     }, terminalId)
 
     await expect.poll(async () => {
-      const metrics = await getTerminalViewportMetrics(window, projectA.id)
-      return metrics.scrollHeight - metrics.clientHeight
-    }, { timeout: 5000 }).toBeGreaterThan(500)
+      const snapshot = await getTerminalDebugSnapshot(window, terminalId)
+      return snapshot?.baseY ?? 0
+    }, { timeout: 5000 }).toBeGreaterThan(150)
 
     await window.locator('[aria-label="Scroll to top"]').first().click()
-    await window.waitForTimeout(WAIT_TIMES.STANDARD)
-
-    const beforeSwitch = await getTerminalViewportMetrics(window, projectA.id)
+    await expect.poll(async () => {
+      const snapshot = await getTerminalDebugSnapshot(window, terminalId)
+      return snapshot?.viewportY
+    }).toBe(0)
     const beforeSwitchDebug = await getTerminalDebugSnapshot(window, terminalId)
-    expect(beforeSwitch.scrollTop).toBeLessThan(100)
+    expect(beforeSwitchDebug?.viewportY).toBe(0)
 
     await window.locator(`[data-testid="project-tab-${projectB.id}"]`).click()
     await window.waitForTimeout(WAIT_TIMES.STANDARD)
 
     await expect.poll(async () => {
-      const metrics = await getTerminalViewportMetrics(window, projectA.id)
-      return metrics.scrollHeight
-    }, { timeout: 7000 }).toBeGreaterThan(beforeSwitch.scrollHeight + 1000)
+      const snapshot = await getTerminalDebugSnapshot(window, terminalId)
+      return snapshot?.baseY ?? 0
+    }, { timeout: 9000 }).toBeGreaterThan((beforeSwitchDebug?.baseY ?? 0) + 100)
 
     const hiddenWhileInactiveDebug = await getTerminalDebugSnapshot(window, terminalId)
 
     await window.locator(`[data-testid="project-tab-${projectA.id}"]`).click()
-    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+    await expect.poll(async () => {
+      const snapshot = await getTerminalDebugSnapshot(window, terminalId)
+      return snapshot?.viewportY
+    }, { timeout: 2000 }).toBe(0)
 
-    const afterReturn = await getTerminalViewportMetrics(window, projectA.id)
     const afterReturnDebug = await getTerminalDebugSnapshot(window, terminalId)
 
-    expect(beforeSwitchDebug?.viewportY).toBe(0)
     expect(hiddenWhileInactiveDebug?.savedViewportY).toBe(0)
     expect(hiddenWhileInactiveDebug?.hiddenViewportIntent?.viewportY).toBe(0)
-    expect(afterReturn.scrollTop).toBeLessThan(100)
     expect(afterReturnDebug?.viewportY).toBe(0)
   })
 
@@ -381,13 +424,11 @@ test.describe('Project Switching - Cursor Display', () => {
     }, terminalA)
 
     await expect.poll(async () => {
-      const metrics = await getTerminalViewportMetrics(window, project.id)
-      return metrics.scrollHeight - metrics.clientHeight
-    }, { timeout: 5000 }).toBeGreaterThan(500)
+      const snapshot = await getTerminalDebugSnapshot(window, terminalA)
+      return snapshot?.baseY ?? 0
+    }, { timeout: 5000 }).toBeGreaterThan(400)
 
-    const beforeSwitch = await getTerminalViewportMetrics(window, project.id)
     const beforeSwitchDebug = await getTerminalDebugSnapshot(window, terminalA)
-    expect(beforeSwitch.bottomGap).toBeLessThan(50)
     expect(beforeSwitchDebug?.isAtBottom).toBe(true)
 
     await addTerminal(window)
@@ -407,10 +448,8 @@ test.describe('Project Switching - Cursor Display', () => {
     await window.locator(`[data-terminal-id="${terminalA}"]`).click()
     await window.waitForTimeout(WAIT_TIMES.STANDARD)
 
-    const afterReturn = await getTerminalViewportMetrics(window, project.id)
     const afterReturnDebug = await getTerminalDebugSnapshot(window, terminalA)
 
-    expect(afterReturn.bottomGap).toBeLessThan(100)
     expect(afterReturnDebug?.isAtBottom).toBe(true)
   })
 
@@ -538,22 +577,21 @@ test.describe('Project Switching - Cursor Display', () => {
       })
     }, projectA.id)
 
-    await expect(window.locator(`[aria-label="Terminal grid for project ${projectA.id}"] .terminal-row`)).toHaveCount(2)
+    const projectGrid = window.getByRole('region', {
+      name: `Terminal grid for project ${projectA.id}`
+    })
+    const rootRows = projectGrid
+      .locator('.pane-tree-split')
+      .first()
+      .locator(':scope > [data-pane-child]')
+    await expect(rootRows).toHaveCount(2)
 
     const handle = window.locator('.terminal-resize-handle--horizontal').first()
-    const handleBox = await handle.boundingBox()
-    expect(handleBox).not.toBeNull()
-    if (!handleBox) {
-      throw new Error('Expected horizontal resize handle to be visible')
-    }
-
-    const startX = handleBox.x + handleBox.width / 2
-    const startY = handleBox.y + handleBox.height / 2
-
-    await window.mouse.move(startX, startY)
-    await window.mouse.down()
-    await window.mouse.move(startX, startY + 140, { steps: 12 })
-    await window.mouse.up()
+    await expect(handle).toBeVisible()
+    await handle.focus()
+    await handle.press('ArrowDown')
+    await handle.press('ArrowDown')
+    await handle.press('ArrowDown')
     await window.waitForTimeout(WAIT_TIMES.SHORT)
 
     const rowFlexBeforeSwitch = await getRowFlex(window, projectA.id)

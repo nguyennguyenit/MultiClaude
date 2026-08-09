@@ -13,15 +13,38 @@ export const IPC_CHANNELS = {
   TERMINAL_DETECT_WSL: 'terminal:detect-wsl',
   TERMINAL_CREATED: 'terminal:created',
   TERMINAL_AGENT_DETECTED: 'terminal:agent-detected',
+  TERMINAL_CLAUDE_SESSION_ID_CHANGED: 'terminal:claude-session-id-changed',
   TERMINAL_GET_SHELLS: 'terminal:getAvailableShells',
+  TERMINAL_GET_NATIVE_CAPABILITY: 'terminal:get-native-capability',
   TERMINAL_LOAD_PANE_TREE: 'terminal:load-pane-tree',
   TERMINAL_SAVE_PANE_TREE: 'terminal:save-pane-tree',
+  TERMINAL_GET_SNAPSHOT: 'terminal:get-snapshot',
+  TERMINAL_GET_DIAGNOSTICS: 'terminal:get-diagnostics',
+  // Part F: rebuild headless mirror from raw PTY transcript before snapshot
+  TERMINAL_REBUILD_HEADLESS: 'terminal:rebuild-headless',
+  // Phase 4: forwarded to renderer when system resumes from sleep/suspend
+  TERMINAL_SYSTEM_RESUMED: 'terminal:system-resumed',
+
+  // Managed provider-neutral agent channels
+  AGENT_GET_READINESS: 'agent:get-readiness',
+  AGENT_GET_BINDING: 'agent:get-binding',
+  AGENT_START: 'agent:start',
+  AGENT_RESUME: 'agent:resume',
+  AGENT_SEND: 'agent:send',
+  AGENT_INTERRUPT: 'agent:interrupt',
+  AGENT_APPROVE: 'agent:approve',
+  AGENT_EVENT: 'agent:event',
+  AGENT_BINDING_CHANGED: 'agent:binding-changed',
+  AGENT_BINDING_REMOVED: 'agent:binding-removed',
+  AGENT_INSIGHTS_GET: 'agent-insights:get',
+  AGENT_INSIGHTS_UPDATED: 'agent-insights:updated',
 
   // Project channels
   PROJECT_LIST: 'project:list',
   PROJECT_CREATE: 'project:create',
   PROJECT_UPDATE: 'project:update',
   PROJECT_DELETE: 'project:delete',
+  PROJECT_REORDER: 'project:reorder',
   PROJECT_SET_ACTIVE: 'project:set-active',
   PROJECT_OPEN_FOLDER: 'project:open-folder',
   PROJECT_CHECK_FOLDER: 'project:check-folder',
@@ -95,6 +118,7 @@ export const IPC_CHANNELS = {
   NOTIFICATION_EVENT: 'notification:event',
   NOTIFICATION_SET_ACTIVE_TERMINAL: 'notification:set-active-terminal',
   NOTIFICATION_REMOTE_CONTROL_STATUS: 'notification:remote-control-status',
+  NOTIFICATION_PANE_STATUS_CHANGED: 'notification:pane-status-changed',
 
   // Mobile control (Claude Code hook receiver + UUID response store)
   MOBILE_CONTROL_GET_STATUS: 'mobile-control:get-status',
@@ -125,6 +149,7 @@ export const IPC_CHANNELS = {
 
   // Media channels (unified image + video)
   MEDIA_OPEN: 'media:open',
+  MEDIA_READ_DATA_URL: 'media:read-data-url',
 
   // File picker channels
   FILE_PICKER_OPEN: 'file-picker:open',
@@ -140,6 +165,11 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESET: 'settings:reset',
+  // Context window analyzer channels
+  CONTEXT_GET: 'context:get',
+  CONTEXT_SNAPSHOT: 'context:snapshot',
+  CONTEXT_GET_TURN_DETAIL: 'context:get-turn-detail',
+
   // Windows channels
   WINDOW_GET_STATE: 'window:get-state',
   WINDOW_STATE_CHANGED: 'window:state-changed',

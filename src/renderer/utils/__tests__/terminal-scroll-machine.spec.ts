@@ -48,6 +48,7 @@ describe('TerminalScrollMachine', () => {
     it('starts with no scroll intents', () => {
       expect(machine.hiddenViewportIntent).toBeNull()
       expect(machine.pendingUserScrollIntent).toBeNull()
+      expect(machine.readingViewportIntent).toBeNull()
       expect(machine.followOutputOnNextWrite).toBe(false)
     })
   })
@@ -258,6 +259,8 @@ describe('TerminalScrollMachine', () => {
       machine.isWriting = true
       machine.hiddenViewportIntent = { viewportY: 42, stickToBottom: false }
       machine.pendingUserScrollIntent = { viewportY: 10, stickToBottom: false }
+      machine.readingViewportIntent = { viewportY: 10, stickToBottom: false }
+      machine.userScrollDirection = 'up'
       machine.followOutputOnNextWrite = true
 
       machine.reset()
@@ -267,6 +270,8 @@ describe('TerminalScrollMachine', () => {
       expect(machine.isWriting).toBe(false)
       expect(machine.hiddenViewportIntent).toBeNull()
       expect(machine.pendingUserScrollIntent).toBeNull()
+      expect(machine.readingViewportIntent).toBeNull()
+      expect(machine.userScrollDirection).toBeNull()
       expect(machine.followOutputOnNextWrite).toBe(false)
     })
   })

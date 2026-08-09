@@ -10,7 +10,9 @@ import { registerTerminalOutputHandler } from '../../utils/terminal-output-dispa
 function findImagePathAtColumn(lineText: string, col: number, terminalId: string): { start: number; end: number } | null {
   const matches: { start: number; end: number }[] = []
 
-  // Check [Image #X] Claude refs + [Image N] / [Video N] input tokens
+  // Claude Code reference tokens: [Image #N] for screenshots it auto-attaches,
+  // plus legacy [Image N] / [Video N] tokens that still appear in restored
+  // terminal buffers from older sessions.
   const tokenRegex = /\[(?:Image(?:\s#)?|Video)\s\d+\]/g
   let match
   while ((match = tokenRegex.exec(lineText)) !== null) {
@@ -97,7 +99,7 @@ export const TerminalView = memo(function TerminalView({
   onRefreshReady,
   onOutput
 }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef } = useTerminal({
     terminalId,
     initialOutput,
     initialViewportY,
@@ -244,13 +246,14 @@ export const TerminalView = memo(function TerminalView({
     }
   }, [terminalRef, terminalId])
 
-  // Handle click on terminal - force show cursor in case it was hidden by CLI
+  // Handle click on terminal - force show cursor in case it was hidden by CLI.
+  // Focus unconditionally: click implies user intent to interact with this pane.
+  // Gating on isActive used stale prop from previous render, so clicks switching
+  // panes left DOM focus on the old textarea — Cmd+V then routed pastes to the
+  // wrong pane.
   const handleTerminalClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isActive) {
-      focus()
-      showCursor()
-    }
-    // Check if clicked on media path
+    focus()
+    showCursor()
     handleMediaClick(e)
   }
 
@@ -309,23 +312,38 @@ export const TerminalView = memo(function TerminalView({
         skipAppend: skipAppendRef.current,
         appendOutput
       })
-    })
-  }, [terminalId, write, appendOutput, onOutput])
+    }, () => refresh(false))
+  }, [terminalId, write, appendOutput, onOutput, refresh])
 
   // Focus when becomes active, blur when inactive
   // Note: scroll restoration and cursor are handled by visibility effect in use-terminal.ts
   useEffect(() => {
     if (isActive) {
       focus()
+      restoreActiveRender()
       // Delayed cursor restore to handle WebGL reload timing
       const timer = setTimeout(() => {
+        restoreActiveRender()
         showCursor()
       }, 100)
       return () => clearTimeout(timer)
     } else {
       blur()
     }
-  }, [isActive, focus, blur, showCursor])
+  }, [isActive, focus, blur, showCursor, restoreActiveRender])
+
+  useEffect(() => {
+    if (!isActive) return
+
+    const handleWindowFocus = () => {
+      focus()
+      restoreActiveRender()
+      showCursor()
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    return () => window.removeEventListener('focus', handleWindowFocus)
+  }, [isActive, focus, restoreActiveRender, showCursor])
 
   // Expose fit function to parent for resize handling
   useEffect(() => {

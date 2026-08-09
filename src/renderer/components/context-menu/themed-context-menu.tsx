@@ -118,10 +118,12 @@ export function ThemedContextMenu(): ReactElement | null {
     }
 
     window.addEventListener('mousedown', onMouseDown)
-    window.addEventListener('keydown', onKeyDown)
+    // Capture before xterm's textarea handlers can stop propagation. The menu
+    // is a global overlay, so Escape/navigation must win while it is open.
+    window.addEventListener('keydown', onKeyDown, true)
     return () => {
       window.removeEventListener('mousedown', onMouseDown)
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [open, items, closeMenu])
 

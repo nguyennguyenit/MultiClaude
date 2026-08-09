@@ -13,7 +13,7 @@ const EMPTY_STATUS: MobileControlStatus = {
   ccpokeReasons: []
 }
 
-export function MobileControlSettings() {
+export function MobileControlSettings({ embedded = false }: { embedded?: boolean } = {}) {
   const [status, setStatus] = useState<MobileControlStatus>(EMPTY_STATUS)
   const [busy, setBusy] = useState(false)
   const [showRegenConfirm, setShowRegenConfirm] = useState(false)
@@ -68,9 +68,16 @@ export function MobileControlSettings() {
 
   return (
     <div className="flex flex-col gap-8 pb-16 max-w-2xl">
-      <SettingsTitle description="Claude Code hook receiver for phone-side control">
-        Mobile Control
-      </SettingsTitle>
+      {embedded ? (
+        <div>
+          <h3 className="text-base font-semibold text-[var(--mc-text-primary)]">Mobile Control</h3>
+          <p className="text-sm text-[var(--mc-text-muted)] mt-0.5">Claude Code hook receiver for phone-side control</p>
+        </div>
+      ) : (
+        <SettingsTitle description="Claude Code hook receiver for phone-side control">
+          Mobile Control
+        </SettingsTitle>
+      )}
 
       <div className="settings-card rounded-xl flex flex-col gap-4">
         <div className="flex items-center justify-between">
@@ -82,6 +89,7 @@ export function MobileControlSettings() {
           </div>
           <div data-testid="mc-toggle">
             <ToggleSwitch
+              ariaLabel="Enable Mobile Control"
               checked={status.running}
               onChange={toggle}
               disabled={busy}
@@ -115,7 +123,7 @@ export function MobileControlSettings() {
         {status.running && (
           <button
             type="button"
-            className="self-start text-xs underline text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)]"
+            className="self-start bg-transparent border-0 p-0 text-xs underline text-[var(--mc-text-muted)] hover:text-[var(--mc-text-primary)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => setShowRegenConfirm(true)}
             disabled={busy}
             data-testid="mc-regen-secret"

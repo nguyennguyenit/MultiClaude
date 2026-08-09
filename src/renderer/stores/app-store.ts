@@ -1,5 +1,15 @@
 import { create } from 'zustand'
-import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState, AgentType } from '@shared/types'
+import type {
+  Terminal,
+  Project,
+  ProjectTerminalLayout,
+  ActivityBarState,
+  AgentType,
+  TerminalTaskStatus,
+  AgentProvider,
+  AgentProviderReadiness,
+  AgentSessionBinding,
+} from '@shared/types'
 import { DEFAULT_ACTIVITY_BAR_STATE } from '@shared/constants'
 import type { TerminalKeyboardEnhancementState } from '../utils/keyboard-enhancement-utils'
 import {
@@ -8,7 +18,6 @@ import {
   getBufferedTerminalOutput
 } from './terminal-output-buffer'
 import { useImageStore } from './image-store'
-import { usePendingMediaStore } from './pending-media-store'
 
 export type ActiveView = 'terminals' | 'github'
 
@@ -35,10 +44,19 @@ interface AppState {
   updateTerminalTitle: (id: string, title: string) => void
   updateTerminalClaudeMode: (id: string, isClaudeMode: boolean) => void
   updateTerminalAgentType: (id: string, agentType: AgentType) => void
+  updateTerminalClaudeSessionId: (id: string, claudeSessionId: string | undefined) => void
+  updateTerminalTaskStatus: (id: string, taskStatus: TerminalTaskStatus) => void
   getTerminalOutput: (id: string) => string
   appendOutput: (id: string, data: string) => void
   getTerminalKeyboardEnhancement: (id: string) => TerminalKeyboardEnhancementState | null
   setTerminalKeyboardEnhancement: (id: string, state: TerminalKeyboardEnhancementState) => void
+
+  // Managed provider state is separate from terminal CLI detection metadata.
+  agentReadiness: Partial<Record<AgentProvider, AgentProviderReadiness>>
+  agentBindings: Record<string, AgentSessionBinding>
+  setAgentReadiness: (readiness: Partial<Record<AgentProvider, AgentProviderReadiness>>) => void
+  setAgentBinding: (binding: AgentSessionBinding) => void
+  removeAgentBinding: (terminalId: string) => void
 
   // Projects
   projects: Project[]
@@ -46,6 +64,7 @@ interface AppState {
   setProjects: (projects: Project[]) => void
   addProject: (project: Project) => void
   removeProject: (id: string) => void
+  reorderProjects: (sourceId: string, targetIndex: number) => void
   setActiveProject: (id: string | null) => void
   switchToProject: (projectId: string, terminalId?: string) => void
 
@@ -102,7 +121,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       delete remainingKeyboardEnhancements[id]
       clearBufferedTerminalOutput(id)
       useImageStore.getState().clearImages(id)
-      usePendingMediaStore.getState().clear(id)
 
       const nextLastActiveTerminalByProjectId = { ...state.lastActiveTerminalByProjectId }
       if (removedTerminal) {
@@ -175,6 +193,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
     })),
 
+  updateTerminalClaudeSessionId: (id, claudeSessionId) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, claudeSessionId } : t
+      )
+    })),
+
+  updateTerminalTaskStatus: (id, taskStatus) =>
+    set((state) => ({
+      terminals: state.terminals.map((t) =>
+        t.id === id ? { ...t, taskStatus } : t
+      )
+    })),
+
   getTerminalOutput: (id) => getBufferedTerminalOutput(id),
 
   appendOutput: (id, data) => appendBufferedTerminalOutput(id, data),
@@ -188,6 +220,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         [id]: state
       }
     })),
+
+  agentReadiness: {},
+  agentBindings: {},
+  setAgentReadiness: (agentReadiness) => set({ agentReadiness }),
+  setAgentBinding: (binding) => set((state) => ({
+    agentBindings: { ...state.agentBindings, [binding.terminalId]: binding }
+  })),
+  removeAgentBinding: (terminalId) => set((state) => {
+    const agentBindings = { ...state.agentBindings }
+    delete agentBindings[terminalId]
+    return { agentBindings }
+  }),
 
   // Projects
   projects: [],
@@ -211,6 +255,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeTerminalId: state.activeProjectId === id ? null : state.activeTerminalId,
         lastActiveTerminalByProjectId: nextLastActiveTerminalByProjectId
       }
+    }),
+
+  reorderProjects: (sourceId, targetIndex) =>
+    set((state) => {
+      const sourceIndex = state.projects.findIndex((project) => project.id === sourceId)
+      if (sourceIndex === -1) return state
+      if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= state.projects.length) return state
+      if (sourceIndex === targetIndex) return state
+
+      const projects = [...state.projects]
+      const [moved] = projects.splice(sourceIndex, 1)
+      projects.splice(targetIndex, 0, moved)
+      return { projects }
     }),
 
   setActiveProject: (id) => set({ activeProjectId: id }),

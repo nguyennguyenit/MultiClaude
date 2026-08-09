@@ -1,0 +1,72 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
+import { TerminalView } from './terminal-view'
+
+const terminalHook = vi.hoisted(() => ({
+  initTerminal: vi.fn(),
+  write: vi.fn(),
+  fit: vi.fn(),
+  focus: vi.fn(),
+  blur: vi.fn(),
+  showCursor: vi.fn(),
+  restoreActiveRender: vi.fn(),
+  refresh: vi.fn(),
+  scrollToTop: vi.fn(),
+  scrollToBottom: vi.fn(),
+  getViewportSnapshot: vi.fn(() => ({ viewportY: null, isAtBottom: true })),
+  terminalRef: { current: null },
+  containerRef: { current: null }
+}))
+
+vi.mock('../../hooks/use-terminal', () => ({
+  useTerminal: () => terminalHook
+}))
+
+vi.mock('../../utils/terminal-output-dispatcher', () => ({
+  registerTerminalOutputHandler: vi.fn(() => vi.fn())
+}))
+
+describe('TerminalView activation render restore', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
+  it('repaints the terminal when it becomes active', () => {
+    render(<TerminalView terminalId="term-1" isActive />)
+
+    expect(terminalHook.focus).toHaveBeenCalled()
+    expect(terminalHook.restoreActiveRender).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(100)
+
+    expect(terminalHook.restoreActiveRender).toHaveBeenCalledTimes(2)
+    expect(terminalHook.showCursor).toHaveBeenCalled()
+  })
+
+  it('repaints the active terminal when the app window regains focus', () => {
+    render(<TerminalView terminalId="term-1" isActive />)
+    vi.clearAllMocks()
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(terminalHook.focus).toHaveBeenCalled()
+    expect(terminalHook.restoreActiveRender).toHaveBeenCalled()
+    expect(terminalHook.showCursor).toHaveBeenCalled()
+  })
+
+  it('does not repaint inactive terminals on window focus', () => {
+    render(<TerminalView terminalId="term-1" isActive={false} />)
+    vi.clearAllMocks()
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(terminalHook.restoreActiveRender).not.toHaveBeenCalled()
+  })
+})

@@ -1,4 +1,5 @@
 import type { ColorThemeDefinition, AppSettings, TerminalColorPreset, TerminalFontId, AppFontId } from '../types'
+import { SCROLLBACK_DEFAULT } from './terminal'
 
 // ============================================
 // VibeTerminal Theme System
@@ -319,21 +320,20 @@ export const COLOR_THEMES: ColorThemeDefinition[] = [
 export const DEFAULT_ACTIVITY_BAR_STATE = 'collapsed' as const
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  settingsSchemaVersion: 1,
+  terminalEngine: 'xterm',
   colorTheme: 'tokyo-night',
   terminalLimit: { preset: 9 },
   terminalRenderMode: 'balanced',
   gpuRendererForClaudeTerminals: false,
-  glassmorphismEnabled: false,
+  scrollbackLines: SCROLLBACK_DEFAULT,
   terminalFontFamily: 'jetbrains-mono',
-  windowsShell: { type: 'cmd' },
   // Legacy fields - kept for backward compat with saved user settings + use-terminal hook
   themeMode: 'dark',
   modernFontFamily: 'system',
-  uiStyle: 'modern',
-  terminalStyleOptions: {
-    colorPreset: 'green',
-    fontFamily: 'jetbrains-mono',
-    useBorderChars: false
-  },
-  activityBarState: DEFAULT_ACTIVITY_BAR_STATE
+  enableContextWindow: true,
+  // Channel-aware default assigned at first run by main settings-store
+  // (beta/rc/alpha → true, stable → false). Typed false here so renderer
+  // snapshots before first main sync do not falsely enable advanced paths.
+  enableContextWindowAdvanced: false,
 }

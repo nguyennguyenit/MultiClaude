@@ -1,4 +1,4 @@
-import type { NotificationSettings, SoundPreset } from '../types/notification'
+import type { NotificationSettings } from '../types/notification'
 import type { AgentType } from '../types'
 
 // Task tracker constants
@@ -10,8 +10,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   onTaskComplete: true,
   onTaskFailed: true,
   onReviewNeeded: true,
-  soundEnabled: true,
-  soundPreset: 'default',
   telegramEnabled: false,
   telegramConfigured: false,
   discordEnabled: false,
@@ -24,12 +22,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
 }
 
 // Sound preset definitions
-export const SOUND_PRESETS: { id: SoundPreset; name: string; description: string }[] = [
-  { id: 'default', name: 'Default', description: 'Standard notification sounds' },
-  { id: 'minimal', name: 'Minimal', description: 'Subtle, soft tones' },
-  { id: 'retro', name: 'Retro', description: '8-bit style sounds' }
-]
-
 // Pattern detection for Claude Code terminal output
 // These patterns match Claude Code's specific output format
 export const DETECTION_PATTERNS = {
@@ -38,8 +30,22 @@ export const DETECTION_PATTERNS = {
   // Match specific task failure indicators, not generic "Error:" which appears everywhere
   // Claude Code shows "✗ Task failed" or "Task failed:" when a task actually fails
   taskFailed: /✗\s*(Task\s+)?failed|^Task\s+failed[:\s]|command\s+failed\s+with\s+exit\s+code/i,
+  // Legacy review pattern — only consumed by the deprecated PatternDetector. Kept
+  // narrowly scoped to "review" phrases that do not collide with Claude's TUI
+  // redraw output (see plain-text-parser.ts REVIEW_PATTERN for the canonical
+  // tightened prompt pattern).
   reviewNeeded: /review\s+needed|waiting\s+for\s+review|needs\s+review|please\s+review/i
 } as const
+
+/**
+ * Canonical tightened approval-prompt regex. Single source of truth — consumed by
+ * PlainTextParser (live emission path) and re-exposed via ENHANCED_DETECTION_PATTERNS
+ * for legacy callers. Loose sub-patterns (`approve` alone, `waiting for input`,
+ * `allow this tool`) were intentionally removed to stop SIGWINCH/resize redraw
+ * false-triggers — see plan plans/20260417-1850-fix-review-needed-false-trigger/.
+ * English-only by design; localized builds must use the hook path instead.
+ */
+export const REVIEW_PROMPT_PATTERN = /\[Y\/n\]|\(y\/N\)|[Dd]o you want to (?:proceed|continue|approve)[\s\S]{0,40}\?|[Aa]llow\s+[`']?\w[\w-]*[`']?\s+to\s+(?:run|execute)/
 
 // Enhanced detection patterns with named capture groups for task name extraction
 // Used by PlainTextParser for richer notifications
@@ -48,8 +54,8 @@ export const ENHANCED_DETECTION_PATTERNS = {
   taskComplete: /✓\s+(?<taskName>.+?)(?:\s*\(completed\)|$)/i,
   // Extract task name and optional exit code from failures
   taskFailed: /✗\s+(?<taskName>.+?)(?:\s*\(failed\)|$)|exit(?:ed)?\s+(?:with\s+)?code\s+(?<exitCode>\d+)/i,
-  // Match review/approval prompts
-  reviewNeeded: /\[Y\/n\]|\(y\/N\)|approve|allow\s+(?:this\s+)?tool|waiting\s+for\s+(?:your\s+)?(?:input|response|confirmation)/i
+  // Same regex as REVIEW_PROMPT_PATTERN (single source of truth).
+  reviewNeeded: REVIEW_PROMPT_PATTERN
 } as const
 
 // Agent command detection patterns

@@ -26,7 +26,7 @@ export default defineConfig(({ command }) => {
               minify: isBuild,
               outDir: 'dist/main',
               rollupOptions: {
-                external: ['@lydell/node-pty', 'electron', 'electron-store', 'simple-git']
+                external: ['@lydell/node-pty', 'electron', 'electron-store', 'simple-git', '@xterm/headless', '@xterm/addon-serialize']
               }
             },
             resolve: {
@@ -72,7 +72,14 @@ export default defineConfig(({ command }) => {
       }
     },
     build: {
-      outDir: 'dist/renderer'
+      outDir: 'dist/renderer',
+      minify: 'terser',
+      terserOptions: {
+        mangle: {
+          // Don't mangle xterm internals
+          reserved: ['Terminal', 'FitAddon', 'WebLinksAddon', 'WebglAddon']
+        }
+      }
     },
     clearScreen: false,
     server: {

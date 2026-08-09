@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { TERMINAL_OUTPUT_BUFFER_MAX, TERMINAL_OUTPUT_BUFFER_TRIM_TO } from '@shared/constants'
-import type { Terminal } from '@shared/types'
+import type { Project, Terminal } from '@shared/types'
 import { useAppStore } from './app-store'
 import { resetBufferedTerminalOutputForTests } from './terminal-output-buffer'
 
@@ -17,10 +17,32 @@ function makeTerminal(id = 'term-1', projectId = 'project-1'): Terminal {
   }
 }
 
+function makeProject(id: string): Project {
+  return {
+    id,
+    name: id,
+    path: `/tmp/${id}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+}
+
 describe('useAppStore terminal output buffering', () => {
   beforeEach(() => {
     resetBufferedTerminalOutputForTests()
     useAppStore.setState(initialState, true)
+  })
+
+  it('updateTerminalTaskStatus sets taskStatus on the matching terminal only', () => {
+    useAppStore.getState().addTerminal(makeTerminal('term-a'))
+    useAppStore.getState().addTerminal(makeTerminal('term-b'))
+
+    useAppStore.getState().updateTerminalTaskStatus('term-a', 'running')
+    expect(useAppStore.getState().terminals.find((t) => t.id === 'term-a')?.taskStatus).toBe('running')
+    expect(useAppStore.getState().terminals.find((t) => t.id === 'term-b')?.taskStatus).toBeUndefined()
+
+    useAppStore.getState().updateTerminalTaskStatus('term-a', 'failed')
+    expect(useAppStore.getState().terminals.find((t) => t.id === 'term-a')?.taskStatus).toBe('failed')
   })
 
   it('keeps terminal metadata stable when appending output', () => {
@@ -108,5 +130,63 @@ describe('useAppStore terminal output buffering', () => {
     state.updateTerminalClaudeMode?.('term-1', true)
 
     expect(useAppStore.getState().terminals[0]?.isClaudeMode).toBe(true)
+  })
+
+  it('keeps managed provider bindings separate from detected terminal metadata', () => {
+    useAppStore.getState().addTerminal({ ...makeTerminal(), agentType: 'gemini' })
+    useAppStore.getState().setAgentReadiness({
+      claude: { status: 'ready', version: '2.1.220' },
+      codex: { status: 'fallback', reason: 'App Server too old' }
+    })
+    useAppStore.getState().setAgentBinding({
+      session: { provider: 'claude', id: 'session-1' },
+      terminalId: 'term-1',
+      projectId: 'project-1',
+      webContentsId: 7,
+      capabilities: {
+        send: true,
+        interrupt: true,
+        resume: true,
+        approvals: false,
+        contextUsage: 'estimated',
+        reasoningMetadata: true
+      },
+      status: 'idle'
+    })
+
+    expect(useAppStore.getState().terminals[0]?.agentType).toBe('gemini')
+    expect(useAppStore.getState().agentBindings['term-1']?.session.provider).toBe('claude')
+    expect(useAppStore.getState().agentReadiness.codex?.status).toBe('fallback')
+
+    useAppStore.getState().removeAgentBinding('term-1')
+    expect(useAppStore.getState().agentBindings['term-1']).toBeUndefined()
+  })
+
+  it('reorders projects by id without changing active project or terminal', () => {
+    const projects = [makeProject('project-a'), makeProject('project-b'), makeProject('project-c')]
+    useAppStore.getState().setProjects(projects)
+    useAppStore.getState().setActiveProject('project-a')
+    useAppStore.getState().addTerminal(makeTerminal('term-a', 'project-a'))
+
+    useAppStore.getState().reorderProjects('project-a', 2)
+
+    expect(useAppStore.getState().projects.map((project) => project.id)).toEqual([
+      'project-b',
+      'project-c',
+      'project-a'
+    ])
+    expect(useAppStore.getState().activeProjectId).toBe('project-a')
+    expect(useAppStore.getState().activeTerminalId).toBe('term-a')
+  })
+
+  it('ignores invalid project reorder requests', () => {
+    const projects = [makeProject('project-a'), makeProject('project-b')]
+    useAppStore.getState().setProjects(projects)
+
+    useAppStore.getState().reorderProjects('missing', 1)
+    useAppStore.getState().reorderProjects('project-a', -1)
+    useAppStore.getState().reorderProjects('project-a', 2)
+
+    expect(useAppStore.getState().projects).toEqual(projects)
   })
 })

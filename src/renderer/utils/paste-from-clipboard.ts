@@ -1,8 +1,5 @@
 import type { Terminal as XTerm } from '@xterm/xterm'
-import { useAppStore, useImageStore, usePendingMediaStore } from '../stores'
-import { writeToDisplay } from '../stores/display-writer-registry'
-import { buildMediaToken } from './media-classifier'
-import { formatPathForTerminal } from './terminal-path-utils'
+import { insertFilePathsIntoTerminal } from './insert-file-paths'
 
 /** Chunk size for text pastes. Beyond this, writes are split and yielded
  *  between so other IPC traffic (terminal output, resize, etc.) can interleave. */
@@ -14,22 +11,24 @@ const BRACKETED_PASTE_END = '\x1b[201~'
 export async function pasteFromClipboard(
   terminalId: string,
   onBeforeWrite?: () => void,
-  term?: XTerm
+  term?: XTerm,
+  onTextWrite?: (payload: string) => void
 ): Promise<void> {
   try {
     const items = await navigator.clipboard.read()
-    const handled = await tryPasteImage(items, terminalId, onBeforeWrite)
+    const handled = await tryPasteImage(items, terminalId, onBeforeWrite, onTextWrite)
     if (handled) return
-    await tryPasteText(terminalId, term, onBeforeWrite)
+    await tryPasteText(terminalId, term, onBeforeWrite, onTextWrite)
   } catch {
-    await tryPasteText(terminalId, term, onBeforeWrite)
+    await tryPasteText(terminalId, term, onBeforeWrite, onTextWrite)
   }
 }
 
 async function tryPasteImage(
   items: readonly ClipboardItem[],
   terminalId: string,
-  onBeforeWrite?: () => void
+  onBeforeWrite?: () => void,
+  onTextWrite?: (payload: string) => void
 ): Promise<boolean> {
   for (const item of items) {
     const imageType = item.types.find((t) => t.startsWith('image/'))
@@ -41,20 +40,7 @@ async function tryPasteImage(
       if (!filePath) return true
 
       onBeforeWrite?.()
-      const terminal = useAppStore.getState().terminals.find((t) => t.id === terminalId)
-      const isClaudeMode = terminal?.isClaudeMode ?? false
-      const entry = useImageStore.getState().addImage(terminalId, filePath, 'image')
-
-      if (isClaudeMode) {
-        window.electron.terminal.write(terminalId, formatPathForTerminal(filePath) + ' ')
-      } else {
-        const token = buildMediaToken('image', entry.index)
-        usePendingMediaStore.getState().push(terminalId, {
-          path: filePath,
-          displayLength: token.length
-        })
-        writeToDisplay(terminalId, token + ' ')
-      }
+      insertFilePathsIntoTerminal(terminalId, [filePath], onTextWrite)
       return true
     } catch (err) {
       console.error('Failed to process clipboard image:', err)
@@ -67,7 +53,8 @@ async function tryPasteImage(
 async function tryPasteText(
   terminalId: string,
   term: XTerm | undefined,
-  onBeforeWrite?: () => void
+  onBeforeWrite?: () => void,
+  onTextWrite?: (payload: string) => void
 ): Promise<void> {
   let text: string
   try {
@@ -91,6 +78,7 @@ async function tryPasteText(
   // bracketed mode — without wrapping there's no region to break out of
   // and stripping would corrupt legitimate literal escape sequences.
   const body = bracketed ? normalized.replace(/\x1b\[20[01]~/g, '') : normalized
+  onTextWrite?.(body)
 
   if (body.length <= PASTE_CHUNK_SIZE) {
     const payload = bracketed

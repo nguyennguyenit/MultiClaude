@@ -1,10 +1,13 @@
 import { useEffect, useRef, useCallback, memo, useState, useMemo } from 'react'
 import { TerminalView, type TerminalRefreshHandle } from './terminal-view'
+import { AttachmentStrip } from './attachment-strip'
 import { useFileDrop } from '../../hooks/use-file-drop'
 import { clearPendingDropTerminal, setPendingDropTerminal } from '../../utils/file-drop-handler'
 import { useAppStore } from '../../stores'
+import { handleAttachmentRemove } from '../../utils/attachment-remove-handler'
+import type { ImageEntry } from '../../stores/image-store'
 import { AGENT_BADGE_COLORS, AGENT_BADGE_TEXT, AGENT_DISPLAY_NAMES } from '@shared/constants/notification'
-import type { AgentType } from '@shared/types'
+import { agentTypeToProvider, type AgentType } from '@shared/types'
 
 interface TerminalPaneProps {
   terminalId: string
@@ -42,6 +45,16 @@ export const TerminalPane = memo(function TerminalPane({
     () => initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId),
     [initialOutput, terminalId]
   )
+  const managedBinding = useAppStore((state) => state.agentBindings[terminalId])
+  const detectedProvider = agentTypeToProvider(agentType ?? (isClaudeMode ? 'claude' : undefined))
+  const providerReadiness = useAppStore((state) =>
+    detectedProvider ? state.agentReadiness[detectedProvider] : undefined
+  )
+  const providerStatusLabel = managedBinding
+    ? `${managedBinding.session.provider === 'claude' ? 'Claude' : 'Codex'} managed · ${managedBinding.capabilities.contextUsage} context`
+    : detectedProvider && providerReadiness?.status === 'fallback'
+      ? `${detectedProvider === 'claude' ? 'Claude' : 'Codex'} · PTY fallback`
+      : undefined
 
   // Sync editTitle when title prop changes externally
   useEffect(() => {
@@ -120,13 +133,20 @@ export const TerminalPane = memo(function TerminalPane({
     }
   }, [editTitle, title, onTitleChange])
 
+  const handleAttachmentRemoveClick = useCallback(
+    (filePath: string, entry: ImageEntry) => {
+      handleAttachmentRemove({ terminalId, filePath, entry, isClaudeMode })
+    },
+    [terminalId, isClaudeMode]
+  )
+
   return (
     <div
       ref={containerRef}
       data-terminal-id={terminalId}
       onClick={onActivate}
       {...dropHandlers}
-      style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minWidth: 0, minHeight: 0 }}
     >
       {/* Top tab bar */}
       <div className={`pane-tab-bar${isActive ? ' active' : ''}`}>
@@ -144,6 +164,14 @@ export const TerminalPane = memo(function TerminalPane({
               </span>
             )
           })()}
+          {providerStatusLabel && (
+            <span
+              className="pane-tab-provider-status"
+              title={providerReadiness?.reason ?? providerStatusLabel}
+            >
+              {providerStatusLabel}
+            </span>
+          )}
 
           <div className="pane-tab-title-group">
             {/* Title - editable on double-click */}
@@ -272,6 +300,9 @@ export const TerminalPane = memo(function TerminalPane({
           onRefreshReady={handleTerminalRefresh}
         />
       </div>
+
+      {/* Attachment thumbnail strip — hidden when no entries */}
+      <AttachmentStrip terminalId={terminalId} onRemove={handleAttachmentRemoveClick} />
     </div>
   )
 })

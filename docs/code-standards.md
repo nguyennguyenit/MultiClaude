@@ -376,51 +376,51 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 - `cancel()`: Reverts pendingSettings to savedSettings
 - Main process validates all settings before persistence (validation firewall)
 
-### Pane Tree Store Pattern (v3.3.0)
+### Attachment Strip Pattern (v3.1.1+)
 
-**Binary Split Tree Layout**: Terminals are organized in a recursive binary tree where each node is either a leaf (terminal) or a split container (vertical/horizontal).
+**Image/Video Thumbnail Strip**: Dropped images/videos display as 80×60px tiles above each terminal pane with ✕ remove buttons.
+
+**Store Integration:**
+- `image-store.ts`: Per-terminal image/video registry with `removeImage(terminalId, filePath)` method
+- `pending-media-store.ts`: Token queue for non-Claude mode; `removeTokenByPath()` for synchronization
+
+**Removal Handler:**
+- Non-Claude mode: Removes from image store, pending-media queue, and xterm display (if still trailing input)
+- Claude mode: Removes only from strip (cannot rewrite Claude Code's internal buffer)
+- Pattern: Mode-aware dispatch via `handleAttachmentRemove()` utility in `src/renderer/utils/attachment-remove-handler.ts`
+
+### Pane Tree Store Pattern (v3.4.4)
+
+**Binary Split Tree**: Recursive tree where nodes are terminals (leaves) or splits (containers with 2 children).
 
 ```typescript
-// stores/pane-tree-store.ts
-interface PaneNode {
-  id: string
-  type: 'pane' | 'split'
-  // If pane:
-  terminalId?: string
-  // If split:
-  splitDirection?: 'vertical' | 'horizontal'
-  children?: [PaneNode, PaneNode]
-}
+// Pure model: src/shared/types/pane-tree.ts
+type PaneTree = { kind: 'leaf', terminalId: string } | 
+               { kind: 'split', orientation: 'row'|'column', ratio: [0.1,0.9], children: [PaneTree, PaneTree] }
 
-interface PaneTreeState {
-  paneTree: PaneNode
-  activePaneId: string
-
-  // Actions
-  splitPane: (paneId: string, direction: 'vertical' | 'horizontal') => void
-  closePane: (paneId: string) => void
-  setActivePaneId: (paneId: string) => void
-}
-
-export const usePaneTreeStore = create<PaneTreeState>((set) => ({
-  // ...
-  splitPane: (paneId, direction) => set((state) => {
-    // Create new pane, replace target with split node
-    return { paneTree: reconcileSplitTree(state.paneTree, paneId, direction) }
-  }),
-  closePane: (paneId) => set((state) => {
-    // Remove pane, collapse parent split if orphaned
-    return { paneTree: reconcileClosePaneTree(state.paneTree, paneId) }
-  })
-}))
+// Renderer store: src/renderer/stores/pane-tree-store.ts
+// Debounces writes 200ms via terminal:load/save-pane-tree IPC
+// Split actions via useExecuteSplit (10s timeout, in-flight guard)
+// Resize via usePaneResize (rAF-coalesce, prevents trackpad bursts)
 ```
 
-**Key Patterns:**
-- `PaneTreeNode` renders recursively: split → two children, pane → terminal
-- `splitPane()` creates new empty pane, inserts split node parent
-- `closePane()` removes pane, collapses parent split if only one child remains
-- Tree persisted per-project via `terminal:load-pane-tree` / `terminal:save-pane-tree`
-- Context menu (themed Portal) triggers split/close from right-click or split-button
+**Key Points:**
+- Tree persisted per-project (schemaVersion 2, legacy flat → tree migration on-read)
+- Split/close via context menu or hotkeys (Ctrl+Shift+→/←/↓/↑)
+- Resize handles capture pointer, clean up on unmount; arrow-key a11y
+- rAF-coalesced divider drag eliminates 100Hz trackpad → ResizeObserver→fit→SIGWINCH cascade
+
+### Context Window Analyzer Pattern (v3.4.4)
+
+```typescript
+// Main: src/main/context/context-window-analyzer.ts (EventEmitter)
+// Parses JSONL from ClaudeLogWatcher, sorts into 6 buckets, 300ms debounce snapshot
+// IPC: context:get(sessionId) invoke + context:snapshot broadcast (1h per-session TTL)
+
+// Renderer: src/renderer/hooks/use-context-snapshot.ts + ContextWindowDrawer
+// Binds to active pane's claudeSessionId; exposes isStale flag (>10s no update)
+// Feature flag: AppSettings.enableContextWindow (startup-only, default true)
+```
 
 ## IPC Standards
 

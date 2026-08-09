@@ -11,8 +11,3 @@ export function classifyMediaFile(filePath: string): MediaKind | null {
   if ((VIDEO_EXTENSIONS as readonly string[]).includes(ext)) return 'video'
   return null
 }
-
-export function buildMediaToken(type: MediaKind, index: number): string {
-  if (type === 'image') return `[Image ${index}]`
-  return `[Video ${index}]`
-}
