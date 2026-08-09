@@ -1,4 +1,9 @@
 import { test, expect, injectMockProject, addTerminal, clearAllTerminalsForScreenshot, WAIT_TIMES } from '../fixtures'
+import {
+  activateTerminalPane,
+  openRendererDiagnostics,
+  readVisibleRendererStatus,
+} from '../fixtures/electron-app'
 import { mockProject } from '../fixtures/test-data'
 
 // Skip PTY-dependent tests on CI (terminal creation can be unreliable)
@@ -161,6 +166,44 @@ test.describe('Terminal Grid Layout', () => {
     expect(boxes.every(({ width, height }) => width > 200 && height > 100)).toBe(true)
     expect(new Set(boxes.map(({ x }) => x)).size).toBe(3)
     expect(new Set(boxes.map(({ y }) => y)).size).toBe(3)
+  })
+
+  test('1/4/9 activated panes expose stable typed Automatic renderer status', async ({ window }) => {
+    test.setTimeout(90_000)
+
+    for (const targetCount of [1, 4, 9]) {
+      const panes = window.locator('[data-terminal-id]')
+      while (await panes.count() < targetCount) await addTerminal(window)
+      await expect(panes).toHaveCount(targetCount)
+
+      const terminalIds = await panes.evaluateAll(elements =>
+        elements.map(element => element.getAttribute('data-terminal-id')).filter((id): id is string => Boolean(id))
+      )
+      expect(terminalIds).toHaveLength(targetCount)
+      for (const terminalId of terminalIds) await activateTerminalPane(window, terminalId)
+
+      await openRendererDiagnostics(window)
+      await expect(window.getByRole('radio', { name: 'Automatic (Recommended)', exact: true })).toBeChecked()
+
+      for (const terminalId of terminalIds) {
+        await expect.poll(async () =>
+          (await readVisibleRendererStatus(window, terminalId)).effective
+        ).toMatch(/^(WebGL|DOM)$/)
+        const status = await readVisibleRendererStatus(window, terminalId)
+        expect([
+          'none',
+          'WebGL is unavailable in this environment.',
+          'WebGL could not start.',
+          'WebGL context lost.',
+        ]).toContain(status.fallback)
+        expect(status.retryVisible).toBe(
+          status.fallback === 'WebGL could not start.' || status.fallback === 'WebGL context lost.'
+        )
+      }
+
+      await window.getByRole('button', { name: 'Close Settings' }).click()
+      await expect(window.getByTestId('settings-modal')).not.toBeVisible()
+    }
   })
 
   test('grid layout screenshot', async ({ window }) => {

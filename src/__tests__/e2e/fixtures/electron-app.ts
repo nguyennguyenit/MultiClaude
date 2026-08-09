@@ -1,4 +1,4 @@
-import { test as base, expect, _electron as electron, ElectronApplication, Page } from '@playwright/test'
+import { test as base, expect, _electron as electron, ElectronApplication, Locator, Page } from '@playwright/test'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
@@ -114,6 +114,73 @@ export const WAIT_TIMES = {
   /** Long delay for complex operations */
   LONG: 500
 } as const
+
+export type RendererPolicyLabel = 'Automatic (Recommended)' | 'Prefer GPU' | 'Compatibility'
+
+export interface VisibleRendererStatus {
+  effective: 'WebGL' | 'DOM' | 'Unavailable'
+  fallback: string
+  retryVisible: boolean
+}
+
+/** Open Settings directly to the renderer policy and semantic status surface. */
+export async function openRendererDiagnostics(window: Page): Promise<void> {
+  const modal = window.getByTestId('settings-modal')
+  if (!await modal.isVisible()) {
+    await window.getByTestId('settings-button').click()
+    await expect(modal).toBeVisible()
+  }
+  await window.getByTestId('settings-tab-diagnostics').click()
+  await expect(window.getByRole('radiogroup', { name: 'Terminal renderer policy' })).toBeVisible()
+}
+
+/** Select a canonical policy through its accessible native radio. */
+export async function selectRendererPolicy(
+  window: Page,
+  policy: RendererPolicyLabel,
+): Promise<void> {
+  const radio = window.getByRole('radio', { name: policy, exact: true })
+  await radio.check()
+  await expect(radio).toBeChecked()
+}
+
+/** Locate one visible Diagnostics row without inspecting xterm internals. */
+export function rendererDiagnosticRow(window: Page, terminalId: string): Locator {
+  return window
+    .getByRole('dialog', { name: 'Settings' })
+    .getByText(terminalId, { exact: true })
+    .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+}
+
+/** Read the public renderer status and Retry eligibility shown to the user. */
+export async function readVisibleRendererStatus(
+  window: Page,
+  terminalId: string,
+): Promise<VisibleRendererStatus> {
+  const row = rendererDiagnosticRow(window, terminalId)
+  await expect(row).toBeVisible()
+  const effective = await row
+    .getByText('Renderer', { exact: true })
+    .locator('xpath=following-sibling::dd[1]')
+    .textContent()
+  const fallback = await row
+    .getByText('Renderer fallback', { exact: true })
+    .locator('xpath=following-sibling::dd[1]')
+    .textContent()
+  const retryVisible = await row.getByRole('button', { name: `Retry GPU for ${terminalId}` }).isVisible()
+
+  if (effective !== 'WebGL' && effective !== 'DOM' && effective !== 'Unavailable') {
+    throw new Error('Diagnostics exposed an unknown renderer state')
+  }
+  return { effective, fallback: fallback?.trim() ?? '', retryVisible }
+}
+
+/** Activate a pane through the same user-visible surface used in production. */
+export async function activateTerminalPane(window: Page, terminalId: string): Promise<void> {
+  const pane = window.locator(`[data-terminal-id="${terminalId}"]`)
+  await expect(pane).toBeVisible()
+  await pane.click()
+}
 
 /**
  * Helper to add a new terminal (works whether terminals exist or not).

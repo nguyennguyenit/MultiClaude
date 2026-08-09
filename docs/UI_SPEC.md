@@ -192,10 +192,10 @@ App
 **Position**: Right edge on landscape (340px wide), bottom edge on portrait (full width)
 
 **Layout**:
-- Tab navigation: Appearance, Terminals, Notifications, Updates
+- Tab navigation: Appearance, Terminals, Notifications, Diagnostics, Agents & Integrations, Updates
 - Theme selector (color theme dropdown for all 5 VibeTerminal themes)
 - Notification settings (Telegram/Discord config)
-- Terminal render mode (Performance/Balanced/Quality)
+- Terminal renderer policy and live renderer status in Diagnostics
 - Terminal limit, default shell (Windows)
 - Update checker with progress bar
 - Save/Cancel buttons
@@ -207,6 +207,14 @@ App
 | Theme Mode | Light/Dark/System | System |
 
 **Source**: `src/renderer/components/settings/`
+
+**Terminal renderer policy** lives in Diagnostics, not Terminal Settings. One
+labelled native radio group offers `Automatic (Recommended)`, `Prefer GPU`, and
+`Compatibility`; the Compatibility description is “Disables WebGL for maximum
+compatibility.” Live rows display terminal ID, effective `WebGL`/`DOM`, closed
+fallback copy, and Retry GPU only for recoverable faults whose desired renderer
+is WebGL. The Settings modal disables the complete form and every modal-owned
+dismissal path while Save is pending.
 
 ## 5. Themes
 

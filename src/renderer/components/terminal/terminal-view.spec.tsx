@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { TerminalView } from './terminal-view'
+import { registerTerminalOutputHandler } from '../../utils/terminal-output-dispatcher'
 
 const terminalHook = vi.hoisted(() => ({
   initTerminal: vi.fn(),
@@ -16,7 +17,8 @@ const terminalHook = vi.hoisted(() => ({
   scrollToBottom: vi.fn(),
   getViewportSnapshot: vi.fn(() => ({ viewportY: null, isAtBottom: true })),
   terminalRef: { current: null },
-  containerRef: { current: null }
+  containerRef: { current: null },
+  sessionToken: Symbol('terminal-view-test-session')
 }))
 
 vi.mock('../../hooks/use-terminal', () => ({
@@ -68,5 +70,16 @@ describe('TerminalView activation render restore', () => {
     window.dispatchEvent(new Event('focus'))
 
     expect(terminalHook.restoreActiveRender).not.toHaveBeenCalled()
+  })
+
+  it('registers output delivery with the renderer session token', () => {
+    render(<TerminalView terminalId="term-1" isActive />)
+
+    expect(registerTerminalOutputHandler).toHaveBeenCalledWith(
+      'term-1',
+      expect.any(Function),
+      expect.any(Function),
+      terminalHook.sessionToken,
+    )
   })
 })

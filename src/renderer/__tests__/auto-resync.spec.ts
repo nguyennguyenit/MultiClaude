@@ -160,6 +160,40 @@ describe('terminal-lifecycle-dispatcher', () => {
     expect(cbAlive).toHaveBeenCalledTimes(1)
     expect(cbDead).not.toHaveBeenCalled()
   })
+
+  it('keeps a same-ID replacement when the old session unsubscribes late', () => {
+    attachTerminalLifecycleDispatcher(mockOnSystemResumed)
+    const oldToken = Symbol('old')
+    const newToken = Symbol('new')
+    const oldCallback = vi.fn()
+    const newCallback = vi.fn()
+    subscribeToSystemResume('term-1', oldToken, oldCallback)
+    subscribeToSystemResume('term-1', newToken, newCallback)
+
+    unsubscribeFromSystemResume('term-1', oldToken)
+    triggerSystemResumed()
+
+    expect(oldCallback).not.toHaveBeenCalled()
+    expect(newCallback).toHaveBeenCalledTimes(1)
+  })
+
+  it('continues fan-out and logs fixed copy when one handler throws', () => {
+    attachTerminalLifecycleDispatcher(mockOnSystemResumed)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const healthy = vi.fn()
+    subscribeToSystemResume('term-bad', Symbol('bad'), () => {
+      throw new Error('/private/renderer failure')
+    })
+    subscribeToSystemResume('term-good', Symbol('good'), healthy)
+
+    triggerSystemResumed()
+
+    expect(healthy).toHaveBeenCalledTimes(1)
+    expect(consoleError).toHaveBeenCalledWith(
+      '[lifecycle-dispatcher] System-resume handler failed.',
+    )
+    expect(consoleError).not.toHaveBeenCalledWith(expect.anything(), expect.anything())
+  })
 })
 
 // ────────────────────────────────────────────────────────────────────────────

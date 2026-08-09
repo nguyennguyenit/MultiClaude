@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Page } from '@playwright/test'
 import { test, expect, injectMockProject, addTerminal, WAIT_TIMES } from '../fixtures'
+import {
+  activateTerminalPane,
+  openRendererDiagnostics,
+  readVisibleRendererStatus,
+} from '../fixtures/electron-app'
 import { mockProjects } from '../fixtures/test-data'
 
 const isCI = process.env.CI === 'true'
@@ -11,6 +16,27 @@ const isCI = process.env.CI === 'true'
  * Validates fix for cursor not appearing after project switch.
  */
 test.describe('Project Switching - Cursor Display', () => {
+  async function writeMarker(page: Page, terminalId: string, marker: string): Promise<void> {
+    const characterCodes = [...marker].map(character => character.charCodeAt(0))
+    const octal = characterCodes.map(code => `\\${code.toString(8).padStart(3, '0')}`).join('')
+    await page.evaluate(({ id, windowsCommand, posixCommand }) => {
+      globalThis.window.electron.terminal.write(
+        id,
+        navigator.userAgent.includes('Windows') ? windowsCommand : posixCommand,
+      )
+    }, {
+      id: terminalId,
+      windowsCommand: `powershell -NoProfile -Command "[Console]::WriteLine([char[]](${characterCodes.join(',')}))"\r`,
+      posixCommand: `printf '${octal}\\n'\r`,
+    })
+  }
+
+  async function waitForSnapshotMarker(page: Page, terminalId: string, marker: string): Promise<void> {
+    await expect.poll(async () => page.evaluate(async ({ id, expected }) =>
+      (await globalThis.window.electron.terminal.getSnapshot(id)).ansi.includes(expected),
+    { id: terminalId, expected: marker }), { timeout: 10_000 }).toBe(true)
+  }
+
   async function getTerminalViewportMetricsByTerminalId(page: Page, terminalId: string): Promise<{
     scrollTop: number
     scrollHeight: number
@@ -176,7 +202,7 @@ test.describe('Project Switching - Cursor Display', () => {
     await expect(secondTab).toBeVisible()
     await secondTab.click()
 
-    // Wait for WebGL toggle + focus delay (60ms)
+    // Wait for renderer visibility and focus propagation.
     await window.waitForTimeout(100)
 
     // Verify state: activeProjectId should be second project
@@ -329,7 +355,7 @@ test.describe('Project Switching - Cursor Display', () => {
     await tabC.click()
     await tabA.click()
 
-    // Wait for all state updates and WebGL toggles
+    // Wait for all project and renderer visibility updates.
     await window.waitForTimeout(WAIT_TIMES.STANDARD)
 
     // Final state should be project A
@@ -608,5 +634,56 @@ test.describe('Project Switching - Cursor Display', () => {
     expect(rowFlexAfterReturn).toHaveLength(2)
     expect(rowFlexAfterReturn[0]).toBeCloseTo(rowFlexBeforeSwitch[0], 1)
     expect(rowFlexAfterReturn[1]).toBeCloseTo(rowFlexBeforeSwitch[1], 1)
+  })
+
+  test.skip(isCI, 'PTY-backed switch/output evidence requires a desktop Electron environment')
+  test('A->B->A preserves typed renderer status and exact-once canonical output', async ({ window }) => {
+    test.setTimeout(60_000)
+    const [projectA, projectB] = mockProjects.slice(0, 2)
+    await injectMockProject(window, [projectA, projectB])
+
+    await addTerminal(window)
+    const [terminalA] = await getProjectTerminalIds(window, projectA.id)
+    if (!terminalA) throw new Error('Expected a terminal in project A')
+    await activateTerminalPane(window, terminalA)
+    await writeMarker(window, terminalA, 'MC_SWITCH_A_913')
+    await waitForSnapshotMarker(window, terminalA, 'MC_SWITCH_A_913')
+
+    await window.getByTestId(`project-tab-${projectB.id}`).click()
+    await expect(window.getByRole('button', { name: '+ New Terminal' })).toBeVisible()
+    await addTerminal(window)
+    const [terminalB] = await getProjectTerminalIds(window, projectB.id)
+    if (!terminalB) throw new Error('Expected a terminal in project B')
+    await activateTerminalPane(window, terminalB)
+    await writeMarker(window, terminalB, 'MC_SWITCH_B_913')
+    await waitForSnapshotMarker(window, terminalB, 'MC_SWITCH_B_913')
+
+    await window.getByTestId(`project-tab-${projectA.id}`).click()
+    await activateTerminalPane(window, terminalA)
+    await writeMarker(window, terminalA, 'MC_SWITCH_A_RETURN_913')
+    await waitForSnapshotMarker(window, terminalA, 'MC_SWITCH_A_RETURN_913')
+
+    const snapshots = await window.evaluate(async ({ idA, idB }) => ({
+      a: (await globalThis.window.electron.terminal.getSnapshot(idA)).ansi,
+      b: (await globalThis.window.electron.terminal.getSnapshot(idB)).ansi,
+    }), { idA: terminalA, idB: terminalB })
+    const occurrences = (text: string, marker: string): number => text.split(marker).length - 1
+    expect(occurrences(snapshots.a, 'MC_SWITCH_A_913')).toBe(1)
+    expect(occurrences(snapshots.a, 'MC_SWITCH_A_RETURN_913')).toBe(1)
+    expect(occurrences(snapshots.b, 'MC_SWITCH_B_913')).toBe(1)
+
+    await openRendererDiagnostics(window)
+    for (const terminalId of [terminalA, terminalB]) {
+      await expect.poll(async () =>
+        (await readVisibleRendererStatus(window, terminalId)).effective
+      ).toMatch(/^(WebGL|DOM)$/)
+      const status = await readVisibleRendererStatus(window, terminalId)
+      expect([
+        'none',
+        'WebGL is unavailable in this environment.',
+        'WebGL could not start.',
+        'WebGL context lost.',
+      ]).toContain(status.fallback)
+    }
   })
 })

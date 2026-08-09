@@ -1,84 +1,96 @@
-/**
- * useTerminalWebGL — manages WebGL renderer lifecycle for a single xterm terminal.
- *
- * Responsibilities:
- *   - Load / unload WebglAddon based on shouldUseWebGL() result
- *   - Attach context-loss listener (calls onRefresh on GPU context loss)
- *   - Expose clearTextureAtlas() helper for other hooks
- *   - Subscribe to render-mode + Claude-mode store changes (three useEffects)
- *   - Expose reloadWebGLForTheme() — dispose + reload WebGL after theme change
- *   - Expose refreshTerminal() — full display refresh with snapshot replay
- *
- * Sub-hooks must NOT import from each other.  All orchestration lives in use-terminal.ts.
- */
-import { useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
-import type { Terminal as XTerm } from '@xterm/xterm'
+import type { IDisposable, Terminal as XTerm } from '@xterm/xterm'
 import type { TerminalSurface } from '../terminal/terminal-surface'
-import { useSettingsStore, useAppStore, useToastStore } from '../stores'
+import { useAppStore, useSettingsStore, useToastStore } from '../stores'
+import {
+  claimTerminalRendererSession,
+  registerTerminalRendererRetry,
+  releaseTerminalRendererSession,
+  setTerminalRendererStatus,
+} from '../stores/terminal-renderer-status-store'
 import {
   pauseAndBuffer,
   resumeAndFlush,
   resumeFromSnapshot,
 } from '../utils/terminal-output-dispatcher'
-import { subscribeToSystemResume, unsubscribeFromSystemResume } from '../utils/terminal-lifecycle-dispatcher'
+import {
+  resolveTerminalRenderer,
+  type RendererFallbackReason,
+} from '../utils/terminal-renderer-policy'
+import {
+  subscribeToSystemResume,
+  unsubscribeFromSystemResume,
+} from '../utils/terminal-lifecycle-dispatcher'
 
-// ── Per-terminal mutex ───────────────────────────────────────────────────────
-// Prevents concurrent snapshot replays (e.g. refresh + phase-4 auto-resync).
-// Map<terminalId, Promise<void>> — presence of key = lock is held.
-// Designed for phase-4 reuse: import snapshotReplayMutex and call isLocked() before
-// triggering auto-resync from powerMonitor/onSystemResumed.
-const snapshotReplayMutex = new Map<string, Promise<void>>()
+interface SnapshotReplayLock {
+  token: symbol
+  promise: Promise<void>
+}
+
+const snapshotReplayMutex = new Map<string, SnapshotReplayLock>()
+const legacyReplayTokens = new Map<string, symbol>()
+const REFRESH_DEBOUNCE = 100
+
+function getLegacyReplayToken(terminalId: string): symbol {
+  let token = legacyReplayTokens.get(terminalId)
+  if (!token) {
+    token = Symbol(`legacy-replay:${terminalId}`)
+    legacyReplayTokens.set(terminalId, token)
+  }
+  return token
+}
 
 export async function acquireSnapshotReplayLock(
   terminalId: string,
-  waitForExisting = false
+  tokenOrWait: symbol | boolean = false,
+  waitForExisting = false,
 ): Promise<(() => void) | null> {
+  const token = typeof tokenOrWait === 'symbol'
+    ? tokenOrWait
+    : getLegacyReplayToken(terminalId)
+  const shouldWait = typeof tokenOrWait === 'boolean' ? tokenOrWait : waitForExisting
+
   while (snapshotReplayMutex.has(terminalId)) {
-    if (!waitForExisting) return null
-    await snapshotReplayMutex.get(terminalId)
+    const existing = snapshotReplayMutex.get(terminalId)!
+    if (existing.token !== token) break
+    if (!shouldWait) return null
+    await existing.promise
   }
 
   let resolve!: () => void
-  const lock = new Promise<void>(resolveLock => { resolve = resolveLock })
+  const promise = new Promise<void>(resolveLock => { resolve = resolveLock })
+  const lock = { token, promise }
   snapshotReplayMutex.set(terminalId, lock)
   return () => {
-    if (snapshotReplayMutex.get(terminalId) === lock) {
-      snapshotReplayMutex.delete(terminalId)
-    }
+    if (snapshotReplayMutex.get(terminalId) === lock) snapshotReplayMutex.delete(terminalId)
     resolve()
   }
 }
 
-const REFRESH_DEBOUNCE = 100  // ms debounce for refreshTerminal()
+export function isSnapshotReplayLocked(terminalId: string): boolean {
+  return snapshotReplayMutex.has(terminalId)
+}
 
-/**
- * Determine if WebGL is allowed for this terminal based on settings only.
- *
- * Note: isActive/isHidden are accepted for API compatibility but intentionally
- * ignored in the allow decision. Once loaded, the WebGL addon stays alive across
- * terminal switches to avoid texture-atlas corruption caused by repeated
- * load/dispose cycles (observed as stretched/garbled text when switching panes).
- * Initial-load gating on isActive/isHidden happens in reconcileWebGL instead.
- */
-export function shouldUseWebGL(terminalId: string, _isActive?: boolean, _isHidden?: boolean): boolean {
-  void _isActive; void _isHidden
-  const { pendingSettings } = useSettingsStore.getState()
-  const terminal = useAppStore.getState().terminals.find(
-    candidate => candidate.id === terminalId
-  )
-  const requiresSafeRenderer =
-    terminal?.agentType === 'claude' ||
-    terminal?.agentType === 'codex' ||
-    terminal?.isClaudeMode === true
+function getRendererIntent(terminalId: string) {
+  const policy = useSettingsStore.getState().pendingSettings.terminalRendererPolicy
+  const terminal = useAppStore.getState().terminals.find(candidate => candidate.id === terminalId)
+  return resolveTerminalRenderer({
+    policy,
+    agentType: terminal?.agentType,
+    isClaudeMode: terminal?.isClaudeMode,
+  })
+}
 
-  if (requiresSafeRenderer && !pendingSettings.gpuRendererForClaudeTerminals) {
-    return false
-  }
-
-  const mode = pendingSettings.terminalRenderMode ?? 'balanced'
-  return mode !== 'performance'
+export function shouldUseWebGL(
+  terminalId: string,
+  _isActive?: boolean,
+  _isHidden?: boolean,
+): boolean {
+  void _isActive
+  void _isHidden
+  return getRendererIntent(terminalId).desired === 'webgl'
 }
 
 interface UseTerminalWebGLParams {
@@ -86,145 +98,112 @@ interface UseTerminalWebGLParams {
   surfaceRef?: RefObject<TerminalSurface | null>
   disposedRef: RefObject<boolean>
   terminalId: string
+  sessionToken?: symbol
   isActiveRef: RefObject<boolean>
   isHiddenRef: RefObject<boolean>
-  /** Called when WebGL context is lost — triggers a full display refresh */
-  onRefresh: (showNotification?: boolean) => void
-  /** Called after WebGL addon loads to repaint visible rows */
+  onRefresh?: (showNotification?: boolean) => void
   onRefreshVisibleRows: () => void
-  /** Called to refit terminal after a refresh */
   performFit: (restoreViewport?: boolean) => boolean
 }
 
 interface UseTerminalWebGLResult {
-  /** Reconcile the current WebGL state with shouldUseWebGL() result */
   reconcileWebGL: () => void
-  /** Clear texture atlas — useful before renderer transitions */
   clearTextureAtlas: () => void
-  /** Ref to the active WebGL addon (null when canvas renderer is active) */
   webglAddonRef: RefObject<WebglAddon | null>
-  /** True while WebGL addon is loading — visibility hook polls this before restoring scroll */
   webglLoadingRef: RefObject<boolean>
-  /** Dispose + reload WebGL after theme change (cursor color requires full reload) */
   reloadWebGLForTheme: () => void
-  /** Full display refresh via snapshot replay (debounced). showNotification defaults true. */
   refreshTerminal: (showNotification?: boolean) => void
+  disposeWebGL: () => void
 }
 
 interface SnapshotReplayParams {
   terminalId: string
+  sessionToken?: symbol
   terminalRef: RefObject<XTerm | null>
   surfaceRef?: RefObject<TerminalSurface | null>
   disposedRef: RefObject<boolean>
-  isActiveRef: RefObject<boolean>
-  isHiddenRef: RefObject<boolean>
+  isActiveRef?: RefObject<boolean>
+  isHiddenRef?: RefObject<boolean>
   clearTextureAtlas: () => void
-  webglAddonRef: RefObject<WebglAddon | null>
+  webglAddonRef?: RefObject<WebglAddon | null>
+  disposeWebGL?: () => void
   reconcileWebGL: () => void
   performFit: (restoreViewport?: boolean) => boolean
   silent: boolean
 }
 
-/**
- * Core snapshot replay sequence — hardened against B1/H4/H6/M8 failure modes.
- *
- * Sequence:
- *   mutex check → pauseAndBuffer → getSnapshot → (disposed check) →
- *   WebGL teardown → terminal.reset() → resize →
- *   write snapshot data → WebGL reload → performFit → SIGWINCH →
- *   resumeFromSnapshot(watermark) → toast
- *
- * Exported so phase-4 (powerMonitor auto-resync) can call it with silent:true.
- */
 export async function performSnapshotReplay(params: SnapshotReplayParams): Promise<void> {
   const {
     terminalId,
+    sessionToken,
     terminalRef,
     surfaceRef,
     disposedRef,
-    isActiveRef,
-    isHiddenRef,
     clearTextureAtlas,
     webglAddonRef,
+    disposeWebGL,
     reconcileWebGL,
     performFit,
     silent,
   } = params
-
-  const releaseLock = await acquireSnapshotReplayLock(terminalId)
+  const replayToken = sessionToken ?? getLegacyReplayToken(terminalId)
+  const releaseLock = await acquireSnapshotReplayLock(terminalId, replayToken)
   if (!releaseLock) return
 
   try {
-    // H4: buffer live output chunks while we reset+replay
-    pauseAndBuffer(terminalId)
-
-    // Canonical state is already maintained in the ordered main-process mirror.
-    // Refresh never replays the persisted raw tail.
-    const snap = await window.electron.terminal.getSnapshot(terminalId)
-
-    // M8: terminal destroyed while IPC was in flight
+    pauseAndBuffer(terminalId, sessionToken)
+    const snapshot = await window.electron.terminal.getSnapshot(terminalId)
     if (disposedRef.current || !terminalRef.current) {
-      resumeAndFlush(terminalId)
+      resumeAndFlush(terminalId, sessionToken)
       return
     }
 
-    const t = terminalRef.current
-
-    // Dispose WebGL before reset to avoid texture cache corruption
+    const terminal = terminalRef.current
     clearTextureAtlas()
-    try { webglAddonRef.current?.dispose() } catch { /* ignore */ }
-    webglAddonRef.current = null
+    if (disposeWebGL) {
+      disposeWebGL()
+    } else {
+      try { webglAddonRef?.current?.dispose() } catch { /* teardown is best-effort */ }
+      if (webglAddonRef) webglAddonRef.current = null
+    }
 
     if (surfaceRef?.current) {
-      await surfaceRef.current.replaceSnapshot(snap)
+      await surfaceRef.current.replaceSnapshot(snapshot)
     } else {
-      t.reset()
-      if (snap.cols > 0 && snap.rows > 0) t.resize(snap.cols, snap.rows)
-      if (snap.ansi) await new Promise<void>(resolve => t.write(snap.ansi, resolve))
+      terminal.reset()
+      if (snapshot.cols > 0 && snapshot.rows > 0) terminal.resize(snapshot.cols, snapshot.rows)
+      if (snapshot.ansi) {
+        await new Promise<void>(resolve => terminal.write(snapshot.ansi, resolve))
+      }
     }
 
-    // Reload WebGL after reset/write cycle
-    if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
-      try {
-        const addon = new WebglAddon()
-        webglAddonRef.current = addon
-        t.loadAddon(addon)
-        reconcileWebGL()
-      } catch (e) { console.warn('WebGL addon failed to load after snapshot replay:', e) }
+    if (disposedRef.current || terminalRef.current !== terminal) {
+      resumeAndFlush(terminalId, sessionToken)
+      return
     }
-
+    reconcileWebGL()
     const fitOk = performFit(false)
-
-    // SIGWINCH — makes CLI (vim, tmux, etc.) repaint at current dimensions
     try {
-      window.electron.terminal.resize(terminalId, t.cols, t.rows)
-    } catch { /* ignore — non-fatal */ }
-
-    resumeFromSnapshot(snap)
+      window.electron.terminal.resize(terminalId, terminal.cols, terminal.rows)
+    } catch { /* non-fatal */ }
+    resumeFromSnapshot(snapshot, sessionToken)
 
     if (!silent) {
-      try {
-        useToastStore.getState().addToast(
-          fitOk ? 'Terminal refreshed' : 'Terminal refreshed (pane hidden — retry when visible)',
-          'info'
-        )
-      } catch { /* ignore */ }
+      useToastStore.getState().addToast(
+        fitOk ? 'Terminal refreshed' : 'Terminal refreshed (pane hidden — retry when visible)',
+        'info',
+      )
     }
-  } catch (err) {
-    // Ensure buffer is always flushed even on error, then surface the error as a toast
-    resumeAndFlush(terminalId)
-    console.error('Terminal snapshot replay failed:', err)
-    try {
-      useToastStore.getState().addToast('Terminal refresh error — could not fetch snapshot', 'error')
-    } catch { /* ignore */ }
+  } catch {
+    resumeAndFlush(terminalId, sessionToken)
+    console.error('[terminal-renderer] Snapshot replay failed.')
+    useToastStore.getState().addToast(
+      'Terminal refresh error — could not fetch snapshot',
+      'error',
+    )
   } finally {
     releaseLock()
   }
-}
-
-/** Test helper: check if a replay is currently in progress for a terminal. */
-export function isSnapshotReplayLocked(terminalId: string): boolean {
-  return snapshotReplayMutex.has(terminalId)
 }
 
 export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWebGLResult {
@@ -235,157 +214,212 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
     terminalId,
     isActiveRef,
     isHiddenRef,
-    onRefresh,
     onRefreshVisibleRows,
     performFit,
   } = params
-
+  const localSessionTokenRef = useRef(Symbol(`renderer:${terminalId}`))
+  const sessionToken = params.sessionToken ?? localSessionTokenRef.current
   const webglAddonRef = useRef<WebglAddon | null>(null)
+  const contextLossDisposableRef = useRef<IDisposable | null>(null)
   const webglLoadingRef = useRef(false)
+  const queuedFrameRef = useRef<number | null>(null)
+  const generationRef = useRef(0)
+  const suppressedReasonRef = useRef<RendererFallbackReason | null>(null)
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Keep a stable ref to onRefresh so the context-loss handler always calls the latest version
-  const onRefreshRef = useRef(onRefresh)
-  useEffect(() => {
-    onRefreshRef.current = onRefresh
-  }, [onRefresh])
+  const publishStatus = useCallback((
+    effective: 'dom' | 'webgl',
+    fallbackReason: RendererFallbackReason | null,
+  ) => {
+    setTerminalRendererStatus(terminalId, sessionToken, { effective, fallbackReason })
+  }, [sessionToken, terminalId])
 
-  /**
-   * Attach context-loss listener via the public addon API.
-   * Wraps dispose() to also cleanup the listener.
-   */
-  const attachContextLostListener = useCallback((addon: WebglAddon) => {
-    const contextLossDisposable = addon.onContextLoss(() => {
-      console.warn('WebGL context lost, auto-refreshing terminal...')
-      onRefreshRef.current(true)  // Show notification on auto-refresh
-    })
-
-    const originalDispose = addon.dispose.bind(addon)
-    addon.dispose = () => {
-      contextLossDisposable.dispose()
-      originalDispose()
+  const invalidateQueuedLoad = useCallback(() => {
+    generationRef.current += 1
+    webglLoadingRef.current = false
+    if (queuedFrameRef.current !== null) {
+      cancelAnimationFrame(queuedFrameRef.current)
+      queuedFrameRef.current = null
     }
   }, [])
 
-  const clearTextureAtlas = useCallback(() => {
-    const terminal = terminalRef.current
-    if (!terminal || disposedRef.current) return
+  const disposeWebGL = useCallback(() => {
+    const addon = webglAddonRef.current
+    const lossDisposable = contextLossDisposableRef.current
+    webglAddonRef.current = null
+    contextLossDisposableRef.current = null
+    try { lossDisposable?.dispose() } catch { /* teardown is best-effort */ }
+    try { addon?.dispose() } catch { /* teardown is best-effort */ }
+  }, [])
 
-    try {
-      terminal.clearTextureAtlas()
-    } catch {
-      // Ignore atlas resets during initialization/teardown races
-    }
-  }, [terminalRef, disposedRef])
+  const clearTextureAtlas = useCallback(() => {
+    if (disposedRef.current || !terminalRef.current) return
+    try { terminalRef.current.clearTextureAtlas() } catch { /* initialization race */ }
+  }, [disposedRef, terminalRef])
 
   const reconcileWebGL = useCallback(() => {
-    if (disposedRef.current || !terminalRef.current || webglLoadingRef.current) return
+    const terminal = terminalRef.current
+    if (disposedRef.current || !terminal) return
+    const intent = getRendererIntent(terminalId)
 
-    const allowed = shouldUseWebGL(terminalId)
-    const hasWebGL = webglAddonRef.current !== null
+    if (intent.desired === 'dom') {
+      const hadWebGL = webglAddonRef.current !== null
+      invalidateQueuedLoad()
+      disposeWebGL()
+      publishStatus('dom', intent.fallbackReason)
+      if (hadWebGL) onRefreshVisibleRows()
+      return
+    }
+    if (suppressedReasonRef.current) {
+      publishStatus('dom', suppressedReasonRef.current)
+      return
+    }
+    if (webglAddonRef.current) {
+      publishStatus('webgl', null)
+      return
+    }
 
-    // Initial load is gated on active+visible to avoid eagerly allocating WebGL
-    // contexts for inactive terminals (browsers cap concurrent WebGL contexts).
-    // Once loaded, the addon stays alive across terminal switches — see
-    // shouldUseWebGL() docstring for rationale.
-    const shouldLoad = allowed && isActiveRef.current && !isHiddenRef.current
+    publishStatus('dom', null)
+    if (webglLoadingRef.current || !isActiveRef.current || isHiddenRef.current) return
+    webglLoadingRef.current = true
+    const generation = ++generationRef.current
+    const scheduledTerminal = terminal
 
-    if (shouldLoad && !hasWebGL) {
-      webglLoadingRef.current = true
-      requestAnimationFrame(() => {
-        if (disposedRef.current || !terminalRef.current) {
-          webglLoadingRef.current = false
+    queuedFrameRef.current = requestAnimationFrame(() => {
+      queuedFrameRef.current = null
+      const latestIntent = getRendererIntent(terminalId)
+      if (
+        generationRef.current !== generation
+        || disposedRef.current
+        || terminalRef.current !== scheduledTerminal
+        || latestIntent.desired !== 'webgl'
+        || suppressedReasonRef.current !== null
+        || !isActiveRef.current
+        || isHiddenRef.current
+      ) {
+        webglLoadingRef.current = false
+        return
+      }
+
+      let candidate: WebglAddon | null = null
+      let candidateLossDisposable: IDisposable | null = null
+      try {
+        if (typeof WebglAddon !== 'function') {
+          suppressedReasonRef.current = 'webgl-unavailable'
+          publishStatus('dom', 'webgl-unavailable')
           return
         }
-        try {
-          const webglAddon = new WebglAddon()
-          webglAddonRef.current = webglAddon
-          terminalRef.current.loadAddon(webglAddon)
-          attachContextLostListener(webglAddon)
+        candidate = new WebglAddon()
+        scheduledTerminal.loadAddon(candidate)
+        candidateLossDisposable = candidate.onContextLoss(() => {
+          if (webglAddonRef.current !== candidate || suppressedReasonRef.current) return
+          suppressedReasonRef.current = 'webgl-context-lost'
+          invalidateQueuedLoad()
+          disposeWebGL()
+          publishStatus('dom', 'webgl-context-lost')
           onRefreshVisibleRows()
-        } catch (e) {
-          console.warn('WebGL addon failed to load:', e)
+          performFit(false)
+        })
+        if (
+          generationRef.current !== generation
+          || disposedRef.current
+          || terminalRef.current !== scheduledTerminal
+          || getRendererIntent(terminalId).desired !== 'webgl'
+        ) {
+          candidateLossDisposable.dispose()
+          candidate.dispose()
+          return
         }
-        webglLoadingRef.current = false
-      })
-    } else if (!allowed && hasWebGL) {
-      try {
-        webglAddonRef.current?.dispose()
+        webglAddonRef.current = candidate
+        contextLossDisposableRef.current = candidateLossDisposable
+        publishStatus('webgl', null)
+        onRefreshVisibleRows()
       } catch {
-        // Ignore disposal errors
+        try { candidateLossDisposable?.dispose() } catch { /* best-effort */ }
+        try { candidate?.dispose() } catch { /* best-effort */ }
+        suppressedReasonRef.current = 'webgl-load-failed'
+        publishStatus('dom', 'webgl-load-failed')
+      } finally {
+        webglLoadingRef.current = false
       }
-      webglAddonRef.current = null
-      onRefreshVisibleRows()
+    })
+  }, [
+    disposedRef,
+    disposeWebGL,
+    invalidateQueuedLoad,
+    isActiveRef,
+    isHiddenRef,
+    onRefreshVisibleRows,
+    performFit,
+    publishStatus,
+    terminalId,
+    terminalRef,
+  ])
+
+  const retryGPU = useCallback((): boolean => {
+    const reason = suppressedReasonRef.current
+    if (reason !== 'webgl-load-failed' && reason !== 'webgl-context-lost') return false
+    if (disposedRef.current || getRendererIntent(terminalId).desired !== 'webgl') return false
+    suppressedReasonRef.current = null
+    invalidateQueuedLoad()
+    reconcileWebGL()
+    return true
+  }, [disposedRef, invalidateQueuedLoad, reconcileWebGL, terminalId])
+
+  useEffect(() => {
+    claimTerminalRendererSession(terminalId, sessionToken)
+    const unregisterRetry = registerTerminalRendererRetry(
+      terminalId,
+      sessionToken,
+      retryGPU,
+    )
+    reconcileWebGL()
+    return () => {
+      invalidateQueuedLoad()
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
+      unregisterRetry()
+      disposeWebGL()
+      releaseTerminalRendererSession(terminalId, sessionToken)
     }
-  }, [attachContextLostListener, disposedRef, isActiveRef, isHiddenRef, onRefreshVisibleRows, terminalId, terminalRef])
+  }, [
+    disposeWebGL,
+    invalidateQueuedLoad,
+    reconcileWebGL,
+    retryGPU,
+    sessionToken,
+    terminalId,
+  ])
 
-  // Subscribe to render-mode + GPU-override setting changes
-  useEffect(() => {
-    const unsubscribe = useSettingsStore.subscribe((state, prevState) => {
-      if (!terminalRef.current || disposedRef.current) return
-      const renderModeChanged =
-        state.pendingSettings.terminalRenderMode !== prevState.pendingSettings.terminalRenderMode
-      const claudeGpuOverrideChanged =
-        state.pendingSettings.gpuRendererForClaudeTerminals !== prevState.pendingSettings.gpuRendererForClaudeTerminals
-
-      if (!renderModeChanged && !claudeGpuOverrideChanged) return
-
+  useEffect(() => useSettingsStore.subscribe((state, previous) => {
+    if (
+      state.pendingSettings.terminalRendererPolicy
+      !== previous.pendingSettings.terminalRendererPolicy
+    ) {
       reconcileWebGL()
-    })
-    return unsubscribe
-  }, [disposedRef, reconcileWebGL, terminalRef])
+    }
+  }), [reconcileWebGL])
 
-  // Subscribe to Claude-mode changes (affects GPU usage per terminal)
-  useEffect(() => {
-    const unsubscribe = useAppStore.subscribe((state, prevState) => {
-      if (!terminalRef.current || disposedRef.current) return
-
-      const nextClaudeMode = state.terminals.find(t => t.id === terminalId)?.isClaudeMode ?? false
-      const prevClaudeMode = prevState.terminals.find(t => t.id === terminalId)?.isClaudeMode ?? false
-
-      if (nextClaudeMode === prevClaudeMode) return
-
+  useEffect(() => useAppStore.subscribe((state, previous) => {
+    const current = state.terminals.find(terminal => terminal.id === terminalId)
+    const prior = previous.terminals.find(terminal => terminal.id === terminalId)
+    if (
+      current?.agentType !== prior?.agentType
+      || current?.isClaudeMode !== prior?.isClaudeMode
+    ) {
       reconcileWebGL()
-    })
-    return unsubscribe
-  }, [disposedRef, reconcileWebGL, terminalId, terminalRef])
+    }
+  }), [reconcileWebGL, terminalId])
 
-  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  /**
-   * Dispose + reload WebGL after a theme change (cursor color requires full reload).
-   * When no WebGL is active, simply refreshes the canvas renderer.
-   */
   const reloadWebGLForTheme = useCallback(() => {
-    const t = terminalRef.current
-    if (!t || disposedRef.current) return
+    const terminal = terminalRef.current
+    if (!terminal || disposedRef.current) return
     clearTextureAtlas()
-    if (webglAddonRef.current) {
-      try { webglAddonRef.current.dispose() } catch { /* ignore */ }
-      webglAddonRef.current = null
-      t.refresh(0, t.rows - 1)
-      if (shouldUseWebGL(terminalId, isActiveRef.current, isHiddenRef.current)) {
-        try {
-          const addon = new WebglAddon()
-          webglAddonRef.current = addon
-          t.loadAddon(addon)
-          reconcileWebGL()
-        } catch (e) { console.warn('WebGL addon failed to load:', e) }
-      }
-    } else {
-      t.refresh(0, t.rows - 1)
-    }
-  }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, reconcileWebGL, terminalId, terminalRef, webglAddonRef])
+    const hadWebGL = webglAddonRef.current !== null
+    if (hadWebGL) disposeWebGL()
+    terminal.refresh(0, terminal.rows - 1)
+    reconcileWebGL()
+  }, [clearTextureAtlas, disposedRef, disposeWebGL, reconcileWebGL, terminalRef])
 
-  /**
-   * Full display refresh via snapshot replay.
-   * Fetches a headless PTY snapshot from the backend, resets xterm, and replays
-   * the snapshot data — restoring the visible terminal state after a GPU context
-   * loss, lid-wake, or explicit user refresh.
-   *
-   * Debounced to absorb rapid context-loss bursts.
-   * Delegates to performSnapshotReplay() which holds the per-terminal mutex,
-   * buffers live output during replay (H4), and handles disposal guard (M8).
-   */
   const refreshTerminal = useCallback((showNotification = true) => {
     if (disposedRef.current || !terminalRef.current) return
     if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
@@ -393,54 +427,65 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
       if (disposedRef.current || !terminalRef.current) return
       void performSnapshotReplay({
         terminalId,
+        sessionToken,
         terminalRef,
         surfaceRef,
         disposedRef,
-        isActiveRef,
-        isHiddenRef,
         clearTextureAtlas,
-        webglAddonRef,
+        disposeWebGL,
         reconcileWebGL,
         performFit,
         silent: !showNotification,
       })
     }, REFRESH_DEBOUNCE)
-  }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, performFit, reconcileWebGL, surfaceRef, terminalId, terminalRef, webglAddonRef])
+  }, [
+    clearTextureAtlas,
+    disposedRef,
+    disposeWebGL,
+    performFit,
+    reconcileWebGL,
+    sessionToken,
+    surfaceRef,
+    terminalId,
+    terminalRef,
+  ])
 
-  // Phase 4: subscribe to system-resume lifecycle events.
-  // Triggers silent snapshot replay (no toast) on lid-wake, mirroring the same
-  // path as the explicit refresh button but with silent=true.
-  // snapshotReplayMutex inside performSnapshotReplay() coalesces concurrent fires.
   useEffect(() => {
-    subscribeToSystemResume(terminalId, () => {
+    subscribeToSystemResume(terminalId, sessionToken, () => {
       if (disposedRef.current || !terminalRef.current) return
       void performSnapshotReplay({
         terminalId,
+        sessionToken,
         terminalRef,
         surfaceRef,
         disposedRef,
-        isActiveRef,
-        isHiddenRef,
         clearTextureAtlas,
-        webglAddonRef,
+        disposeWebGL,
         reconcileWebGL,
         performFit,
         silent: true,
       })
     })
-    return () => unsubscribeFromSystemResume(terminalId)
+    return () => unsubscribeFromSystemResume(terminalId, sessionToken)
   }, [
+    clearTextureAtlas,
+    disposedRef,
+    disposeWebGL,
+    performFit,
+    reconcileWebGL,
+    sessionToken,
+    surfaceRef,
     terminalId,
     terminalRef,
-    surfaceRef,
-    disposedRef,
-    isActiveRef,
-    isHiddenRef,
-    clearTextureAtlas,
-    webglAddonRef,
-    reconcileWebGL,
-    performFit,
   ])
 
-  return { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal }
+  return {
+    reconcileWebGL,
+    clearTextureAtlas,
+    webglAddonRef,
+    webglLoadingRef,
+    reloadWebGLForTheme,
+    refreshTerminal,
+    disposeWebGL,
+  }
 }

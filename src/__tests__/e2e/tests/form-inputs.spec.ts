@@ -153,20 +153,18 @@ test.describe('Form Inputs', () => {
       await expect(dracula).toHaveAttribute('aria-pressed', 'true')
     })
 
-    test('render mode buttons change selection', async ({ window }) => {
-      await window.locator('[data-testid="settings-tab-terminals"]').click()
-      const renderingCard = window
-        .locator('p:has-text("Rendering Mode")')
-        .locator('xpath=ancestor::div[contains(@class,"settings-card")][1]')
-      const performanceBtn = renderingCard.getByRole('button', { name: /Performance/i })
-      const balancedBtn = renderingCard.getByRole('button', { name: /Balanced/i })
+    test('renderer policy radios support keyboard selection', async ({ window }) => {
+      await window.locator('[data-testid="settings-tab-diagnostics"]').click()
+      const group = window.getByRole('radiogroup', { name: 'Terminal renderer policy' })
+      const automatic = group.getByRole('radio', { name: 'Automatic (Recommended)', exact: true })
+      const preferGpu = group.getByRole('radio', { name: 'Prefer GPU', exact: true })
 
-      await performanceBtn.click()
-      await expect(performanceBtn).toHaveAttribute('aria-pressed', 'true')
+      await automatic.focus()
+      await automatic.press('ArrowDown')
 
-      await balancedBtn.click()
-      await expect(balancedBtn).toHaveAttribute('aria-pressed', 'true')
-      await expect(performanceBtn).toHaveAttribute('aria-pressed', 'false')
+      await expect(preferGpu).toBeChecked()
+      await expect(automatic).not.toBeChecked()
+      await expect(window.getByTestId('settings-save-button')).toBeEnabled()
     })
   })
 })

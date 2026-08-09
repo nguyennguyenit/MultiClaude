@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import process from 'node:process'
 import test from 'node:test'
 
 import {
   aggregateCanonicalEvidence,
+  attestSingleSoakEvidence,
   evaluateMemoryAcceptance,
+  createProfileDirectoryPlan,
+  evidenceExecutableIdentifier,
   parseSoakArguments,
   readSingleFlag,
   summarizeAttributionSamples,
@@ -11,6 +18,8 @@ import {
   summarizeSteadyStateTrend,
   summarizeTrendWindow,
   validateTerminalEvidence,
+  validateRendererEvidence,
+  workspaceRelativeEvidenceSource,
 } from './packaged-terminal-soak-lib.mjs'
 
 test('aggregateCanonicalEvidence sums multi-terminal snapshot metadata and rejects invalid values', () => {
@@ -38,7 +47,147 @@ test('readSingleFlag returns one string value and rejects ambiguous repeats', ()
 test('parseSoakArguments accepts bounded pane counts and duration', () => {
   assert.deepEqual(
     parseSoakArguments(['--pane-counts=1,4,9', '--duration-seconds=1800', '--sample-interval-ms=5000']),
-    { paneCounts: [1, 4, 9], durationSeconds: 1800, sampleIntervalMs: 5000, canonicalIntervalSeconds: 0 }
+    {
+      paneCounts: [1, 4, 9],
+      durationSeconds: 1800,
+      sampleIntervalMs: 5000,
+      canonicalIntervalSeconds: 0,
+      rendererPolicy: 'automatic',
+      profileDirectory: null,
+      settingsOperation: null,
+    }
+  )
+})
+
+test('parseSoakArguments accepts closed renderer policy, explicit profile, and settings operation', () => {
+  const profileDirectory = path.resolve('/tmp/multiclaude-explicit-profile')
+  assert.deepEqual(parseSoakArguments([
+    '--pane-counts=4',
+    '--renderer-policy=safe-dom',
+    `--profile-dir=${profileDirectory}`,
+    '--settings-operation=observe',
+  ]), {
+    paneCounts: [4],
+    durationSeconds: 30,
+    sampleIntervalMs: 5000,
+    canonicalIntervalSeconds: 0,
+    rendererPolicy: 'safe-dom',
+    profileDirectory,
+    settingsOperation: 'observe',
+  })
+  assert.throws(() => parseSoakArguments(['--renderer-policy=quality']), /renderer-policy/)
+  assert.throws(() => parseSoakArguments(['--profile-dir=relative']), /absolute path/)
+  assert.throws(() => parseSoakArguments([`--profile-dir=${path.parse(process.cwd()).root}`]), /filesystem root/)
+  assert.throws(
+    () => parseSoakArguments([`--profile-dir=${profileDirectory}`, '--pane-counts=1,4']),
+    /exactly one pane count/,
+  )
+  assert.throws(() => parseSoakArguments(['--settings-operation=delete']), /observe or reset/)
+})
+
+test('parseSoakArguments rejects broad or workspace-overlapping explicit profiles', (t) => {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'multiclaude-profile-guard-'))
+  const workspaceLink = path.join(temporaryDirectory, 'workspace-link')
+  fs.symlinkSync(process.cwd(), workspaceLink, 'dir')
+  t.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }))
+
+  for (const unsafePath of [
+    os.homedir(),
+    path.dirname(os.homedir()),
+    process.cwd(),
+    path.dirname(process.cwd()),
+    path.join(process.cwd(), 'profile-data'),
+    os.tmpdir(),
+    ...(process.platform === 'win32' ? [] : ['/tmp', '/private/tmp', '/var/tmp']),
+    workspaceLink,
+  ]) {
+    assert.throws(
+      () => parseSoakArguments([`--profile-dir=${unsafePath}`, '--pane-counts=1']),
+      /dedicated directory/,
+    )
+  }
+})
+
+test('explicit profile plans are caller-owned while generated profiles are cleaned up', () => {
+  const explicit = path.resolve('/tmp/multiclaude-explicit-profile')
+  assert.deepEqual(createProfileDirectoryPlan({
+    profileDirectory: explicit,
+    paneCount: 1,
+    makeTemporaryDirectory: () => assert.fail('must not allocate a temporary profile'),
+  }), { profileDirectory: explicit, cleanup: false })
+  assert.deepEqual(createProfileDirectoryPlan({
+    profileDirectory: null,
+    paneCount: 9,
+    makeTemporaryDirectory: prefix => `/tmp/${prefix}owned`,
+  }), { profileDirectory: '/tmp/multiclaude-packaged-soak-9-owned', cleanup: true })
+})
+
+test('validateRendererEvidence accepts typed fallback and rejects orphans, arbitrary fields, and policy mismatch', () => {
+  assert.equal(validateRendererEvidence({
+    terminalIds: ['t1', 't2'],
+    policy: 'prefer-gpu',
+    statuses: [
+      { terminalId: 't1', effective: 'webgl', fallbackReason: 'none' },
+      { terminalId: 't2', effective: 'dom', fallbackReason: 'webgl-load-failed' },
+    ],
+  }).ok, true)
+
+  const failed = validateRendererEvidence({
+    terminalIds: ['t1'],
+    policy: 'safe-dom',
+    statuses: [
+      { terminalId: 'orphan', effective: 'webgl', fallbackReason: 'raw driver error', title: 'SECRET' },
+    ],
+  })
+  assert.equal(failed.ok, false)
+  assert.match(failed.failures.join(' '), /unsupported fields|not live|missing renderer status/)
+  assert.doesNotMatch(JSON.stringify(failed), /SECRET|driver error/)
+})
+
+test('attestSingleSoakEvidence rejects failures, substitutions, and multi-result documents', () => {
+  const valid = {
+    environment: { rendererPolicy: 'automatic', paneCounts: [4] },
+    results: [{ paneCount: 4 }],
+  }
+  assert.equal(attestSingleSoakEvidence(valid, {
+    expectedPolicy: 'automatic',
+    expectedPaneCount: 4,
+  }).ok, true)
+
+  for (const evidence of [
+    { ...valid, failure: { code: 'run-failed' } },
+    { ...valid, results: [{ paneCount: 4 }, { paneCount: 9 }] },
+    { ...valid, environment: { rendererPolicy: 'safe-dom', paneCounts: [4] } },
+    { ...valid, environment: { rendererPolicy: 'automatic', paneCounts: [9] } },
+  ]) {
+    assert.equal(attestSingleSoakEvidence(evidence, {
+      expectedPolicy: 'automatic',
+      expectedPaneCount: 4,
+    }).ok, false)
+  }
+})
+
+test('workspaceRelativeEvidenceSource emits no absolute or user-specific source path', () => {
+  const workspace = path.resolve('/workspace/multiclaude')
+  assert.equal(
+    workspaceRelativeEvidenceSource('/workspace/multiclaude/plans/report.json', workspace),
+    'plans/report.json',
+  )
+  assert.throws(
+    () => workspaceRelativeEvidenceSource('/Users/private/report.json', workspace),
+    /inside the workspace/,
+  )
+})
+
+test('evidenceExecutableIdentifier redacts executables outside the workspace', () => {
+  const workspace = path.resolve('/workspace/multiclaude')
+  assert.equal(
+    evidenceExecutableIdentifier('/workspace/multiclaude/release/MultiClaude', workspace),
+    'release/MultiClaude',
+  )
+  assert.equal(
+    evidenceExecutableIdentifier('/tmp/private-build/MultiClaude', workspace),
+    'external-artifact/MultiClaude',
   )
 })
 

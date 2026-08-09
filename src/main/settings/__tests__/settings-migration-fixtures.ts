@@ -9,6 +9,32 @@ export interface SettingsMigrationFixture {
 
 export const SETTINGS_MIGRATION_FIXTURES: readonly SettingsMigrationFixture[] = [
   {
+    name: 'legacy compatibility renderer selection',
+    payload: {
+      settingsSchemaVersion: 1,
+      terminalRenderMode: 'performance',
+      gpuRendererForClaudeTerminals: true,
+    },
+    preserved: {
+      settingsSchemaVersion: 2,
+      terminalRendererPolicy: 'safe-dom',
+    },
+    legacyKeys: ['terminalRenderMode', 'gpuRendererForClaudeTerminals'],
+  },
+  {
+    name: 'legacy quality renderer selection',
+    payload: {
+      settingsSchemaVersion: 1,
+      terminalRenderMode: 'quality',
+      gpuRendererForClaudeTerminals: false,
+    },
+    preserved: {
+      settingsSchemaVersion: 2,
+      terminalRendererPolicy: 'prefer-gpu',
+    },
+    legacyKeys: ['terminalRenderMode', 'gpuRendererForClaudeTerminals'],
+  },
+  {
     name: 'supported appearance and terminal selections',
     payload: {
       themeMode: 'system',

@@ -69,6 +69,7 @@ interface UseTerminalInitParams {
   disposedRef: RefObject<boolean>
   containerRef: RefObject<HTMLDivElement | null>
   terminalId: string
+  sessionToken: symbol
   initialOutput?: string
   initialViewportY?: number | null
   isActiveRef: RefObject<boolean>
@@ -102,6 +103,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     disposedRef,
     containerRef,
     terminalId,
+    sessionToken,
     initialOutput,
     initialViewportY = null,
     isActiveRef,
@@ -148,7 +150,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     // "jump" as cursor moves / lines are cleared / prompt reprints. Buffering
     // the live chunks until after snapshot write guarantees a single clean
     // paint — any post-snapshot bytes are flushed via resumeAndFlush() below.
-    pauseAndBuffer(terminalId)
+    pauseAndBuffer(terminalId, sessionToken)
 
     const terminal = new XTerm({
       cursorBlink: true,
@@ -370,7 +372,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
 
     // ── Deferred initialisation (WebGL, fit, restore) ────────────────────────
     setTimeout(() => {
-      if (disposedRef.current || !terminalRef.current) return
+      if (disposedRef.current || terminalRef.current !== terminal) return
 
       // Conditionally load WebGL — delegated to reconcileWebGL which handles
       // shouldUseWebGL(), addon construction, and context-loss listener setup
@@ -383,15 +385,14 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       }
 
       const restoreInitialViewport = () => {
-        if (disposedRef.current || !terminalRef.current) return
+        if (disposedRef.current || terminalRef.current !== terminal) return
         if (initialViewportYRef.current !== null && initialViewportYRef.current >= 0) {
-          const terminal = terminalRef.current
           const targetViewportY = initialViewportYRef.current
           withInstantTerminalScroll(terminal, () => {
             terminal.scrollToLine(targetViewportY)
           })
         }
-        scrollMachineRef.current.savedViewportY = terminalRef.current.buffer.active.viewportY
+        scrollMachineRef.current.savedViewportY = terminal.buffer.active.viewportY
         syncScrollPosition(false)
       }
 
@@ -402,32 +403,32 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       // reflects the post-SIGWINCH headless state, the flush is typically a
       // no-op or a small trailing delta — not a full replay.
       const finishInit = () => {
-        if (disposedRef.current) return
-        resumeAndFlush(terminalId)
+        if (disposedRef.current || terminalRef.current !== terminal) return
+        resumeAndFlush(terminalId, sessionToken)
       }
 
       const hydrateFromCanonicalSnapshot = async () => {
-        const releaseLock = await acquireSnapshotReplayLock(terminalId, true)
+        const releaseLock = await acquireSnapshotReplayLock(terminalId, sessionToken, true)
         if (!releaseLock) return
         try {
           const snap = await window.electron.terminal.getSnapshot(terminalId)
-          if (disposedRef.current || !terminalRef.current) return
+          if (disposedRef.current || terminalRef.current !== terminal) return
           const hydrationData = snap.ansi || initialOutputRef.current || ''
           if (hydrationData) {
-            await (surfaceRef.current?.write(hydrationData)
+            await (surface.write(hydrationData)
               ?? new Promise<void>(resolve => terminal.write(hydrationData, resolve)))
           }
-          if (disposedRef.current || !terminalRef.current) return
+          if (disposedRef.current || terminalRef.current !== terminal) return
           requestAnimationFrame(restoreInitialViewport)
-          resumeFromSnapshot(snap)
+          resumeFromSnapshot(snap, sessionToken)
         } catch {
-          if (disposedRef.current || !terminalRef.current) return
+          if (disposedRef.current || terminalRef.current !== terminal) return
           const fallback = initialOutputRef.current
           if (fallback) {
-            await (surfaceRef.current?.write(fallback)
+            await (surface.write(fallback)
               ?? new Promise<void>(resolve => terminal.write(fallback, resolve)))
           }
-          if (disposedRef.current || !terminalRef.current) return
+          if (disposedRef.current || terminalRef.current !== terminal) return
           requestAnimationFrame(restoreInitialViewport)
           finishInit()
         } finally {
@@ -560,6 +561,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     surfaceRef,
     fitAddonRef,
     terminalId,
+    sessionToken,
     isActiveRef,
     isHiddenRef,
     scrollMachineRef,

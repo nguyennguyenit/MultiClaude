@@ -264,13 +264,13 @@ test.describe('Settings Modal', () => {
  * Terminal UI Style E2E tests.
  * Tests terminal style toggle, color presets, fonts, and border options.
  */
-test.describe('Terminal Settings', () => {
+test.describe('Terminal and renderer settings', () => {
   test.beforeEach(async ({ window }) => {
     await injectMockProject(window, [mockProject])
     await window.waitForTimeout(200)
   })
 
-  test('should show rendering mode options in terminal settings', async ({ window }) => {
+  test('keeps renderer policy out of Terminal Settings', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
@@ -278,67 +278,82 @@ test.describe('Terminal Settings', () => {
     await window.locator('[data-testid="settings-tab-terminals"]').click()
     await window.waitForTimeout(200)
 
-    await expect(window.getByText('Rendering Mode')).toBeVisible()
-    await expect(window.getByRole('button', { name: /Performance/i })).toBeVisible()
-    await expect(window.getByRole('button', { name: /Balanced/i })).toBeVisible()
-    await expect(window.getByRole('button', { name: /Quality/i })).toBeVisible()
+    await expect(window.getByText('Rendering Mode', { exact: true })).toHaveCount(0)
+    await expect(window.getByText('Use GPU renderer for Claude terminals', { exact: true })).toHaveCount(0)
+    await expect(window.getByRole('radio', { name: 'Automatic (Recommended)' })).toHaveCount(0)
   })
 
-  test('should switch terminal render mode to quality', async ({ window }) => {
+  test('shows canonical policy copy and accessible radios in Diagnostics', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.locator('[data-testid="settings-tab-diagnostics"]').click()
     await window.waitForTimeout(200)
 
-    const renderingCard = window
-      .locator('p:has-text("Rendering Mode")')
-      .locator('xpath=ancestor::div[contains(@class,"settings-card")][1]')
-    const saveButton = window.locator('[data-testid="settings-save-button"]')
-
-    await window.getByRole('button', { name: /Quality/i }).click()
-    await window.waitForTimeout(300)
-
-    await expect(renderingCard.locator('span').first()).toHaveText(/quality/i)
-    await expect(saveButton).toBeEnabled()
+    const group = window.getByRole('radiogroup', { name: 'Terminal renderer policy' })
+    await expect(group).toBeVisible()
+    await expect(group.getByRole('radio', { name: 'Automatic (Recommended)', exact: true })).toBeChecked()
+    await expect(group.getByRole('radio', { name: 'Prefer GPU', exact: true })).toBeVisible()
+    await expect(group.getByRole('radio', { name: 'Compatibility', exact: true })).toBeVisible()
+    await expect(window.getByText('WebGL for regular shells; safer non-WebGL rendering for Claude and Codex.')).toBeVisible()
+    await expect(window.getByText('Attempts WebGL for all terminals and falls back automatically.')).toBeVisible()
+    await expect(window.getByText('Disables WebGL for maximum compatibility.')).toBeVisible()
   })
 
-  test('should disable Claude GPU override in performance mode', async ({ window }) => {
+  test('Cancel restores the saved renderer policy', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.locator('[data-testid="settings-tab-diagnostics"]').click()
     await window.waitForTimeout(200)
 
-    await window.getByRole('button', { name: /Performance/i }).click()
-    await window.waitForTimeout(300)
+    await window.getByRole('radio', { name: 'Compatibility', exact: true }).check()
+    await expect(window.getByTestId('settings-save-button')).toBeEnabled()
+    await window.getByTestId('settings-cancel-button').click()
+    await expect(window.getByTestId('settings-modal')).not.toBeVisible()
 
-    const gpuToggle = window.locator('[role="switch"]').first()
-    await expect(window.getByText('GPU unavailable')).toBeVisible()
-    await expect(gpuToggle).toBeDisabled()
+    await window.getByTestId('settings-button').click()
+    await window.getByTestId('settings-tab-diagnostics').click()
+    await expect(window.getByRole('radio', { name: 'Automatic (Recommended)', exact: true })).toBeChecked()
   })
 
-  test('should allow Claude GPU override in balanced mode', async ({ window }) => {
+  test('saves the canonical policy and restores it after reload', async ({ window }) => {
     const settingsButton = window.locator('[data-testid="settings-button"]')
     await settingsButton.click()
     await window.waitForTimeout(300)
 
-    await window.locator('[data-testid="settings-tab-terminals"]').click()
+    await window.locator('[data-testid="settings-tab-diagnostics"]').click()
     await window.waitForTimeout(200)
 
-    await window.getByRole('button', { name: /Performance/i }).click()
-    await window.waitForTimeout(200)
-    await window.getByRole('button', { name: /Balanced/i }).click()
-    await window.waitForTimeout(300)
+    await window.getByRole('radio', { name: 'Prefer GPU', exact: true }).check()
+    await window.getByTestId('settings-save-button').click()
+    await expect(window.getByTestId('settings-modal')).not.toBeVisible()
 
-    const gpuToggle = window.locator('[role="switch"]').first()
-    const initialState = await gpuToggle.getAttribute('aria-checked')
-    await expect(gpuToggle).toBeEnabled()
-    await gpuToggle.click()
+    const savedPolicy = await window.evaluate(async () =>
+      (await globalThis.window.electron.settings.get()).terminalRendererPolicy
+    )
+    expect(savedPolicy).toBe('prefer-gpu')
 
-    await expect(gpuToggle).toHaveAttribute('aria-checked', initialState === 'true' ? 'false' : 'true')
+    await window.reload()
+    await window.waitForLoadState('domcontentloaded')
+    await injectMockProject(window, [mockProject])
+    await window.getByTestId('settings-button').click()
+    await window.getByTestId('settings-tab-diagnostics').click()
+    await expect(window.getByRole('radio', { name: 'Prefer GPU', exact: true })).toBeChecked()
+  })
+
+  test('main sanitizes a non-canonical renderer policy', async ({ window }) => {
+    const canonical = await window.evaluate(async () =>
+      globalThis.window.electron.settings.set({
+        terminalRendererPolicy: 'retired-quality',
+      } as never)
+    )
+
+    expect(canonical.terminalRendererPolicy).toBe('automatic')
+    const saved = await window.evaluate(async () => globalThis.window.electron.settings.get())
+    expect(saved.terminalRendererPolicy).toBe('automatic')
   })
 
   test('should update max terminal preset badge', async ({ window }) => {
@@ -397,34 +412,4 @@ test.describe('Terminal Settings', () => {
     await expect(limitCard.locator('span').first()).toHaveText('12 max')
   })
 
-  test('should save and persist terminal settings', async ({ window }) => {
-    const settingsButton = window.locator('[data-testid="settings-button"]')
-    await settingsButton.click()
-    await window.waitForTimeout(300)
-
-    await window.locator('[data-testid="settings-tab-terminals"]').click()
-    await window.waitForTimeout(200)
-
-    await window.getByRole('button', { name: /Quality/i }).click()
-    await window.waitForTimeout(300)
-
-    const saveButton = window.locator('[data-testid="settings-save-button"]')
-    await expect(saveButton).toBeEnabled()
-    await saveButton.click()
-    await window.waitForTimeout(300)
-
-    const modal = window.locator('[data-testid="settings-modal"]')
-    await expect(modal).not.toBeVisible()
-
-    const savedSettings = await window.evaluate(() =>
-      (globalThis as typeof globalThis & {
-        electron: {
-          settings: {
-            get: () => Promise<{ terminalRenderMode: string }>
-          }
-        }
-      }).electron.settings.get()
-    )
-    expect(savedSettings.terminalRenderMode).toBe('quality')
-  })
 })

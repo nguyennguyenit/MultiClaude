@@ -63,18 +63,18 @@ MultiClaude v3.1.0-beta.1 uses the VibeTerminal aesthetic: a minimal, terminal-f
 
 **Note**: Escape key handling is managed by `shortcut-utils.ts` to prevent leakage during project switching.
 
-### Terminal Rendering Modes UI
+### Terminal Renderer Policy UI
 
-Three preset modes (Settings > Terminals > Rendering Mode):
-- **⚡ Performance**: No WebGL, best for 9+ terminals, lower GPU load
-- **⚖️ Balanced** (default): WebGL on active terminal only, balanced experience
-- **✨ Quality**: WebGL always on, best visual clarity
+Settings > Diagnostics owns one keyboard-operable radio group:
 
-**Claude-safe Mode** (Experimental):
-- Badge shows current GPU state: "GPU unavailable" (Performance) | "Claude-safe mode" (safe) | "Claude follows mode" (experimental)
-- When disabled: Claude terminals always use canvas renderer (safer)
-- When enabled: Claude terminals use selected rendering mode (experimental, may have rendering issues)
-- Toggle disabled in Performance mode (GPU off globally)
+- **Automatic (Recommended)**: WebGL for regular shells; safer non-WebGL rendering for Claude and Codex.
+- **Prefer GPU**: attempts WebGL for all terminals and falls back automatically.
+- **Compatibility**: Disables WebGL for maximum compatibility.
+
+Preference and effective state remain separate. Each live terminal row uses its
+ID as the label, displays `WebGL` or `DOM` with fixed fallback copy, and shows
+Retry GPU only for recoverable terminal-local faults. Do not display title,
+cwd, command, transcript, raw error, or GPU/device data.
 
 ### Element Styling Guidelines
 

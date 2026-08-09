@@ -27,7 +27,7 @@ Built for developers who want the speed of Claude Code in a local terminal, but 
 - **Provider-Neutral Agent Insights**: The managed-agent boundary supports Claude and Codex projections, while the UI exposes only available usage, tool, compaction, and reasoning capabilities with explicit source, precision, confidence, and unavailable states.
 - **Git + GitHub Inside the App**: Visual git status, staging, branches, stash, history, GitHub auth via `gh`, remote repo creation, plus issue and pull request views.
 - **Notification Pipeline for Agent Runs**: Detect complete, failed, and review-needed output patterns, then route alerts through native OS notifications, Telegram bots, or Discord webhooks; multi-agent detection included.
-- **Desktop-First Terminal UX**: Native PTY terminals with configurable rendering modes, drag-and-drop file paths with thumbnail preview strip (80×60 tiles), clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
+- **Desktop-First Terminal UX**: Native PTY terminals with an automatic, compatibility-first renderer policy, drag-and-drop file paths with thumbnail preview strip (80×60 tiles), clipboard image path insertion, WSL-aware shell handling, cross-platform shell selection, and global shortcuts.
 - **Polished Local Distribution**: Cross-platform installers, in-app auto-updates, changelog display, 7 UI themes + 5 terminal ANSI palettes, and light/dark/system appearance without requiring a backend service.
 
 ## Ecosystem
@@ -170,19 +170,20 @@ Configure in Settings > Notifications:
 
 Detected events: Task Complete, Task Failed, Review Needed
 
-## Terminal Rendering Modes
+## Terminal Renderer Policy
 
-Configure in Settings > Terminals:
+Configure `Automatic`, `Prefer GPU`, or `Compatibility` in Settings >
+Diagnostics. Automatic is the default: regular shells attempt WebGL, while
+Claude and Codex use safer DOM rendering. Prefer GPU attempts WebGL for every
+terminal; Compatibility disables WebGL. Any WebGL failure falls back per pane,
+and recoverable faults expose a terminal-local Retry GPU action.
 
-| Mode | Description |
-|------|-------------|
-| Performance | No WebGL, best for many terminals |
-| Balanced | WebGL on active terminal only (default) |
-| Quality | WebGL always enabled, best visuals |
-
-Settings > Diagnostics includes a privacy-safe terminal stream report with the
-detected provider, selected engine, backend availability, last sequence and
-committed watermark, and any fallback reason. It never includes terminal text.
+The same privacy-safe Diagnostics surface shows the effective `WebGL` or `DOM`
+state beside terminal-stream metadata. It uses terminal IDs and closed fallback
+reasons only; terminal text, cwd, commands, raw errors, and GPU/device details
+are excluded. Executable ownership lives in
+`src/renderer/hooks/use-terminal-webgl.ts` and
+`src/renderer/stores/terminal-renderer-status-store.ts`.
 
 ## Documentation
 

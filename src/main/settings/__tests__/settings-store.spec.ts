@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { SCROLLBACK_DEFAULT, SCROLLBACK_MAX, SCROLLBACK_MIN } from '@shared/constants'
+import { DEFAULT_SETTINGS, SCROLLBACK_DEFAULT, SCROLLBACK_MAX, SCROLLBACK_MIN } from '@shared/constants'
 import { SettingsStore } from '../settings-store'
 import { SETTINGS_MIGRATION_FIXTURES } from './settings-migration-fixtures'
 
@@ -14,6 +14,45 @@ describe('SettingsStore', () => {
 
     expect(updated.terminalFontFamily).toBe('system')
     expect(store.getSettings().terminalFontFamily).toBe('system')
+  })
+
+  it('creates a canonical schema-v2 renderer profile by default', () => {
+    const settings = new SettingsStore().getSettings()
+
+    expect(settings.settingsSchemaVersion).toBe(2)
+    expect(settings.terminalRendererPolicy).toBe('automatic')
+    expect(settings).not.toHaveProperty('terminalRenderMode')
+    expect(settings).not.toHaveProperty('gpuRendererForClaudeTerminals')
+    expect(DEFAULT_SETTINGS.settingsSchemaVersion).toBe(2)
+  })
+
+  it.each(['automatic', 'prefer-gpu', 'safe-dom'] as const)(
+    'round-trips canonical renderer policy %s',
+    (terminalRendererPolicy) => {
+      const store = new SettingsStore()
+
+      expect(store.setSettings({ terminalRendererPolicy }).terminalRendererPolicy)
+        .toBe(terminalRendererPolicy)
+      expect(store.getSettings().terminalRendererPolicy).toBe(terminalRendererPolicy)
+    },
+  )
+
+  it('preserves the current renderer policy across an unrelated partial update', () => {
+    const store = new SettingsStore()
+    store.setSettings({ terminalRendererPolicy: 'prefer-gpu' })
+
+    const updated = store.setSettings({ colorTheme: 'dracula' })
+
+    expect(updated.terminalRendererPolicy).toBe('prefer-gpu')
+  })
+
+  it('uses the current renderer policy when a partial update contains an invalid value', () => {
+    const store = new SettingsStore()
+    store.setSettings({ terminalRendererPolicy: 'safe-dom' })
+
+    const updated = store.setSettings({ terminalRendererPolicy: 'invalid' as never })
+
+    expect(updated.terminalRendererPolicy).toBe('safe-dom')
   })
 
   it.each(['tokyo-night', 'catppuccin', 'dracula', 'rose-pine', 'pro-dark'] as const)(
@@ -67,13 +106,14 @@ describe('SettingsStore', () => {
     expect(updated.terminalFontFamily).toBe('jetbrains-mono')
   })
 
-  it('persists the Claude GPU renderer override flag', () => {
+  it('migrates the legacy Claude GPU override without persisting retired keys', () => {
     const store = new SettingsStore()
 
     const updated = store.setSettings({ gpuRendererForClaudeTerminals: true } as never)
 
-    expect((updated as { gpuRendererForClaudeTerminals?: boolean }).gpuRendererForClaudeTerminals).toBe(true)
-    expect((store.getSettings() as { gpuRendererForClaudeTerminals?: boolean }).gpuRendererForClaudeTerminals).toBe(true)
+    expect(updated.terminalRendererPolicy).toBe('prefer-gpu')
+    expect(updated).not.toHaveProperty('gpuRendererForClaudeTerminals')
+    expect(store.getSettings()).not.toHaveProperty('gpuRendererForClaudeTerminals')
   })
 
   it('persists a valid scrollbackLines value within range', () => {
@@ -143,7 +183,7 @@ describe('SettingsStore', () => {
 
     expect(recovered.enableContextWindowAdvanced).toBe(true)
     expect(recovered.terminalEngine).toBe('xterm')
-    expect(recovered.terminalRenderMode).toBe('balanced')
+    expect(recovered.terminalRendererPolicy).toBe('automatic')
     expect(recovered.terminalLimit).toEqual({ preset: 9 })
   })
 
@@ -169,6 +209,10 @@ describe('SettingsStore', () => {
 
       expect(updated).toMatchObject(preserved)
       expect(store.getSettings()).toMatchObject(preserved)
+      for (const legacyKey of SETTINGS_MIGRATION_FIXTURES.find(fixture => fixture.payload === payload)?.legacyKeys ?? []) {
+        expect(updated).not.toHaveProperty(legacyKey)
+        expect(store.getSettings()).not.toHaveProperty(legacyKey)
+      }
     }
   )
 })

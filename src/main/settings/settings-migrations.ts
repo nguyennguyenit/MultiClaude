@@ -1,7 +1,13 @@
-import type { AppSettings, ColorTheme, ShellInfo, WindowsShell } from '@shared/types'
+import type {
+  AppSettings,
+  ColorTheme,
+  ShellInfo,
+  TerminalRendererPolicy,
+  WindowsShell,
+} from '@shared/types'
 import { THEMES } from '@shared/constants'
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 1
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 2
 
 const CURRENT_THEME_IDS = new Set(THEMES.map(theme => theme.id))
 
@@ -31,7 +37,44 @@ const RETIRED_KEYS = [
   'terminalStyleOptions',
   'reflowSafeScrollback',
   'windowsShell',
+  'terminalRenderMode',
+  'gpuRendererForClaudeTerminals',
 ] as const
+
+const TERMINAL_RENDERER_POLICIES: ReadonlySet<TerminalRendererPolicy> = new Set([
+  'automatic',
+  'prefer-gpu',
+  'safe-dom',
+])
+
+function isTerminalRendererPolicy(value: unknown): value is TerminalRendererPolicy {
+  return typeof value === 'string'
+    && TERMINAL_RENDERER_POLICIES.has(value as TerminalRendererPolicy)
+}
+
+function migrateTerminalRendererPolicy(
+  raw: Record<string, unknown>,
+): TerminalRendererPolicy | undefined {
+  const hasOwn = (key: string): boolean => Object.prototype.hasOwnProperty.call(raw, key)
+  if (hasOwn('terminalRendererPolicy') && isTerminalRendererPolicy(raw.terminalRendererPolicy)) {
+    return raw.terminalRendererPolicy
+  }
+
+  const schemaVersion = hasOwn('settingsSchemaVersion')
+    ? raw.settingsSchemaVersion
+    : undefined
+  if (typeof schemaVersion === 'number' && schemaVersion >= 2) return undefined
+
+  const legacyMode = hasOwn('terminalRenderMode') ? raw.terminalRenderMode : undefined
+  const legacyGpuFlag = hasOwn('gpuRendererForClaudeTerminals')
+    ? raw.gpuRendererForClaudeTerminals
+    : undefined
+  if (legacyMode === 'performance') return 'safe-dom'
+  if (legacyGpuFlag === true) return 'prefer-gpu'
+  if (legacyMode === 'quality') return 'prefer-gpu'
+  if (legacyMode === 'balanced') return 'automatic'
+  return undefined
+}
 
 function migrateWindowsShell(shell: unknown): ShellInfo | undefined {
   if (!shell || typeof shell !== 'object' || !('type' in shell)) return undefined
@@ -67,6 +110,11 @@ function migrateWindowsShell(shell: unknown): ShellInfo | undefined {
 export function migrateSettings(raw: Record<string, unknown>): Record<string, unknown> {
   const migrated = structuredClone(raw)
   const legacyStyle = migrated.terminalStyleOptions
+  const terminalRendererPolicy = migrateTerminalRendererPolicy(raw)
+
+  if (terminalRendererPolicy) {
+    migrated.terminalRendererPolicy = terminalRendererPolicy
+  }
 
   if (typeof migrated.colorTheme === 'string') {
     if (!CURRENT_THEME_IDS.has(migrated.colorTheme as ColorTheme)) {

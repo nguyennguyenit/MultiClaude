@@ -12,8 +12,12 @@
 
 type SystemResumedCallback = () => void
 
-// Per-terminal subscriber map: terminalId → callback
-const systemResumeHandlers = new Map<string, SystemResumedCallback>()
+interface SystemResumeSubscription {
+  token: symbol
+  callback: SystemResumedCallback
+}
+
+const systemResumeHandlers = new Map<string, SystemResumeSubscription>()
 
 /**
  * Subscribe a terminal to system-resume events.
@@ -21,16 +25,28 @@ const systemResumeHandlers = new Map<string, SystemResumedCallback>()
  */
 export function subscribeToSystemResume(
   terminalId: string,
-  callback: SystemResumedCallback
-): void {
-  systemResumeHandlers.set(terminalId, callback)
+  tokenOrCallback: symbol | SystemResumedCallback,
+  maybeCallback?: SystemResumedCallback,
+): () => void {
+  const token = typeof tokenOrCallback === 'symbol' ? tokenOrCallback : Symbol('legacy-session')
+  const callback = typeof tokenOrCallback === 'function' ? tokenOrCallback : maybeCallback
+  if (!callback) return () => undefined
+  const subscription = { token, callback }
+  systemResumeHandlers.set(terminalId, subscription)
+  return () => {
+    if (systemResumeHandlers.get(terminalId) === subscription) {
+      systemResumeHandlers.delete(terminalId)
+    }
+  }
 }
 
 /**
  * Unsubscribe a terminal from system-resume events.
  * Safe to call if terminalId was never subscribed.
  */
-export function unsubscribeFromSystemResume(terminalId: string): void {
+export function unsubscribeFromSystemResume(terminalId: string, token?: symbol): void {
+  const subscription = systemResumeHandlers.get(terminalId)
+  if (!subscription || (token !== undefined && subscription.token !== token)) return
   systemResumeHandlers.delete(terminalId)
 }
 
@@ -53,12 +69,12 @@ export function attachTerminalLifecycleDispatcher(
 ): () => void {
   return subscribe(() => {
     // Fan out to all currently subscribed terminals
-    for (const [, handler] of systemResumeHandlers) {
+    for (const [, { callback }] of systemResumeHandlers) {
       try {
-        handler()
-      } catch (err) {
+        callback()
+      } catch {
         // Guard: one failing handler must not block others
-        console.error('[lifecycle-dispatcher] system-resume handler threw:', err)
+        console.error('[lifecycle-dispatcher] System-resume handler failed.')
       }
     }
   })

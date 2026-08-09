@@ -11,7 +11,10 @@ import { useEffect, useRef, useCallback } from 'react'
 import { Terminal as XTerm, IDisposable } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
-import { resumeAndFlush as resumeTerminalOutput } from '../utils/terminal-output-dispatcher'
+import {
+  claimTerminalOutputSession,
+  resumeAndFlush as resumeTerminalOutput,
+} from '../utils/terminal-output-dispatcher'
 import { useTerminalWebGL } from './use-terminal-webgl'
 import { useTerminalFontTheme } from './use-terminal-font-theme'
 import { useTerminalKeyboard } from './use-terminal-keyboard'
@@ -59,6 +62,14 @@ export function useTerminal({
   const viewportListenersRef = useRef<ViewportEventListener[] | null>(null)
   const webglToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshFnRef = useRef<((showNotification?: boolean) => void) | null>(null)
+  const sessionTokenRef = useRef<symbol>(Symbol(`terminal-renderer:${terminalId}`))
+  const sessionToken = sessionTokenRef.current
+
+  // Claim output ownership before component-level registration and deferred
+  // hydration effects. Same-ID renderer recreation receives a distinct token.
+  useEffect(() => {
+    claimTerminalOutputSession(terminalId, sessionToken)
+  }, [sessionToken, terminalId])
 
   // ── Sub-hooks ──────────────────────────────────────────────────────────────
   const { registerTerminalDebugHandle, unregisterTerminalDebugHandle } =
@@ -84,13 +95,22 @@ export function useTerminal({
 
   // performFit is needed by WebGL hook (refresh) — forward-declare via ref
   const performFitRef = useRef<(restoreViewport?: boolean) => boolean>(() => false)
+  const performFitFromRef = useCallback(
+    (restoreViewport?: boolean) => performFitRef.current(restoreViewport),
+    [],
+  )
+  const refreshFromRef = useCallback(
+    (showNotification?: boolean) => refreshFnRef.current?.(showNotification),
+    [],
+  )
 
   const { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal } =
     useTerminalWebGL({
       terminalRef, surfaceRef, disposedRef, terminalId, isActiveRef, isHiddenRef,
-      onRefresh: (n) => refreshFnRef.current?.(n),
+      sessionToken,
+      onRefresh: refreshFromRef,
       onRefreshVisibleRows: refreshVisibleRows,
-      performFit: (r) => performFitRef.current(r),
+      performFit: performFitFromRef,
     })
 
   const { performFit, cancelScheduledFit, fit } = useTerminalFit({
@@ -123,6 +143,7 @@ export function useTerminal({
 
   const { initTerminal } = useTerminalInit({
     terminalRef, surfaceRef, fitAddonRef, disposedRef, containerRef, terminalId,
+    sessionToken,
     initialOutput, initialViewportY, isActiveRef, isHiddenRef, scrollMachineRef,
     userViewportInteractingRef, viewportListenersRef, scrollDisposableRef,
     syncViewportState, clearUserViewportInteraction, markUserViewportInteraction,
@@ -154,7 +175,7 @@ export function useTerminal({
       disposedRef.current = true
       // Drain any pause state set by initTerminal in case unmount races ahead
       // of snapshot-apply (prevents stuck pausedBuffer entry).
-      resumeTerminalOutput(paneTerminalId)
+      resumeTerminalOutput(paneTerminalId, sessionToken)
       scrollMachine.reset()
       clearUserViewportInteraction()
       cancelScheduledFit()
@@ -184,7 +205,7 @@ export function useTerminal({
       }, TERMINAL_DISPOSE_DELAY)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- ref objects are stable; listed for clarity
-  }, [cancelScheduledFit, clearUserViewportInteraction, unregisterTerminalDebugHandle])
+  }, [cancelScheduledFit, clearUserViewportInteraction, sessionToken, unregisterTerminalDebugHandle])
 
   // ── Public API ─────────────────────────────────────────────────────────────
   // Focus the hidden helper textarea directly with preventScroll so the browser
@@ -220,6 +241,6 @@ export function useTerminal({
   return {
     containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, clear,
     scrollToTop, scrollToBottom, isAtBottom, hasScrollback,
-    refresh, getViewportSnapshot, terminalRef
+    refresh, getViewportSnapshot, terminalRef, sessionToken
   }
 }
