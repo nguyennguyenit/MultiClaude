@@ -23,6 +23,7 @@ import {
   isViewportNearBottom,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD,
+  withInstantTerminalScroll,
 } from '../utils/terminal-scroll-utils'
 
 const USER_SCROLL_WHEEL_GRACE = 180   // ms wheel-scroll intent grace period
@@ -121,7 +122,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal || disposedRef.current) return
 
-    terminal.scrollToBottom()
+    withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
 
     const buffer = terminal.buffer.active
     scrollMachineRef.current.isAtBottom = true
@@ -166,9 +167,10 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
       if (scrollMachine.pendingWriteCount > 0) {
         // More writes in flight — apply hidden intent if present, then exit
         if (hiddenViewportIntent?.stickToBottom) {
-          term.scrollToBottom()
+          withInstantTerminalScroll(term, () => term.scrollToBottom())
         } else if (hiddenViewportIntent?.viewportY !== null && hiddenViewportIntent?.viewportY !== undefined) {
-          term.scrollToLine(hiddenViewportIntent.viewportY)
+          const targetViewportY = hiddenViewportIntent.viewportY
+          withInstantTerminalScroll(term, () => term.scrollToLine(targetViewportY))
         }
         syncViewportState(term.buffer.active, hiddenViewportIntent)
         return
@@ -190,9 +192,9 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
       scrollMachine.pendingUserScrollIntent = null
 
       if (restoreTarget === 'bottom') {
-        term.scrollToBottom()
+        withInstantTerminalScroll(term, () => term.scrollToBottom())
       } else if (typeof restoreTarget === 'number' && restoreTarget >= 0) {
-        term.scrollToLine(restoreTarget)
+        withInstantTerminalScroll(term, () => term.scrollToLine(restoreTarget))
       }
 
       const buffer = term.buffer.active
@@ -209,7 +211,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal) return
 
-    terminal.scrollToLine(0)
+    withInstantTerminalScroll(terminal, () => terminal.scrollToLine(0))
     const scrollMachine = scrollMachineRef.current
     scrollMachine.hiddenViewportIntent = createUserScrollIntent(
       terminal.buffer.active.baseY,
@@ -225,7 +227,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal) return
 
-    terminal.scrollToBottom()
+    withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
     const scrollMachine = scrollMachineRef.current
     scrollMachine.hiddenViewportIntent = createUserScrollIntent(
       terminal.buffer.active.baseY,

@@ -20,6 +20,7 @@ import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import {
   createUserScrollIntent,
   TERMINAL_SCROLL_THRESHOLD,
+  withInstantTerminalScroll,
 } from '../utils/terminal-scroll-utils'
 
 interface UseTerminalVisibilityParams {
@@ -62,9 +63,11 @@ export function useTerminalVisibility(params: UseTerminalVisibilityParams): void
     performFit(false)
 
     if (stickToBottom && terminalRef.current) {
-      terminalRef.current.scrollToBottom()
+      const terminal = terminalRef.current
+      withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
     } else if (savedViewportY !== null && savedViewportY >= 0 && terminalRef.current) {
-      terminalRef.current.scrollToLine(savedViewportY)
+      const terminal = terminalRef.current
+      withInstantTerminalScroll(terminal, () => terminal.scrollToLine(savedViewportY))
     }
   }
 

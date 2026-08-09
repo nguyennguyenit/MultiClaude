@@ -15,7 +15,7 @@ import type { Terminal as XTerm } from '@xterm/xterm'
 import type { FitAddon } from '@xterm/addon-fit'
 import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import type { TerminalSurface } from '../terminal/terminal-surface'
-import { resolveFitViewportRestoreTarget } from '../utils/terminal-scroll-utils'
+import { resolveFitViewportRestoreTarget, withInstantTerminalScroll } from '../utils/terminal-scroll-utils'
 import { isPaneDragging, subscribePaneDragging } from '../utils/pane-drag-state'
 
 const RESIZE_REFIT_SETTLE_DELAY = 120  // ms second fit after layout settles
@@ -90,8 +90,11 @@ export function useTerminalFit(params: UseTerminalFitParams): UseTerminalFitResu
       currentBaseY: terminal.buffer.active.baseY
     })
 
-    if (restoreTarget === 'bottom') terminalRef.current?.scrollToBottom()
-    else if (typeof restoreTarget === 'number') terminalRef.current?.scrollToLine(restoreTarget)
+    if (restoreTarget === 'bottom') {
+      withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
+    } else if (typeof restoreTarget === 'number') {
+      withInstantTerminalScroll(terminal, () => terminal.scrollToLine(restoreTarget))
+    }
 
     return true
   }, [containerRef, disposedRef, fitAddonRef, refreshVisibleRows, scrollMachineRef, surfaceRef, terminalRef])

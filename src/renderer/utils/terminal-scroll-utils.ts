@@ -1,5 +1,29 @@
 export const TERMINAL_SCROLL_THRESHOLD = 5
 
+export const TERMINAL_SCROLL_OPTIONS = {
+  smoothScrollDuration: 125,
+} as const
+
+interface SmoothScrollTerminal {
+  options: {
+    smoothScrollDuration?: number
+  }
+}
+
+/** Keep state-restoration commands synchronous while wheel input stays smooth. */
+export function withInstantTerminalScroll<T>(
+  terminal: SmoothScrollTerminal,
+  operation: () => T
+): T {
+  const smoothScrollDuration = terminal.options.smoothScrollDuration ?? 0
+  terminal.options.smoothScrollDuration = 0
+  try {
+    return operation()
+  } finally {
+    terminal.options.smoothScrollDuration = smoothScrollDuration
+  }
+}
+
 export interface UserScrollIntent {
   viewportY: number | null
   stickToBottom: boolean

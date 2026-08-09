@@ -26,7 +26,9 @@ import {
   isViewportNearBottom,
   isPointerOnViewportScrollbar,
   createUserScrollIntent,
+  TERMINAL_SCROLL_OPTIONS,
   TERMINAL_SCROLL_THRESHOLD,
+  withInstantTerminalScroll,
 } from '../utils/terminal-scroll-utils'
 import { pauseAndBuffer, resumeAndFlush, resumeFromSnapshot } from '../utils/terminal-output-dispatcher'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
@@ -161,6 +163,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       allowProposedApi: true,
       convertEol: false,
       scrollback: clampScrollback(useSettingsStore.getState().pendingSettings.scrollbackLines),
+      ...TERMINAL_SCROLL_OPTIONS,
       reflowCursorLine: true,   // v6: include cursor line in reflow on resize
       // OSC 8 hyperlinks: CLIs (e.g. Claude Code) emit explicit hyperlink metadata
       // that survives line-wrapping. Without this handler, clicks fall back to
@@ -253,8 +256,11 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
           && existingReadingIntent
           && existingReadingIntent.viewportY !== null
         ) {
+          const targetViewportY = existingReadingIntent.viewportY
           reconcilingReadingViewport = true
-          terminal.scrollToLine(existingReadingIntent.viewportY)
+          withInstantTerminalScroll(terminal, () => {
+            terminal.scrollToLine(targetViewportY)
+          })
           reconcilingReadingViewport = false
           syncViewportState(terminal.buffer.active, hiddenViewportIntent)
           return
@@ -278,8 +284,11 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         && readingIntent.viewportY !== null
         && buffer.viewportY !== readingIntent.viewportY
       ) {
+        const targetViewportY = readingIntent.viewportY
         reconcilingReadingViewport = true
-        terminal.scrollToLine(readingIntent.viewportY)
+        withInstantTerminalScroll(terminal, () => {
+          terminal.scrollToLine(targetViewportY)
+        })
         reconcilingReadingViewport = false
         syncViewportState(terminal.buffer.active, hiddenViewportIntent)
         return
@@ -376,7 +385,11 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       const restoreInitialViewport = () => {
         if (disposedRef.current || !terminalRef.current) return
         if (initialViewportYRef.current !== null && initialViewportYRef.current >= 0) {
-          terminalRef.current.scrollToLine(initialViewportYRef.current)
+          const terminal = terminalRef.current
+          const targetViewportY = initialViewportYRef.current
+          withInstantTerminalScroll(terminal, () => {
+            terminal.scrollToLine(targetViewportY)
+          })
         }
         scrollMachineRef.current.savedViewportY = terminalRef.current.buffer.active.viewportY
         syncScrollPosition(false)

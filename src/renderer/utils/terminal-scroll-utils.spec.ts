@@ -5,10 +5,37 @@ import {
   isViewportNearBottom,
   resolveFitViewportRestoreTarget,
   resolveViewportRestoreTarget,
+  TERMINAL_SCROLL_OPTIONS,
+  withInstantTerminalScroll,
   TERMINAL_SCROLL_THRESHOLD
 } from './terminal-scroll-utils'
 
 describe('terminal-scroll-utils', () => {
+  it('enables a short smooth animation for user-driven wheel scrolling', () => {
+    expect(TERMINAL_SCROLL_OPTIONS).toEqual({ smoothScrollDuration: 125 })
+  })
+
+  it('keeps programmatic viewport reconciliation instantaneous', () => {
+    const terminal = { options: { smoothScrollDuration: 125 } }
+    let durationDuringScroll: number | undefined
+
+    withInstantTerminalScroll(terminal, () => {
+      durationDuringScroll = terminal.options.smoothScrollDuration
+    })
+
+    expect(durationDuringScroll).toBe(0)
+    expect(terminal.options.smoothScrollDuration).toBe(125)
+  })
+
+  it('restores wheel smoothing when a programmatic scroll throws', () => {
+    const terminal = { options: { smoothScrollDuration: 125 } }
+
+    expect(() => withInstantTerminalScroll(terminal, () => {
+      throw new Error('scroll failed')
+    })).toThrow('scroll failed')
+    expect(terminal.options.smoothScrollDuration).toBe(125)
+  })
+
   it('treats viewports within the threshold as bottom-following', () => {
     expect(isViewportNearBottom(120, 116, TERMINAL_SCROLL_THRESHOLD)).toBe(true)
   })
