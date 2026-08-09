@@ -1,14 +1,32 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
-import { getShellKey } from '../../utils'
-import type { TerminalLimitPreset, TerminalRenderMode, WindowsShell } from '@shared/types'
-import { SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX, SCROLLBACK_PRESETS } from '@shared/constants'
+import { getShellKey, shellInfoToWindowsShell } from '../../utils'
+import type { ShellInfo, TerminalLimitPreset, TerminalRenderMode } from '@shared/types'
+import {
+  CANONICAL_SCROLLBACK_LINES,
+  SCROLLBACK_DEFAULT,
+  SCROLLBACK_MIN,
+  SCROLLBACK_MAX,
+  SCROLLBACK_PRESETS,
+} from '@shared/constants'
 import { SettingsTitle } from './settings-typography'
 import { ToggleSwitch } from './toggle-switch'
 
 function formatScrollback(value: number): string {
   if (value >= 1000) return `${Math.round(value / 1000)}k`
   return `${value}`
+}
+
+export function getScrollbackRetentionNotice(lines: number): string | null {
+  if (lines <= CANONICAL_SCROLLBACK_LINES) return null
+  const cap = formatScrollback(CANONICAL_SCROLLBACK_LINES)
+  return `Values above ${cap} are live-only and use more memory. Refresh restores ${cap} canonical lines; app restart uses a separate local raw tail capped at 3 MB.`
+}
+
+export function shouldShowTerminalEngineSelector(
+  capability: { available: boolean; platform: NodeJS.Platform } | null,
+): boolean {
+  return capability?.platform === 'darwin' && capability.available
 }
 
 const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
@@ -75,16 +93,20 @@ export function TerminalSettings() {
     wslInfo,
     setTerminalLimit,
     setTerminalRenderMode,
+    setTerminalEngine,
     setGpuRendererForClaudeTerminals,
     setScrollbackLines,
     setEnableContextWindow,
     setEnableContextWindowAdvanced,
-    setEnableThinkingSyntaxHighlight,
-    setReflowSafeScrollback,
-    setWindowsShell
+    setDefaultShell
   } = useSettingsStore()
+  const [nativeCapability, setNativeCapability] = useState<{
+    available: boolean
+    platform: NodeJS.Platform
+  } | null>(null)
   const { terminalLimit } = pendingSettings
   const scrollbackLines = pendingSettings.scrollbackLines ?? SCROLLBACK_DEFAULT
+  const scrollbackRetentionNotice = getScrollbackRetentionNotice(scrollbackLines)
   const isScrollbackPreset = (SCROLLBACK_PRESETS as readonly number[]).includes(scrollbackLines)
   const [customScrollback, setCustomScrollback] = useState(
     isScrollbackPreset ? SCROLLBACK_DEFAULT : scrollbackLines
@@ -94,6 +116,18 @@ export function TerminalSettings() {
   useEffect(() => {
     if (!isScrollbackPreset) setCustomScrollback(scrollbackLines)
   }, [scrollbackLines, isScrollbackPreset])
+
+  useEffect(() => {
+    let cancelled = false
+    void window.electron.terminal.getNativeCapability().then((capability) => {
+      if (!cancelled) setNativeCapability(capability)
+    }).catch(() => {
+      if (!cancelled) setNativeCapability(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const [customValue, setCustomValue] = useState(
     terminalLimit.preset === 'custom' ? (terminalLimit.customValue ?? 9) : 9
@@ -138,15 +172,21 @@ export function TerminalSettings() {
 
   // Build shell options for dropdown (Windows with WSL only)
   const shellOptions = useMemo(() => {
-    const options: { value: WindowsShell; label: string }[] = [
-      { value: { type: 'cmd' }, label: 'Command Prompt' },
-      { value: { type: 'powershell' }, label: 'PowerShell' }
+    const options: { value: ShellInfo; label: string }[] = [
+      { value: { path: 'cmd.exe', name: 'Command Prompt', isDefault: true, kind: 'cmd' }, label: 'Command Prompt' },
+      { value: { path: 'powershell.exe', name: 'PowerShell', isDefault: true, kind: 'powershell' }, label: 'PowerShell' }
     ]
 
     if (wslInfo?.distros) {
       wslInfo.distros.forEach((distro) => {
         options.push({
-          value: { type: 'wsl', distro: distro.name },
+          value: {
+            path: 'wsl.exe',
+            name: distro.name,
+            distro: distro.name,
+            isDefault: distro.isDefault,
+            kind: 'wsl'
+          },
           label: `WSL: ${distro.name}${distro.isDefault ? ' (default)' : ''}`
         })
       })
@@ -158,7 +198,16 @@ export function TerminalSettings() {
   // Show shell settings on Windows (wslInfo is only set on Windows platform)
   const showShellSettings = wslInfo !== null
 
-  const currentShellKey = getShellKey(pendingSettings.windowsShell || { type: 'cmd' })
+  const currentShellKey = getShellKey(
+    shellInfoToWindowsShell(
+      pendingSettings.defaultShell ?? {
+        path: 'cmd.exe',
+        name: 'Command Prompt',
+        isDefault: true,
+        kind: 'cmd'
+      }
+    )
+  )
   const claudeRendererHelper = getClaudeRendererControlState(
     pendingSettings.terminalRenderMode,
     pendingSettings.gpuRendererForClaudeTerminals
@@ -169,6 +218,28 @@ export function TerminalSettings() {
       <SettingsTitle description="Configure terminal behavior and limits">
         Terminals
       </SettingsTitle>
+
+      {shouldShowTerminalEngineSelector(nativeCapability) && (
+        <div className="settings-card rounded-2xl flex flex-col gap-3 p-5">
+          <div>
+            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
+              Terminal Engine
+            </p>
+            <p className="text-xs text-[var(--mc-text-muted)] mt-1">
+              Changes apply after restarting the app.
+            </p>
+          </div>
+          <select
+            aria-label="Terminal Engine"
+            value={pendingSettings.terminalEngine}
+            onChange={(event) => setTerminalEngine(event.target.value as 'xterm' | 'ghostty')}
+            className="text-sm bg-[var(--mc-bg-primary)] border border-[var(--mc-border)] rounded px-3 py-2 text-[var(--mc-text-primary)]"
+          >
+            <option value="xterm">xterm.js</option>
+            <option value="ghostty">GhosttyKit (Experimental)</option>
+          </select>
+        </div>
+      )}
 
       {/* Max Terminals per Project */}
       <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
@@ -191,6 +262,8 @@ export function TerminalSettings() {
             return (
               <button
                 key={option.value}
+                type="button"
+                aria-pressed={isSelected}
                 onClick={() => handlePresetChange(option.value)}
                 className={`
                   relative flex items-center justify-center px-5 py-2.5 rounded-lg text-sm font-semibold min-w-[4rem]
@@ -234,12 +307,12 @@ export function TerminalSettings() {
           </div>
           <div className="flex flex-wrap gap-2">
             {shellOptions.map((option) => {
-              const optionKey = getShellKey(option.value)
+              const optionKey = getShellKey(shellInfoToWindowsShell(option.value))
               const isSelected = optionKey === currentShellKey
               return (
                 <button
                   key={optionKey}
-                  onClick={() => setWindowsShell(option.value)}
+                  onClick={() => void setDefaultShell(option.value)}
                   className={`
                     px-4 py-2 rounded-lg text-sm font-semibold
                     transition-all duration-200
@@ -274,6 +347,8 @@ export function TerminalSettings() {
             return (
               <button
                 key={mode.id}
+                type="button"
+                aria-pressed={isSelected}
                 onClick={() => setTerminalRenderMode(mode.id)}
                 className={`
                   flex flex-col items-start px-4 py-3.5 rounded-xl
@@ -308,6 +383,7 @@ export function TerminalSettings() {
         <div className="pt-2 border-t border-[var(--mc-border)]/70 flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <ToggleSwitch
+              ariaLabel="Use GPU renderer for Claude terminals"
               checked={Boolean(pendingSettings.gpuRendererForClaudeTerminals)}
               onChange={setGpuRendererForClaudeTerminals}
               disabled={claudeRendererHelper.disabled}
@@ -332,7 +408,7 @@ export function TerminalSettings() {
               Scrollback Lines
             </p>
             <p className="text-xs text-[var(--mc-text-muted)] mt-1">
-              How far back you can scroll in each terminal. Higher values use more memory (~1–2KB per line).
+              Live xterm history. Refresh keeps {formatScrollback(CANONICAL_SCROLLBACK_LINES)} canonical lines; app restart uses a separate local 3 MB raw tail.
             </p>
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30">
@@ -391,36 +467,14 @@ export function TerminalSettings() {
             />
           </div>
         )}
-      </div>
-
-      {/* Auto-rebuild scrollback on resize (Part D) */}
-      <div className="settings-card rounded-2xl flex flex-col gap-3 p-5">
-        <div>
-          <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">
-            Auto-rebuild Scrollback on Resize
+        {scrollbackRetentionNotice && (
+          <p
+            role="status"
+            className="text-xs leading-relaxed rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-600 dark:text-amber-300"
+          >
+            {scrollbackRetentionNotice}
           </p>
-          <p className="text-xs text-[var(--mc-text-muted)] mt-1">
-            The Refresh button always rebuilds scrollback from the raw PTY transcript
-            to eliminate blank gaps from xterm reflow. Enable this option to also do
-            it automatically every time the terminal width changes (split, resize,
-            project switch). Adds ~100-300ms CPU per resize.
-          </p>
-        </div>
-        <div className="flex items-start gap-3 pt-1">
-          <ToggleSwitch
-            checked={Boolean(pendingSettings.reflowSafeScrollback)}
-            onChange={setReflowSafeScrollback}
-          />
-          <div>
-            <p className="text-sm font-medium text-[var(--mc-text-primary)]">
-              Enable auto-rebuild on width change
-            </p>
-            <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-              Off by default. Useful for split-heavy workflows; causes a brief CPU
-              spike on each resize.
-            </p>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Context Window Breakdown */}
@@ -436,6 +490,7 @@ export function TerminalSettings() {
         </div>
         <div className="flex items-start gap-3 pt-1">
           <ToggleSwitch
+            ariaLabel="Enable context window breakdown"
             checked={pendingSettings.enableContextWindow !== false}
             onChange={setEnableContextWindow}
           />
@@ -456,6 +511,7 @@ export function TerminalSettings() {
         {/* Advanced features — nested under master */}
         <div className="flex items-start gap-3 pt-3 pl-6 border-l-2 border-[var(--mc-border)]/60">
           <ToggleSwitch
+            ariaLabel="Advanced features"
             checked={Boolean(pendingSettings.enableContextWindowAdvanced)}
             onChange={setEnableContextWindowAdvanced}
             disabled={pendingSettings.enableContextWindow === false}
@@ -468,35 +524,12 @@ export function TerminalSettings() {
               Advanced features
             </p>
             <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-              Turn-injection diff · Execution trace · Compaction timeline · Extended thinking.
+              Turn-injection diff · Tool activity · Compaction timeline · Extended thinking.
               <span className="font-semibold"> Requires restart.</span>
             </p>
           </div>
         </div>
 
-        {/* Thinking syntax highlight — nested under advanced */}
-        <div className="flex items-start gap-3 pt-2 pl-12 border-l-2 border-[var(--mc-border)]/60">
-          <ToggleSwitch
-            checked={Boolean(pendingSettings.enableThinkingSyntaxHighlight)}
-            onChange={setEnableThinkingSyntaxHighlight}
-            disabled={
-              pendingSettings.enableContextWindow === false ||
-              !pendingSettings.enableContextWindowAdvanced
-            }
-          />
-          <div>
-            <p
-              className="text-sm font-medium text-[var(--mc-text-primary)]"
-              title="Requires restart. Loads a ~25KB code-highlight chunk on first expand."
-            >
-              Thinking syntax highlighting
-            </p>
-            <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-              Lazy-loads a ~25KB highlighter chunk only when a thinking block is expanded.
-              <span className="font-semibold"> Requires restart.</span>
-            </p>
-          </div>
-        </div>
       </div>
 
     </div>

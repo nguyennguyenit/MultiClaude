@@ -1,4 +1,4 @@
-import type { NotificationSettings, SoundPreset } from '../types/notification'
+import type { NotificationSettings } from '../types/notification'
 import type { AgentType } from '../types'
 
 // Task tracker constants
@@ -10,8 +10,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   onTaskComplete: true,
   onTaskFailed: true,
   onReviewNeeded: true,
-  soundEnabled: true,
-  soundPreset: 'default',
   telegramEnabled: false,
   telegramConfigured: false,
   discordEnabled: false,
@@ -24,12 +22,6 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
 }
 
 // Sound preset definitions
-export const SOUND_PRESETS: { id: SoundPreset; name: string; description: string }[] = [
-  { id: 'default', name: 'Default', description: 'Standard notification sounds' },
-  { id: 'minimal', name: 'Minimal', description: 'Subtle, soft tones' },
-  { id: 'retro', name: 'Retro', description: '8-bit style sounds' }
-]
-
 // Pattern detection for Claude Code terminal output
 // These patterns match Claude Code's specific output format
 export const DETECTION_PATTERNS = {

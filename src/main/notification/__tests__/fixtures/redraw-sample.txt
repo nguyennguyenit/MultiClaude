@@ -1,0 +1,12 @@
+# SYNTHETIC - Captured-style redraw payload for PlainTextParser false-trigger regression.
+#
+# The two chunks mirror a terminal repaint. The literal backslash-x-1-b tokens
+# are converted to ESC bytes by the test loader.
+<<<FIXTURE-CHUNK-BOUNDARY>>>
+\x1b[H\x1b[2JAllow `bash` to run the command?
+npm test
+[Y/n]
+<<<FIXTURE-CHUNK-BOUNDARY>>>
+\x1b[H\x1b[2J\x1b[1;1HAllow `bash` to run the command?
+\x1b[2;1Hnpm test
+\x1b[3;1H[Y/n]

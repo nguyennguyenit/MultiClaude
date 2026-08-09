@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, WindowsShell, WslInfo, UiStyle, TerminalStyleOptions, TerminalFontId, AppFontId, ActivityBarState, ShellInfo } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, TerminalEngine, WslInfo, TerminalFontId, AppFontId, ShellInfo } from '@shared/types'
 import { DEFAULT_SETTINGS, APP_FONTS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
@@ -49,22 +49,16 @@ interface SettingsState {
   // Pending setters (preview only, no persist)
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
-  setGlassmorphismEnabled: (enabled: boolean) => void
   setTerminalLimit: (limit: TerminalLimit) => void
   setTerminalRenderMode: (mode: TerminalRenderMode) => void
+  setTerminalEngine: (engine: TerminalEngine) => void
   setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setScrollbackLines: (lines: number) => void
   setEnableContextWindow: (enabled: boolean) => void
   setEnableContextWindowAdvanced: (enabled: boolean) => void
-  setEnableThinkingSyntaxHighlight: (enabled: boolean) => void
-  setReflowSafeScrollback: (enabled: boolean) => void
-  setWindowsShell: (shell: WindowsShell) => void
   setDefaultShell: (shell: ShellInfo | null) => Promise<void>
-  setUiStyle: (style: UiStyle) => void
   setModernFontFamily: (fontId: AppFontId) => void
   setTerminalFontFamily: (fontId: TerminalFontId) => void
-  setTerminalStyleOptions: (options: Partial<TerminalStyleOptions>) => void
-  setActivityBarState: (state: ActivityBarState) => void
   // Actions
   saveSettings: () => Promise<void>      // Persist pending → saved
   cancelSettings: () => void             // Revert pending → saved
@@ -89,15 +83,10 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   if (a.terminalRenderMode !== b.terminalRenderMode) return false
   if (a.gpuRendererForClaudeTerminals !== b.gpuRendererForClaudeTerminals) return false
   if (a.scrollbackLines !== b.scrollbackLines) return false
-  if (a.glassmorphismEnabled !== b.glassmorphismEnabled) return false
-  if (a.uiStyle !== b.uiStyle) return false
   if (a.modernFontFamily !== b.modernFontFamily) return false
   if (a.terminalFontFamily !== b.terminalFontFamily) return false
-  if (a.activityBarState !== b.activityBarState) return false
   if (a.enableContextWindow !== b.enableContextWindow) return false
   if (a.enableContextWindowAdvanced !== b.enableContextWindowAdvanced) return false
-  if (a.enableThinkingSyntaxHighlight !== b.enableThinkingSyntaxHighlight) return false
-  if (a.reflowSafeScrollback !== b.reflowSafeScrollback) return false
   // Compare terminalLimit (with null safety for migration)
   const aLimit = a.terminalLimit
   const bLimit = b.terminalLimit
@@ -106,26 +95,18 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
     if (aLimit.customValue !== bLimit.customValue) return false
   }
 
-  // Compare terminalStyleOptions
-  const aStyle = a.terminalStyleOptions
-  const bStyle = b.terminalStyleOptions
-  if (aStyle?.colorPreset !== bStyle?.colorPreset) return false
-  if (aStyle?.fontFamily !== bStyle?.fontFamily) return false
-  if (aStyle?.useBorderChars !== bStyle?.useBorderChars) return false
-
-  // Compare windowsShell
-  const aShell = a.windowsShell
-  const bShell = b.windowsShell
-  if (!aShell && bShell) return false
-  if (aShell && !bShell) return false
-  if (aShell && bShell) {
-    if (aShell.type !== bShell.type) return false
-    if (aShell.type === 'wsl' && bShell.type === 'wsl') {
-      if (aShell.distro !== bShell.distro) return false
-    }
-  }
+  if (a.terminalEngine !== b.terminalEngine) return false
+  if (JSON.stringify(a.defaultShell) !== JSON.stringify(b.defaultShell)) return false
 
   return true
+}
+
+/**
+ * Legacy renderer storage is only authoritative when main still has an
+ * untouched default profile. A current main-owned preference always wins.
+ */
+export function shouldImportLegacySettings(mainSettings: AppSettings): boolean {
+  return areSettingsEqual(mainSettings, DEFAULT_SETTINGS)
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -158,14 +139,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
-  setGlassmorphismEnabled: (enabled) => {
-    const pending = { ...get().pendingSettings, glassmorphismEnabled: enabled }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
   setTerminalLimit: (limit) => {
     const pending = { ...get().pendingSettings, terminalLimit: limit }
     set({
@@ -176,6 +149,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setTerminalRenderMode: (mode) => {
     const pending = { ...get().pendingSettings, terminalRenderMode: mode }
+    set({
+      pendingSettings: pending,
+      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
+    })
+  },
+
+  setTerminalEngine: (engine) => {
+    const pending = { ...get().pendingSettings, terminalEngine: engine }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
@@ -198,14 +179,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
-  setWindowsShell: (shell) => {
-    const pending = { ...get().pendingSettings, windowsShell: shell }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
   setEnableContextWindow: (enabled) => {
     const pending = { ...get().pendingSettings, enableContextWindow: enabled }
     set({
@@ -222,43 +195,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
-  setEnableThinkingSyntaxHighlight: (enabled) => {
-    const pending = { ...get().pendingSettings, enableThinkingSyntaxHighlight: enabled }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
-  setReflowSafeScrollback: (enabled) => {
-    const pending = { ...get().pendingSettings, reflowSafeScrollback: enabled }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
   // Persist selected shell to disk immediately (cross-platform shell persistence)
   setDefaultShell: async (shell) => {
-    const updated = { ...get().savedSettings, defaultShell: shell ?? undefined }
+    const saved = get().savedSettings
     try {
-      await window.electron.settings.set({ defaultShell: shell ?? undefined })
+      const updated = await window.electron.settings.set({ defaultShell: shell ?? undefined })
+      const pending = {
+        ...get().pendingSettings,
+        defaultShell: updated.defaultShell
+      }
       set({
         savedSettings: updated,
-        pendingSettings: updated,
-        settings: updated
+        pendingSettings: pending,
+        settings: pending,
+        hasUnsavedChanges: !areSettingsEqual(pending, updated)
       })
     } catch (err) {
       console.error('[settings] Failed to persist defaultShell:', err)
+      const pending = get().pendingSettings
+      set({
+        savedSettings: saved,
+        pendingSettings: pending,
+        settings: pending,
+        hasUnsavedChanges: !areSettingsEqual(pending, saved)
+      })
     }
-  },
-
-  setUiStyle: (style) => {
-    const pending = { ...get().pendingSettings, uiStyle: style }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
   },
 
   setModernFontFamily: (fontId) => {
@@ -279,52 +240,43 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
-  setTerminalStyleOptions: (options) => {
-    const pending: AppSettings = {
-      ...get().pendingSettings,
-      terminalStyleOptions: {
-        ...get().pendingSettings.terminalStyleOptions,
-        ...options
-      } as TerminalStyleOptions
-    }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
-  setActivityBarState: (state) => {
-    const pending = { ...get().pendingSettings, activityBarState: state }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
   // Save: persist pending to disk, update saved state
   saveSettings: async () => {
     const pending = get().pendingSettings
+    const saved = get().savedSettings
     console.log('[settings] Saving settings:', pending)
     try {
       const result = await window.electron.settings.set(pending)
       console.log('[settings] Save result from main:', result)
       set({
-        savedSettings: pending,
+        savedSettings: result,
+        pendingSettings: result,
+        settings: result,
         hasUnsavedChanges: false
       })
+      if (result.modernFontFamily) applyAppFont(result.modernFontFamily)
       console.log('[settings] savedSettings updated to:', get().savedSettings)
     } catch (err) {
       console.error('Failed to save settings:', err)
+      set({
+        savedSettings: saved,
+        pendingSettings: saved,
+        settings: saved,
+        hasUnsavedChanges: false
+      })
+      if (saved.modernFontFamily) applyAppFont(saved.modernFontFamily)
       throw err
     }
   },
 
   // Cancel: revert pending to saved
   cancelSettings: () => {
+    const saved = get().savedSettings
     set({
-      pendingSettings: { ...get().savedSettings },
+      pendingSettings: { ...saved },
       hasUnsavedChanges: false
     })
+    if (saved.modernFontFamily) applyAppFont(saved.modernFontFamily)
   },
 
   // Load from disk on startup
@@ -334,6 +286,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       set({
         savedSettings: settings,
         pendingSettings: settings,
+        settings,
         hasUnsavedChanges: false
       })
 
@@ -347,13 +300,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         migrationAttempted = true
         const oldData = localStorage.getItem(STORAGE_KEY)
         if (oldData) {
+          if (!shouldImportLegacySettings(settings)) {
+            localStorage.removeItem(STORAGE_KEY)
+            return
+          }
           try {
             const parsed = JSON.parse(oldData)
-            const merged = { ...settings, ...parsed }
-            await window.electron.settings.set(merged)
+            const migrated = await window.electron.settings.set(parsed)
             set({
-              savedSettings: merged,
-              pendingSettings: merged
+              savedSettings: migrated,
+              pendingSettings: migrated,
+              settings: migrated,
+              hasUnsavedChanges: false
             })
             localStorage.removeItem(STORAGE_KEY)
           } catch (migrationErr) {
@@ -406,12 +364,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         if (!info) return
         set({ wslInfo: info })
 
-        const currentShell = get().pendingSettings.windowsShell
-        if (currentShell?.type === 'wsl' && info.available) {
+        const currentShell = get().pendingSettings.defaultShell
+        if (currentShell?.kind === 'wsl' && info.available) {
           const distroExists = info.distros.some(d => d.name === currentShell.distro)
           if (!distroExists) {
-            const pending = { ...get().pendingSettings, windowsShell: { type: 'cmd' as const } }
-            set({ pendingSettings: pending })
+            void get().setDefaultShell({
+              path: 'cmd.exe',
+              name: 'Command Prompt',
+              isDefault: true,
+              kind: 'cmd'
+            })
           }
         }
       } catch {

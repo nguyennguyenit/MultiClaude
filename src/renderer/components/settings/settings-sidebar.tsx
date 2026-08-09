@@ -1,6 +1,12 @@
 import { useUpdateStore } from '../../stores'
 
-export type SettingsTab = 'appearance' | 'terminals' | 'notifications' | 'mobile-control' | 'updates'
+export type SettingsTab =
+  | 'appearance'
+  | 'terminals'
+  | 'notifications'
+  | 'diagnostics'
+  | 'agents-integrations'
+  | 'updates'
 
 interface SettingsSidebarProps {
   activeTab: SettingsTab
@@ -27,9 +33,15 @@ const TABS: { id: SettingsTab; label: string; description: string; icon: React.R
     icon: <BellIcon />
   },
   {
-    id: 'mobile-control',
-    label: 'Mobile',
-    description: 'Phone-side control',
+    id: 'diagnostics',
+    label: 'Diagnostics',
+    description: 'Advanced troubleshooting',
+    icon: <DiagnosticsIcon />
+  },
+  {
+    id: 'agents-integrations',
+    label: 'Agents & Integrations',
+    description: 'Provider and mobile hooks',
     icon: <PhoneIcon />
   },
   {
@@ -61,10 +73,11 @@ export function SettingsSidebar({ activeTab, onTabChange }: SettingsSidebarProps
             <button
               key={tab.id}
               data-testid={`settings-tab-${tab.id}`}
+              aria-current={isActive ? 'page' : undefined}
               onClick={() => onTabChange(tab.id)}
               className={`
                 w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left relative
-                transition-all
+                transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mc-accent)]
                 ${!isActive ? 'hover:bg-[var(--mc-bg-hover)]' : 'font-medium'}
               `}
               style={isActive ? {
@@ -130,6 +143,14 @@ function PhoneIcon() {
   return (
     <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+    </svg>
+  )
+}
+
+function DiagnosticsIcon() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.75h4.5m-5.25 0h6l.75 3H8.25l.75-3zM7.5 8.25h9m-8.25 0v9a3.75 3.75 0 007.5 0v-9M6 12h2.25m7.5 0H18M6 16.5h2.25m7.5 0H18" />
     </svg>
   )
 }

@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNotificationStore, useSettingsStore } from '../../stores'
 import { SettingsSidebar, type SettingsTab } from './settings-sidebar'
 import { ThemeSelector } from './theme-selector'
 import { TerminalSettings } from './terminal-settings'
 import { NotificationSettings } from './notification-settings'
-import { MobileControlSettings } from './mobile-control-settings'
 import { UpdateSettings } from './update-settings'
+import { DiagnosticsSettings } from './diagnostics-settings'
+import { AgentsIntegrationsSettings } from './agents-integrations-settings'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -15,6 +16,7 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
   const [isSaving, setIsSaving] = useState(false)
+  const modalRef = useRef<HTMLDivElement>(null)
   const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
   const {
     saveSettings: saveNotificationSettings,
@@ -30,13 +32,43 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     onClose()
   }, [cancelNotificationSettings, cancelSettings, onClose])
 
-  // ESC key to close (cancel changes)
+  // Keep keyboard focus inside the modal and restore it on close.
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleCancel()
+    if (!isOpen) return
+    const previouslyFocused = document.activeElement
+    const frame = requestAnimationFrame(() => {
+      modalRef.current
+        ?.querySelector<HTMLElement>('[aria-label="Close Settings"]')
+        ?.focus()
+    })
+    const handleKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleCancel()
+        return
+      }
+      if (event.key !== 'Tab' || !modalRef.current) return
+      const focusable = Array.from(
+        modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), select:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+        )
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
-    if (isOpen) window.addEventListener('keydown', handleEsc)
-    return () => window.removeEventListener('keydown', handleEsc)
+    window.addEventListener('keydown', handleKeyboard)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('keydown', handleKeyboard)
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus()
+    }
   }, [isOpen, handleCancel])
 
   useEffect(() => {
@@ -81,15 +113,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       />
 
       {/* Modal - centered with max dimensions */}
-      <div data-testid="settings-modal" className="relative bg-[var(--mc-bg-primary)] shadow-xl flex flex-col overflow-hidden rounded-xl" style={{ border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))', width: 'calc(100% - 80px)', height: 'calc(100% - 60px)' }}>
+      <div
+        data-testid="settings-modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-dialog-title"
+        className="relative bg-[var(--mc-bg-primary)] shadow-xl flex flex-col overflow-hidden rounded-xl"
+        style={{ border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))', width: 'calc(100% - 80px)', height: 'calc(100% - 60px)' }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between" style={{ padding: '25px 40px 25px 32px', borderBottom: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
           <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2">
+            <h2 id="settings-dialog-title" className="text-xl font-semibold flex items-center gap-2">
               <span style={{ color: 'var(--mc-accent)' }}><SettingsIcon /></span>
               Settings
             </h2>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--mc-accent)', opacity: 0.7 }}>App Settings & Project Settings</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--mc-accent)', opacity: 0.7 }}>Preferences, diagnostics &amp; integrations</p>
           </div>
           <button
             data-testid="settings-close-button"
@@ -97,6 +137,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             className="p-1.5 rounded transition-colors hover:bg-[var(--mc-bg-hover)]"
             style={{ color: 'var(--mc-accent)', border: 'none', background: 'transparent', cursor: 'pointer' }}
             title="Close"
+            aria-label="Close Settings"
           >
             <CloseIcon />
           </button>
@@ -108,8 +149,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="flex-1 overflow-y-scroll text-left" style={{ padding: '32px 40px', scrollbarGutter: 'stable' }}>
             {activeTab === 'appearance' && <ThemeSelector />}
             {activeTab === 'terminals' && <TerminalSettings />}
-            {activeTab === 'notifications' && <NotificationSettings onNavigateToMobile={() => setActiveTab('mobile-control')} />}
-            {activeTab === 'mobile-control' && <MobileControlSettings />}
+            {activeTab === 'notifications' && <NotificationSettings onNavigateToMobile={() => setActiveTab('agents-integrations')} />}
+            {activeTab === 'diagnostics' && <DiagnosticsSettings />}
+            {activeTab === 'agents-integrations' && <AgentsIntegrationsSettings />}
             {activeTab === 'updates' && <UpdateSettings />}
           </div>
         </div>
@@ -134,7 +176,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
           >
             <SaveIcon />
-            {isSaving ? 'Saving...' : 'Save Settings'}
+            {isSaving ? 'Saving…' : 'Save Settings'}
           </button>
         </div>
       </div>

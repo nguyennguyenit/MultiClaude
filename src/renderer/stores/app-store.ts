@@ -1,5 +1,15 @@
 import { create } from 'zustand'
-import type { Terminal, Project, ProjectTerminalLayout, ActivityBarState, AgentType, TerminalTaskStatus } from '@shared/types'
+import type {
+  Terminal,
+  Project,
+  ProjectTerminalLayout,
+  ActivityBarState,
+  AgentType,
+  TerminalTaskStatus,
+  AgentProvider,
+  AgentProviderReadiness,
+  AgentSessionBinding,
+} from '@shared/types'
 import { DEFAULT_ACTIVITY_BAR_STATE } from '@shared/constants'
 import type { TerminalKeyboardEnhancementState } from '../utils/keyboard-enhancement-utils'
 import {
@@ -40,6 +50,13 @@ interface AppState {
   appendOutput: (id: string, data: string) => void
   getTerminalKeyboardEnhancement: (id: string) => TerminalKeyboardEnhancementState | null
   setTerminalKeyboardEnhancement: (id: string, state: TerminalKeyboardEnhancementState) => void
+
+  // Managed provider state is separate from terminal CLI detection metadata.
+  agentReadiness: Partial<Record<AgentProvider, AgentProviderReadiness>>
+  agentBindings: Record<string, AgentSessionBinding>
+  setAgentReadiness: (readiness: Partial<Record<AgentProvider, AgentProviderReadiness>>) => void
+  setAgentBinding: (binding: AgentSessionBinding) => void
+  removeAgentBinding: (terminalId: string) => void
 
   // Projects
   projects: Project[]
@@ -203,6 +220,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         [id]: state
       }
     })),
+
+  agentReadiness: {},
+  agentBindings: {},
+  setAgentReadiness: (agentReadiness) => set({ agentReadiness }),
+  setAgentBinding: (binding) => set((state) => ({
+    agentBindings: { ...state.agentBindings, [binding.terminalId]: binding }
+  })),
+  removeAgentBinding: (terminalId) => set((state) => {
+    const agentBindings = { ...state.agentBindings }
+    delete agentBindings[terminalId]
+    return { agentBindings }
+  }),
 
   // Projects
   projects: [],

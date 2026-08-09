@@ -71,7 +71,8 @@ describe('NotificationManager', () => {
     const terminalManager = {
       findByClaudeSessionId: vi.fn().mockReturnValue(undefined),
       attachClaudeSession: vi.fn().mockReturnValue({ id: 'term-1' }),
-      get: vi.fn().mockReturnValue({ title: 'Terminal 1' })
+      get: vi.fn().mockReturnValue({ title: 'Terminal 1' }),
+      setNotificationTailEnabled: vi.fn()
     }
 
     const manager = new NotificationManager()
@@ -116,7 +117,8 @@ describe('NotificationManager', () => {
     const terminalManager = {
       findByClaudeSessionId: vi.fn(),
       attachClaudeSession: vi.fn(),
-      get: vi.fn().mockReturnValue({ title: 'Terminal 1' })
+      get: vi.fn().mockReturnValue({ title: 'Terminal 1' }),
+      setNotificationTailEnabled: vi.fn()
     }
 
     const manager = new NotificationManager()
@@ -153,6 +155,32 @@ describe('NotificationManager', () => {
     internals.parser.emit('taskEvent', makeEvent('evt-3'))
     expect(handler).toHaveBeenCalledTimes(1)
 
+    manager.destroy()
+  })
+
+  it('enables transcript retention only for configured Telegram remote control', () => {
+    const terminalManager = {
+      setNotificationTailEnabled: vi.fn()
+    }
+    const manager = new NotificationManager()
+    manager.setManagers(terminalManager as never, {} as never)
+    const internals = manager as unknown as {
+      settings: ReturnType<NotificationManager['getSettings']>
+      startRemoteControl: () => void
+    }
+    vi.spyOn(internals, 'startRemoteControl').mockImplementation(() => {})
+
+    internals.settings = {
+      ...manager.getSettings(),
+      telegramEnabled: true,
+      remoteControlEnabled: true
+    }
+    manager.syncRemoteControl()
+    expect(terminalManager.setNotificationTailEnabled).toHaveBeenLastCalledWith(true)
+
+    internals.settings.remoteControlEnabled = false
+    manager.syncRemoteControl()
+    expect(terminalManager.setNotificationTailEnabled).toHaveBeenLastCalledWith(false)
     manager.destroy()
   })
 })

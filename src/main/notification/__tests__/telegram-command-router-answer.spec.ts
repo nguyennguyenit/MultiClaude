@@ -10,8 +10,10 @@ import type { ProjectStore } from '../../project/project-store'
 const mockTerminalManager = {
   list: vi.fn<() => Terminal[]>(),
   write: vi.fn<(id: string, data: string) => boolean>(),
-  destroy: vi.fn<(id: string) => boolean>(),
+  destroyAsync: vi.fn<(id: string) => Promise<boolean>>(),
   getSessions: vi.fn(),
+  getNotificationTail: vi.fn<(id: string) => string | undefined>(),
+  forgetTerminalHistory: vi.fn<(id: string) => void>(),
   getExitedSession: vi.fn(),
   create: vi.fn<(opts: { cwd?: string; projectId?: string; shell?: unknown }) => Terminal>()
 }
@@ -20,7 +22,8 @@ const mockProjectStore = {
   getProjects: vi.fn<() => Project[]>(),
   getProject: vi.fn<(id: string) => Project | undefined>(),
   setActiveProjectId: vi.fn<(id: string | null) => void>(),
-  getActiveProjectId: vi.fn<() => string | null>()
+  getActiveProjectId: vi.fn<() => string | null>(),
+  removeTerminalFromSession: vi.fn<(id: string) => void>()
 }
 
 const mockSendReply = vi.fn<(text: string) => Promise<boolean>>()
