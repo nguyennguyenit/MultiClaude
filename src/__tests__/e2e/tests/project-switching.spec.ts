@@ -252,6 +252,68 @@ test.describe('Project Switching - Cursor Display', () => {
     expect(stateAfter.activeProjectId).not.toBe(stateBefore.activeProjectId)
   })
 
+  test('switching to an empty project hides retained xterm scrollbars immediately', async ({ window }) => {
+    const [projectA, projectB] = mockProjects.slice(0, 2)
+    await injectMockProject(window, [projectA, projectB])
+
+    await window.evaluate((projectId: string) => {
+      const store = (window as any).__APP_STORE__
+      const createdAt = new Date().toISOString()
+      const scrollback = Array.from({ length: 250 }, (_, index) => `line ${index + 1}`).join('\n')
+
+      store?.setState({
+        terminals: [
+          {
+            id: 'scrollbar-term-1',
+            title: 'Scrollbar Terminal 1',
+            cwd: '/tmp/project-switch-scrollbar',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          },
+          {
+            id: 'scrollbar-term-2',
+            title: 'Scrollbar Terminal 2',
+            cwd: '/tmp/project-switch-scrollbar',
+            isClaudeMode: false,
+            projectId,
+            createdAt
+          }
+        ],
+        terminalOutputs: {
+          'scrollbar-term-1': scrollback,
+          'scrollbar-term-2': scrollback
+        },
+        activeTerminalId: 'scrollbar-term-1'
+      })
+    }, projectA.id)
+
+    const projectAGrid = window.locator(
+      `[aria-label="Terminal grid for project ${projectA.id}"]`
+    )
+    const projectAScrollbars = projectAGrid.locator(
+      '.xterm-scrollable-element > .scrollbar.vertical'
+    )
+    await expect(projectAScrollbars).toHaveCount(2)
+
+    await window.locator(`[data-testid="project-tab-${projectB.id}"]`).click()
+    await expect(window.getByRole('heading', { name: 'Multi Terminals' })).toBeVisible()
+    await expect(projectAGrid).toHaveAttribute('aria-hidden', 'true')
+    await expect(projectAGrid.locator('[data-terminal-id]')).toHaveCount(2)
+
+    const inactiveScrollbarDisplay = await projectAScrollbars.evaluateAll((scrollbars) =>
+      scrollbars.map((scrollbar) => getComputedStyle(scrollbar).display)
+    )
+    expect(inactiveScrollbarDisplay).toEqual(['none', 'none'])
+
+    await window.locator(`[data-testid="project-tab-${projectA.id}"]`).click()
+    await expect(projectAGrid).toHaveAttribute('aria-hidden', 'false')
+    const restoredScrollbarDisplay = await projectAScrollbars.evaluateAll((scrollbars) =>
+      scrollbars.map((scrollbar) => getComputedStyle(scrollbar).display)
+    )
+    expect(restoredScrollbarDisplay).toEqual(['block', 'block'])
+  })
+
   test('rapid switching: no race conditions', async ({ window }) => {
     // Setup: 3 projects
     const threeProjects = mockProjects.slice(0, 3)
