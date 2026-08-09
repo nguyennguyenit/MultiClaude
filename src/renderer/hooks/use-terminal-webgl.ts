@@ -15,8 +15,13 @@ import { useEffect, useRef, useCallback } from 'react'
 import type { RefObject } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
 import type { Terminal as XTerm } from '@xterm/xterm'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 import { useSettingsStore, useAppStore, useToastStore } from '../stores'
-import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
+import {
+  pauseAndBuffer,
+  resumeAndFlush,
+  resumeFromSnapshot,
+} from '../utils/terminal-output-dispatcher'
 import { subscribeToSystemResume, unsubscribeFromSystemResume } from '../utils/terminal-lifecycle-dispatcher'
 
 // ── Per-terminal mutex ───────────────────────────────────────────────────────
@@ -25,6 +30,26 @@ import { subscribeToSystemResume, unsubscribeFromSystemResume } from '../utils/t
 // Designed for phase-4 reuse: import snapshotReplayMutex and call isLocked() before
 // triggering auto-resync from powerMonitor/onSystemResumed.
 const snapshotReplayMutex = new Map<string, Promise<void>>()
+
+export async function acquireSnapshotReplayLock(
+  terminalId: string,
+  waitForExisting = false
+): Promise<(() => void) | null> {
+  while (snapshotReplayMutex.has(terminalId)) {
+    if (!waitForExisting) return null
+    await snapshotReplayMutex.get(terminalId)
+  }
+
+  let resolve!: () => void
+  const lock = new Promise<void>(resolveLock => { resolve = resolveLock })
+  snapshotReplayMutex.set(terminalId, lock)
+  return () => {
+    if (snapshotReplayMutex.get(terminalId) === lock) {
+      snapshotReplayMutex.delete(terminalId)
+    }
+    resolve()
+  }
+}
 
 const REFRESH_DEBOUNCE = 100  // ms debounce for refreshTerminal()
 
@@ -40,11 +65,15 @@ const REFRESH_DEBOUNCE = 100  // ms debounce for refreshTerminal()
 export function shouldUseWebGL(terminalId: string, _isActive?: boolean, _isHidden?: boolean): boolean {
   void _isActive; void _isHidden
   const { pendingSettings } = useSettingsStore.getState()
-  const isClaudeTerminal = useAppStore.getState().terminals.some(
-    terminal => terminal.id === terminalId && terminal.isClaudeMode
+  const terminal = useAppStore.getState().terminals.find(
+    candidate => candidate.id === terminalId
   )
+  const requiresSafeRenderer =
+    terminal?.agentType === 'claude' ||
+    terminal?.agentType === 'codex' ||
+    terminal?.isClaudeMode === true
 
-  if (isClaudeTerminal && !pendingSettings.gpuRendererForClaudeTerminals) {
+  if (requiresSafeRenderer && !pendingSettings.gpuRendererForClaudeTerminals) {
     return false
   }
 
@@ -54,6 +83,7 @@ export function shouldUseWebGL(terminalId: string, _isActive?: boolean, _isHidde
 
 interface UseTerminalWebGLParams {
   terminalRef: RefObject<XTerm | null>
+  surfaceRef?: RefObject<TerminalSurface | null>
   disposedRef: RefObject<boolean>
   terminalId: string
   isActiveRef: RefObject<boolean>
@@ -84,6 +114,7 @@ interface UseTerminalWebGLResult {
 interface SnapshotReplayParams {
   terminalId: string
   terminalRef: RefObject<XTerm | null>
+  surfaceRef?: RefObject<TerminalSurface | null>
   disposedRef: RefObject<boolean>
   isActiveRef: RefObject<boolean>
   isHiddenRef: RefObject<boolean>
@@ -99,9 +130,9 @@ interface SnapshotReplayParams {
  *
  * Sequence:
  *   mutex check → pauseAndBuffer → getSnapshot → (disposed check) →
- *   WebGL teardown → terminal.reset() → alt-buffer exit (B1) → resize →
+ *   WebGL teardown → terminal.reset() → resize →
  *   write snapshot data → WebGL reload → performFit → SIGWINCH →
- *   resumeAndFlush → toast
+ *   resumeFromSnapshot(watermark) → toast
  *
  * Exported so phase-4 (powerMonitor auto-resync) can call it with silent:true.
  */
@@ -109,6 +140,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
   const {
     terminalId,
     terminalRef,
+    surfaceRef,
     disposedRef,
     isActiveRef,
     isHiddenRef,
@@ -119,27 +151,15 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     silent,
   } = params
 
-  // H6: concurrent refresh + auto-resync guard
-  if (snapshotReplayMutex.has(terminalId)) return
-
-  let resolveMutex!: () => void
-  const lockPromise = new Promise<void>(resolve => { resolveMutex = resolve })
-  snapshotReplayMutex.set(terminalId, lockPromise)
+  const releaseLock = await acquireSnapshotReplayLock(terminalId)
+  if (!releaseLock) return
 
   try {
     // H4: buffer live output chunks while we reset+replay
     pauseAndBuffer(terminalId)
 
-    // Part F: rebuild headless from raw PTY transcript at current cols before serializing.
-    // This ensures ANSI erase sequences execute at the correct width so the snapshot
-    // contains no reflow gaps (blank lines left by xterm's internal logical-line splitter).
-    // Failure is silenced — a stale snapshot is still better than no refresh at all.
-    try {
-      await window.electron.terminal.rebuildHeadless(terminalId)
-    } catch (e) {
-      console.warn('[snapshot-replay] rebuildHeadless failed (non-fatal):', e)
-    }
-
+    // Canonical state is already maintained in the ordered main-process mirror.
+    // Refresh never replays the persisted raw tail.
     const snap = await window.electron.terminal.getSnapshot(terminalId)
 
     // M8: terminal destroyed while IPC was in flight
@@ -155,22 +175,12 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     try { webglAddonRef.current?.dispose() } catch { /* ignore */ }
     webglAddonRef.current = null
 
-    t.reset()
-
-    // B1: force exit alt-buffer before replaying snapshot — ensures shell prompt
-    // is visible even if terminal was inside vim/less when refresh was triggered.
-    t.write('\x1b[?1049l', undefined)
-
-    // Apply snapshot dimensions if valid
-    if (snap.cols > 0 && snap.rows > 0) {
-      t.resize(snap.cols, snap.rows)
-    }
-
-    // Write snapshot data (skip write call if empty to avoid unnecessary parse)
-    if (snap.data) {
-      await new Promise<void>(resolve => {
-        t.write(snap.data, resolve)
-      })
+    if (surfaceRef?.current) {
+      await surfaceRef.current.replaceSnapshot(snap)
+    } else {
+      t.reset()
+      if (snap.cols > 0 && snap.rows > 0) t.resize(snap.cols, snap.rows)
+      if (snap.ansi) await new Promise<void>(resolve => t.write(snap.ansi, resolve))
     }
 
     // Reload WebGL after reset/write cycle
@@ -190,8 +200,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
       window.electron.terminal.resize(terminalId, t.cols, t.rows)
     } catch { /* ignore — non-fatal */ }
 
-    // H4: drain buffered live chunks (arrival order preserved)
-    resumeAndFlush(terminalId)
+    resumeFromSnapshot(snap)
 
     if (!silent) {
       try {
@@ -209,8 +218,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
       useToastStore.getState().addToast('Terminal refresh error — could not fetch snapshot', 'error')
     } catch { /* ignore */ }
   } finally {
-    snapshotReplayMutex.delete(terminalId)
-    resolveMutex()
+    releaseLock()
   }
 }
 
@@ -222,6 +230,7 @@ export function isSnapshotReplayLocked(terminalId: string): boolean {
 export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWebGLResult {
   const {
     terminalRef,
+    surfaceRef,
     disposedRef,
     terminalId,
     isActiveRef,
@@ -385,6 +394,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
       void performSnapshotReplay({
         terminalId,
         terminalRef,
+        surfaceRef,
         disposedRef,
         isActiveRef,
         isHiddenRef,
@@ -395,7 +405,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         silent: !showNotification,
       })
     }, REFRESH_DEBOUNCE)
-  }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, performFit, reconcileWebGL, terminalId, terminalRef, webglAddonRef])
+  }, [clearTextureAtlas, disposedRef, isActiveRef, isHiddenRef, performFit, reconcileWebGL, surfaceRef, terminalId, terminalRef, webglAddonRef])
 
   // Phase 4: subscribe to system-resume lifecycle events.
   // Triggers silent snapshot replay (no toast) on lid-wake, mirroring the same
@@ -407,6 +417,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
       void performSnapshotReplay({
         terminalId,
         terminalRef,
+        surfaceRef,
         disposedRef,
         isActiveRef,
         isHiddenRef,
@@ -421,6 +432,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
   }, [
     terminalId,
     terminalRef,
+    surfaceRef,
     disposedRef,
     isActiveRef,
     isHiddenRef,

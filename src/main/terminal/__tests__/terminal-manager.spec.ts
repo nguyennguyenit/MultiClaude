@@ -252,6 +252,15 @@ describe('TerminalManager', () => {
     })
   })
 
+  it('binds a caller-supplied Claude --session-id during terminal input detection', () => {
+    const terminal = manager.create({ cwd: '/tmp' })
+    manager.write(terminal.id, 'claude --session-id 11111111-1111-4111-8111-111111111111\r')
+
+    expect(manager.get(terminal.id)?.agentType).toBe('claude')
+    expect(manager.get(terminal.id)?.claudeSessionId)
+      .toBe('11111111-1111-4111-8111-111111111111')
+  })
+
   describe('Windows PowerShell resolution', () => {
     it('prefers pwsh.exe when available on PATH', () => {
       const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
@@ -336,6 +345,48 @@ describe('TerminalManager', () => {
       const sessions = manager.getSessions()
       expect(sessions[0].id).toBe(term.id)
       expect(sessions[0].outputBuffer).toHaveLength(TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+    })
+
+    it('caps restoration and notification tails by encoded UTF-8 bytes', () => {
+      const term = manager.create()
+      manager.setNotificationTailEnabled(true)
+      mockPty._dataCallback?.('界'.repeat(Math.ceil(TERMINAL_OUTPUT_BUFFER_MAX / 3) + 20))
+
+      const restoreTail = manager.getSessions()[0].outputBuffer
+      const notificationTail = manager.getNotificationTail(term.id)
+      expect(Buffer.byteLength(restoreTail, 'utf8')).toBeLessThanOrEqual(TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+      expect(Buffer.byteLength(notificationTail ?? '', 'utf8')).toBeLessThanOrEqual(TERMINAL_OUTPUT_BUFFER_TRIM_TO)
+      expect(restoreTail).not.toContain('\uFFFD')
+      expect(notificationTail).not.toContain('\uFFFD')
+    })
+
+    it('scrubs live and exited retained tails', async () => {
+      const term = manager.create()
+      manager.setNotificationTailEnabled(true)
+      mockPty._dataCallback?.('sensitive-output')
+      expect(manager.getNotificationTail(term.id)).toContain('sensitive-output')
+
+      const destroyPromise = manager.destroyAsync(term.id)
+      mockPty._exitCallback?.({ exitCode: 0 })
+      await destroyPromise
+      expect(manager.getNotificationTail(term.id)).toContain('sensitive-output')
+
+      manager.forgetTerminalHistory(term.id)
+      expect(manager.getNotificationTail(term.id)).toBeUndefined()
+    })
+
+    it('retains notification output only while remote control is enabled', () => {
+      const term = manager.create()
+      mockPty._dataCallback?.('disabled-output')
+      expect(manager.getNotificationTail(term.id)).toBe('')
+
+      manager.setNotificationTailEnabled(true)
+      mockPty._dataCallback?.('enabled-output')
+      expect(manager.getNotificationTail(term.id)).toBe('enabled-output')
+
+      manager.setNotificationTailEnabled(false)
+      expect(manager.getNotificationTail(term.id)).toBe('')
+      expect(manager.getSessions()[0].outputBuffer).toContain('disabled-outputenabled-output')
     })
 
     it('can attach a Claude session ID to a live Claude terminal by cwd', () => {
@@ -580,7 +631,7 @@ describe('TerminalManager', () => {
 
       const snap = await manager.getSnapshot(term.id)
       // Snapshot should still contain the text that was in outputBuffer
-      expect(snap.data).toContain('hello reflow world')
+      expect(snap.ansi).toContain('hello reflow world')
     })
 
     it('is idempotent — multiple consecutive calls do not duplicate content', async () => {
@@ -597,9 +648,9 @@ describe('TerminalManager', () => {
       const snap3 = await manager.getSnapshot(term.id)
 
       // Each call must NOT duplicate content
-      const count1 = (snap1.data.match(/idempotent test/g) || []).length
-      const count2 = (snap2.data.match(/idempotent test/g) || []).length
-      const count3 = (snap3.data.match(/idempotent test/g) || []).length
+      const count1 = (snap1.ansi.match(/idempotent test/g) || []).length
+      const count2 = (snap2.ansi.match(/idempotent test/g) || []).length
+      const count3 = (snap3.ansi.match(/idempotent test/g) || []).length
 
       expect(count1).toBe(1)
       expect(count2).toBe(1)
@@ -623,8 +674,8 @@ describe('TerminalManager', () => {
       const snap = await manager.getSnapshot(term.id)
 
       // Each marker should appear EXACTLY ONCE — no duplication from live write + replay
-      const initialCount = (snap.data.match(/initial-marker/g) || []).length
-      const concurrentCount = (snap.data.match(/concurrent-marker/g) || []).length
+      const initialCount = (snap.ansi.match(/initial-marker/g) || []).length
+      const concurrentCount = (snap.ansi.match(/concurrent-marker/g) || []).length
 
       expect(initialCount).toBe(1)
       expect(concurrentCount).toBe(1)
@@ -660,7 +711,7 @@ describe('TerminalManager', () => {
       await Promise.all([a, b])
 
       const snap = await manager.getSnapshot(term.id)
-      const count = (snap.data.match(/serialize-marker/g) || []).length
+      const count = (snap.ansi.match(/serialize-marker/g) || []).length
       expect(count).toBe(1)
     })
 
@@ -686,8 +737,50 @@ describe('TerminalManager', () => {
       const snap = await manager.getSnapshot(term.id)
       // The post-trim marker must appear exactly once — neither lost (buggy slice
       // returning empty) nor duplicated (buggy slice repeating replayed content).
-      const postCount = (snap.data.match(/post-trim-marker/g) || []).length
+      const postCount = (snap.ansi.match(/post-trim-marker/g) || []).length
       expect(postCount).toBe(1)
+    })
+  })
+
+  describe('getDiagnostics', () => {
+    it('reports sequence and committed watermark without terminal content', async () => {
+      const term = manager.create()
+      manager.write(term.id, 'codex\r')
+      mockPty._dataCallback?.('private transcript marker\r\n')
+      await manager.getSnapshot(term.id)
+
+      const diagnostics = manager.getDiagnostics()
+
+      expect(diagnostics).toEqual([expect.objectContaining({
+        terminalId: term.id,
+        provider: 'codex',
+        backend: 'xterm-headless',
+        backendAvailable: true,
+        lastSequence: 1,
+        watermark: 1,
+        fallbackReason: null,
+      })])
+      expect(JSON.stringify(diagnostics)).not.toContain('private transcript marker')
+    })
+
+    it('fails backend capability closed when the canonical mirror is unavailable', () => {
+      const term = manager.create()
+      const proc = (manager as unknown as {
+        terminals: Map<string, {
+          headlessTerm?: { dispose: () => void }
+          serializeAddon?: unknown
+        }>
+      }).terminals.get(term.id)!
+      proc.headlessTerm?.dispose()
+      proc.headlessTerm = undefined
+      proc.serializeAddon = undefined
+
+      expect(manager.getDiagnostics()).toEqual([expect.objectContaining({
+        terminalId: term.id,
+        backend: 'unavailable',
+        backendAvailable: false,
+        fallbackReason: 'Canonical xterm headless mirror unavailable.',
+      })])
     })
   })
 

@@ -25,4 +25,5 @@ export interface ViewportEventListener {
   target: EventTarget
   type: string
   handler: EventListener
+  capture?: boolean
 }

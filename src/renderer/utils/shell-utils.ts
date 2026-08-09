@@ -15,7 +15,7 @@ export function getShellKey(shell: WindowsShell): string {
  */
 export function shellInfoToWindowsShell(info: ShellInfo): WindowsShell {
   switch (info.kind) {
-    case 'wsl': return { type: 'wsl', distro: info.name }
+    case 'wsl': return { type: 'wsl', distro: info.distro ?? info.name }
     case 'powershell': return { type: 'powershell' }
     case 'cmd': return { type: 'cmd' }
     default: return { type: 'cmd' }

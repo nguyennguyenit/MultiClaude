@@ -9,8 +9,10 @@ vi.mock('@xterm/addon-webgl')
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - file does not exist yet (Phase 05)
-import { useTerminalWebGL } from '../../hooks/use-terminal-webgl'
+import { shouldUseWebGL, useTerminalWebGL } from '../../hooks/use-terminal-webgl'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { useAppStore, useSettingsStore } from '../../stores'
+import { DEFAULT_SETTINGS } from '@shared/constants'
 
 function makeRefs(overrides: Record<string, unknown> = {}) {
   const terminal = {
@@ -28,6 +30,14 @@ function makeRefs(overrides: Record<string, unknown> = {}) {
 describe('useTerminalWebGL', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    useAppStore.setState({ terminals: [] })
+    useSettingsStore.setState({
+      pendingSettings: {
+        ...DEFAULT_SETTINGS,
+        terminalRenderMode: 'balanced',
+        gpuRendererForClaudeTerminals: false,
+      },
+    })
   })
 
   afterEach(() => {
@@ -37,6 +47,39 @@ describe('useTerminalWebGL', () => {
   it('loads WebglAddon when mode=quality', async () => {
     // This test will pass after Phase 05 implementation
     expect(true).toBe(true)  // placeholder until hook exists
+  })
+
+  it.each(['claude', 'codex'] as const)(
+    'uses the safe renderer policy for %s terminals',
+    (agentType) => {
+      useAppStore.setState({
+        terminals: [{
+          id: 'agent-terminal',
+          title: 'Agent',
+          cwd: '/redacted',
+          isClaudeMode: agentType === 'claude',
+          agentType,
+          createdAt: new Date(),
+        }],
+      })
+
+      expect(shouldUseWebGL('agent-terminal')).toBe(false)
+    }
+  )
+
+  it('allows WebGL for a generic shell under balanced mode', () => {
+    useAppStore.setState({
+      terminals: [{
+        id: 'shell-terminal',
+        title: 'Shell',
+        cwd: '/redacted',
+        isClaudeMode: false,
+        agentType: 'generic',
+        createdAt: new Date(),
+      }],
+    })
+
+    expect(shouldUseWebGL('shell-terminal')).toBe(true)
   })
 
   it.todo('loads WebglAddon when mode=quality and not hidden')

@@ -16,19 +16,21 @@ import type { RefObject } from 'react'
 import type { Terminal as XTerm } from '@xterm/xterm'
 import type { TerminalScrollMachine } from '../utils/terminal-scroll-machine'
 import type { UserScrollIntent } from '../utils/terminal-scroll-utils'
+import type { TerminalSurface } from '../terminal/terminal-surface'
+import { SynchronizedOutputFilter } from '../utils/synchronized-output-filter'
 import {
   createUserScrollIntent,
   isViewportNearBottom,
   resolveViewportRestoreTarget,
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
-import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
 
 const USER_SCROLL_WHEEL_GRACE = 180   // ms wheel-scroll intent grace period
 const USER_SCROLL_DRAG_GRACE = 1200  // ms scrollbar-drag intent grace period
 
 interface UseTerminalScrollParams {
   terminalRef: RefObject<XTerm | null>
+  surfaceRef: RefObject<TerminalSurface | null>
   disposedRef: RefObject<boolean>
   isHiddenRef: RefObject<boolean>
   scrollMachineRef: RefObject<TerminalScrollMachine>
@@ -43,9 +45,7 @@ interface UseTerminalScrollResult {
   followLiveOutput: () => void
   syncViewportState: (buffer: XTerm['buffer']['active'], intent?: UserScrollIntent | null) => void
   clearUserViewportInteraction: () => void
-  markUserViewportInteraction: (durationMs: number) => void
-  /** v6: call from terminal.onWriteParsed — updates snapshot with post-parse baseY */
-  onWriteParsed: () => void
+  markUserViewportInteraction: (durationMs: number, direction?: 'up' | 'down') => void
   isAtBottom: boolean
   hasScrollback: boolean
 }
@@ -53,6 +53,7 @@ interface UseTerminalScrollResult {
 export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalScrollResult {
   const {
     terminalRef,
+    surfaceRef,
     disposedRef,
     isHiddenRef,
     scrollMachineRef,
@@ -63,6 +64,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [hasScrollback, setHasScrollback] = useState(false)
   const userViewportInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const synchronizedOutputFilterRef = useRef(new SynchronizedOutputFilter())
 
   const syncViewportState = useCallback((
     buffer: XTerm['buffer']['active'],
@@ -92,10 +94,12 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
       userViewportInteractionTimerRef.current = null
     }
     userViewportInteractingRef.current = false
-  }, [userViewportInteractingRef])
+    scrollMachineRef.current.userScrollDirection = null
+  }, [scrollMachineRef, userViewportInteractingRef])
 
-  const markUserViewportInteraction = useCallback((durationMs: number) => {
+  const markUserViewportInteraction = useCallback((durationMs: number, direction?: 'up' | 'down') => {
     userViewportInteractingRef.current = true
+    scrollMachineRef.current.userScrollDirection = direction ?? null
 
     if (userViewportInteractionTimerRef.current) {
       clearTimeout(userViewportInteractionTimerRef.current)
@@ -104,12 +108,14 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     userViewportInteractionTimerRef.current = setTimeout(() => {
       userViewportInteractionTimerRef.current = null
       userViewportInteractingRef.current = false
+      scrollMachineRef.current.userScrollDirection = null
     }, durationMs)
-  }, [userViewportInteractingRef])
+  }, [scrollMachineRef, userViewportInteractingRef])
 
   const followLiveOutput = useCallback(() => {
     scrollMachineRef.current.followOutputOnNextWrite = true
     scrollMachineRef.current.pendingUserScrollIntent = null
+    scrollMachineRef.current.readingViewportIntent = null
     clearUserViewportInteraction()
 
     const terminal = terminalRef.current
@@ -128,7 +134,8 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal) return ''
 
-    const visibleData = stripLeakedTerminalResponses(processKeyboardEnhancementOutput(data))
+    const filteredData = synchronizedOutputFilterRef.current.process(data)
+    const visibleData = processKeyboardEnhancementOutput(filteredData)
     if (!visibleData) return ''
 
     const scrollMachine = scrollMachineRef.current
@@ -136,15 +143,20 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     // Capture pre-write scroll state on the first concurrent write
     if (scrollMachine.pendingWriteCount === 0) {
       const buffer = terminal.buffer.active
+      const readingIntent = scrollMachine.readingViewportIntent
       scrollMachine.pendingWriteSnapshot = {
-        wasAtBottom: isViewportNearBottom(buffer.baseY, buffer.viewportY, TERMINAL_SCROLL_THRESHOLD),
-        savedViewportY: buffer.viewportY
+        wasAtBottom: readingIntent
+          ? readingIntent.stickToBottom
+          : isViewportNearBottom(buffer.baseY, buffer.viewportY, TERMINAL_SCROLL_THRESHOLD),
+        savedViewportY: readingIntent?.stickToBottom === false && readingIntent.viewportY !== null
+          ? readingIntent.viewportY
+          : buffer.viewportY
       }
     }
 
     scrollMachine.pendingWriteCount += 1
 
-    terminal.write(visibleData, () => {
+    const afterWrite = () => {
       scrollMachine.pendingWriteCount = Math.max(0, scrollMachine.pendingWriteCount - 1)
       const term = terminalRef.current
       if (!term) return
@@ -172,7 +184,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
         currentBaseY: term.buffer.active.baseY,
         pendingUserScrollIntent: isHiddenRef.current
           ? scrollMachine.hiddenViewportIntent
-          : scrollMachine.pendingUserScrollIntent
+          : scrollMachine.pendingUserScrollIntent ?? scrollMachine.readingViewportIntent
       })
       scrollMachine.followOutputOnNextWrite = false
       scrollMachine.pendingUserScrollIntent = null
@@ -185,11 +197,13 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
 
       const buffer = term.buffer.active
       syncViewportState(buffer, isHiddenRef.current ? scrollMachine.hiddenViewportIntent : null)
-    })
+    }
+    if (surfaceRef.current) void surfaceRef.current.write(visibleData).then(afterWrite)
+    else terminal.write(visibleData, afterWrite)
 
     return visibleData
   // eslint-disable-next-line react-hooks/exhaustive-deps -- disposedRef is a stable ref object
-  }, [disposedRef, isHiddenRef, processKeyboardEnhancementOutput, scrollMachineRef, syncViewportState, terminalRef])
+  }, [disposedRef, isHiddenRef, processKeyboardEnhancementOutput, scrollMachineRef, surfaceRef, syncViewportState, terminalRef])
 
   const scrollToTop = useCallback(() => {
     const terminal = terminalRef.current
@@ -203,6 +217,7 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
       TERMINAL_SCROLL_THRESHOLD
     )
     scrollMachine.pendingUserScrollIntent = scrollMachine.hiddenViewportIntent
+    scrollMachine.readingViewportIntent = scrollMachine.hiddenViewportIntent
     syncViewportState(terminal.buffer.active, isHiddenRef.current ? scrollMachine.hiddenViewportIntent : null)
   }, [isHiddenRef, scrollMachineRef, syncViewportState, terminalRef])
 
@@ -218,25 +233,9 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
       TERMINAL_SCROLL_THRESHOLD
     )
     scrollMachine.pendingUserScrollIntent = scrollMachine.hiddenViewportIntent
+    scrollMachine.readingViewportIntent = scrollMachine.hiddenViewportIntent
     syncViewportState(terminal.buffer.active, isHiddenRef.current ? scrollMachine.hiddenViewportIntent : null)
   }, [isHiddenRef, scrollMachineRef, syncViewportState, terminalRef])
-
-  // v6: fires after each write chunk is parsed, before render — update snapshot
-  // with post-parse buffer state so resolveViewportRestoreTarget has accurate baseY
-  const onWriteParsed = useCallback(() => {
-    const terminal = terminalRef.current
-    const scrollMachine = scrollMachineRef.current
-    if (!terminal || scrollMachine.pendingWriteCount === 0) return
-
-    const { baseY, viewportY } = terminal.buffer.active
-    // Refresh wasAtBottom using post-parse buffer — more accurate than pre-write capture
-    if (scrollMachine.pendingWriteSnapshot) {
-      scrollMachine.pendingWriteSnapshot = {
-        wasAtBottom: isViewportNearBottom(baseY, viewportY, TERMINAL_SCROLL_THRESHOLD),
-        savedViewportY: scrollMachine.pendingWriteSnapshot.savedViewportY,
-      }
-    }
-  }, [scrollMachineRef, terminalRef])
 
   return {
     write,
@@ -246,7 +245,6 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     syncViewportState,
     clearUserViewportInteraction,
     markUserViewportInteraction,
-    onWriteParsed,
     isAtBottom,
     hasScrollback,
   }

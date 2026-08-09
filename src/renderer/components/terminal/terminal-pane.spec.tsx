@@ -110,4 +110,34 @@ describe('TerminalPane', () => {
     expect(container.querySelector('.attachment-strip')).toBeNull()
   })
 
+  it('labels managed provider capability separately from the detected CLI badge', () => {
+    useAppStore.getState().setAgentBinding({
+      session: { provider: 'codex', id: 'thread-1' },
+      terminalId: 'term-1',
+      webContentsId: 1,
+      capabilities: {
+        send: true,
+        interrupt: true,
+        resume: true,
+        approvals: true,
+        contextUsage: 'exact',
+        reasoningMetadata: true
+      },
+      status: 'running'
+    })
+    const { getByTitle, getByText } = render(
+      <TerminalPane
+        terminalId="term-1"
+        title="Terminal 1"
+        isActive
+        agentType="gemini"
+        onActivate={() => {}}
+        onClose={() => {}}
+      />
+    )
+
+    expect(getByTitle('Gemini CLI')).toBeTruthy()
+    expect(getByText('Codex managed · exact context')).toBeTruthy()
+  })
+
 })

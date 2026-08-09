@@ -72,8 +72,9 @@ export function useKeyboardShortcuts({
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    // Capture global shortcuts before xterm's textarea can stop propagation.
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [onAddTerminal, onCloseTerminal, onSelectProject, onToggleGitHubPanel, onToggleContextWindow, onSplit])
 }
 

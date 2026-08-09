@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Terminal as HeadlessTerminal } from '@xterm/headless'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { TerminalManager } from '../terminal-manager'
+import type { TerminalOutputChunk } from '@shared/types'
 
 // --- Mock helpers ---
 
@@ -82,12 +83,149 @@ describe('TerminalManager.getSnapshot', () => {
     const snap = await manager.getSnapshot(term.id)
 
     // data must contain the output text
-    expect(snap.data).toContain('line1')
-    expect(snap.data).toContain('line2')
+    expect(snap.ansi).toContain('line1')
+    expect(snap.ansi).toContain('line2')
 
     // dims must reflect actual terminal size (default 80x24)
     expect(snap.cols).toBeGreaterThan(0)
     expect(snap.rows).toBeGreaterThan(0)
+  })
+
+  it('assigns monotonic envelopes and returns a coherent committed watermark', async () => {
+    const chunks: TerminalOutputChunk[] = []
+    manager.on('output', (chunk: TerminalOutputChunk) => chunks.push(chunk))
+    const term = manager.create()
+
+    mockPty.__emitData('one\r\n')
+    mockPty.__emitData('two\r\n')
+    const snap = await manager.getSnapshot(term.id)
+
+    expect(chunks.map(chunk => chunk.sequence)).toEqual([1, 2])
+    expect(new Set(chunks.map(chunk => chunk.streamEpoch)).size).toBe(1)
+    expect(snap.streamEpoch).toBe(chunks[0].streamEpoch)
+    expect(snap.watermark).toBe(2)
+    expect(snap.ansi).toContain('one')
+    expect(snap.ansi).toContain('two')
+  })
+
+  it('rejects snapshot hydration while sequenced PTY output remains live without a headless mirror', async () => {
+    const chunks: TerminalOutputChunk[] = []
+    manager.on('output', (chunk: TerminalOutputChunk) => chunks.push(chunk))
+    const term = manager.create()
+    const proc = (manager as unknown as { terminals: InternalTerminals }).terminals.get(term.id)!
+    proc.headlessTerm?.dispose()
+    proc.headlessTerm = undefined
+    proc.serializeAddon = undefined
+
+    mockPty.__emitData('degraded-output\r\n')
+
+    await expect(manager.getSnapshot(term.id)).rejects.toThrow(
+      `Canonical terminal snapshot unavailable for ${term.id}`
+    )
+    expect(chunks).toHaveLength(1)
+  })
+
+  it('uses a fresh stream epoch for each terminal lifetime', async () => {
+    const first = manager.create()
+    mockPty.__emitData('first\r\n')
+    const firstSnapshot = await manager.getSnapshot(first.id)
+    manager.destroy(first.id)
+
+    const second = manager.create()
+    mockPty.__emitData('second\r\n')
+    const secondSnapshot = await manager.getSnapshot(second.id)
+
+    expect(firstSnapshot.streamEpoch).not.toBe(secondSnapshot.streamEpoch)
+    expect(secondSnapshot.watermark).toBe(1)
+  })
+
+  it('reports the committed alternate buffer in the snapshot contract', async () => {
+    const term = manager.create()
+    mockPty.__emitData('\x1b[?1049hfull-screen')
+
+    const snapshot = await manager.getSnapshot(term.id)
+
+    expect(snapshot.buffer).toBe('alternate')
+    expect(snapshot.watermark).toBe(1)
+  })
+
+  it('orders canonical output before a later headless resize', async () => {
+    const term = manager.create()
+    const proc = (manager as unknown as { terminals: InternalTerminals }).terminals.get(term.id)!
+    const events: string[] = []
+    manager.on('output', () => events.push('output'))
+    const originalResize = proc.headlessTerm!.resize.bind(proc.headlessTerm)
+    vi.spyOn(proc.headlessTerm!, 'resize').mockImplementation((cols, rows) => {
+      events.push('resize')
+      originalResize(cols, rows)
+    })
+
+    mockPty.__emitData('before-resize\r\n')
+    manager.resize(term.id, 100, 30)
+    const snapshot = await manager.getSnapshot(term.id)
+
+    expect(events).toEqual(['output', 'resize'])
+    expect(snapshot.watermark).toBe(1)
+    expect(snapshot.cols).toBe(100)
+    expect(snapshot.rows).toBe(30)
+  })
+
+  it('orders a synchronous PTY resize repaint after canonical dimensions', async () => {
+    const term = manager.create()
+    const proc = (manager as unknown as { terminals: InternalTerminals }).terminals.get(term.id)!
+    const events: string[] = []
+    const originalResize = proc.headlessTerm!.resize.bind(proc.headlessTerm)
+    vi.spyOn(proc.headlessTerm!, 'resize').mockImplementation((cols, rows) => {
+      events.push('canonical-resize')
+      originalResize(cols, rows)
+    })
+    mockPty.resize.mockImplementationOnce(() => {
+      events.push('pty-resize')
+      mockPty.__emitData('resize-repaint\r\n')
+    })
+    manager.on('output', () => events.push('repaint-output'))
+
+    expect(manager.resize(term.id, 100, 30)).toBe(true)
+    const snapshot = await manager.getSnapshot(term.id)
+
+    expect(events).toEqual(['pty-resize', 'canonical-resize', 'repaint-output'])
+    expect(snapshot.cols).toBe(100)
+    expect(snapshot.rows).toBe(30)
+    expect(snapshot.ansi).toContain('resize-repaint')
+  })
+
+  it('commits final PTY output before publishing terminal exit', async () => {
+    const events: string[] = []
+    const term = manager.create()
+    manager.on('output', (chunk: TerminalOutputChunk) => events.push(`output:${chunk.data}`))
+    const exited = new Promise<void>(resolve => {
+      manager.once('exit', () => {
+        events.push('exit')
+        resolve()
+      })
+    })
+
+    mockPty.__emitData('final-output')
+    mockPty._exitCallback?.({ exitCode: 0 })
+    await exited
+
+    expect(events).toEqual(['output:final-output', 'exit'])
+    expect(manager.get(term.id)).toBeUndefined()
+  })
+
+  it('uses the same ordered exit finalizer for destroyAsync', async () => {
+    const events: string[] = []
+    const term = manager.create()
+    manager.on('output', (chunk: TerminalOutputChunk) => events.push(`output:${chunk.data}`))
+    manager.on('exit', () => events.push('exit'))
+
+    mockPty.__emitData('close-tail')
+    const destroying = manager.destroyAsync(term.id)
+    mockPty._exitCallback?.({ exitCode: 0 })
+    await destroying
+
+    expect(events).toEqual(['output:close-tail', 'exit'])
+    expect(manager.get(term.id)).toBeUndefined()
   })
 
   it('(a) includes timing: snapshot serialize latency <60ms for typical scrollback', async () => {
@@ -108,7 +246,15 @@ describe('TerminalManager.getSnapshot', () => {
 
   it('(b) returns empty payload { data: "", cols: 0, rows: 0 } for unknown id', async () => {
     const snap = await manager.getSnapshot('nonexistent-id-xyz')
-    expect(snap).toEqual({ data: '', cols: 0, rows: 0 })
+    expect(snap).toEqual({
+      terminalId: 'nonexistent-id-xyz',
+      streamEpoch: '',
+      watermark: 0,
+      ansi: '',
+      cols: 0,
+      rows: 0,
+      buffer: 'normal',
+    })
   })
 
   it('(c) snapshot round-trips cursor position into a fresh headless terminal', async () => {
@@ -119,7 +265,7 @@ describe('TerminalManager.getSnapshot', () => {
     mockPty.__emitData('AAAA\r\nBBBB\r\n')
 
     const snap = await manager.getSnapshot(term.id)
-    expect(snap.data.length).toBeGreaterThan(0)
+    expect(snap.ansi.length).toBeGreaterThan(0)
 
     // Write the snapshot into a fresh headless terminal and verify it processes cleanly
     const freshTerm = new HeadlessTerminal({
@@ -132,7 +278,7 @@ describe('TerminalManager.getSnapshot', () => {
     freshTerm.loadAddon(freshAddon as unknown as Parameters<typeof freshTerm.loadAddon>[0])
 
     // Write serialized data into fresh terminal
-    await new Promise<void>(resolve => freshTerm.write(snap.data, () => resolve()))
+    await new Promise<void>(resolve => freshTerm.write(snap.ansi, () => resolve()))
 
     // Cursor Y in fresh terminal should be > 0 (text was written, cursor advanced)
     expect(freshTerm.buffer.active.cursorY).toBeGreaterThanOrEqual(0)
@@ -166,6 +312,14 @@ describe('TerminalManager.getSnapshot', () => {
 
     // After exit the terminal is removed from the map — should return empty payload
     const snap = await manager.getSnapshot(term.id)
-    expect(snap).toEqual({ data: '', cols: 0, rows: 0 })
+    expect(snap).toEqual({
+      terminalId: term.id,
+      streamEpoch: '',
+      watermark: 0,
+      ansi: '',
+      cols: 0,
+      rows: 0,
+      buffer: 'normal',
+    })
   })
 })

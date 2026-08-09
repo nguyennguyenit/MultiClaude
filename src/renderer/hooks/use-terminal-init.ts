@@ -28,14 +28,17 @@ import {
   createUserScrollIntent,
   TERMINAL_SCROLL_THRESHOLD,
 } from '../utils/terminal-scroll-utils'
-import { stripLeakedTerminalResponses } from '../utils/terminal-output-utils'
-import { pauseAndBuffer, resumeAndFlush } from '../utils/terminal-output-dispatcher'
+import { pauseAndBuffer, resumeAndFlush, resumeFromSnapshot } from '../utils/terminal-output-dispatcher'
 import { useSettingsStore, useToastStore, useImageStore } from '../stores'
 import { getTerminalFontFamilyById, isAllowedExternalUrl, SCROLLBACK_DEFAULT, SCROLLBACK_MIN, SCROLLBACK_MAX } from '@shared/constants'
 import { shouldBypassXtermShortcut } from '../utils'
 import { getCsiUEnterSequence } from '../utils/keyboard-enhancement-utils'
 import { createTerminalDraftUndo } from '../utils/terminal-draft-undo'
+import { isTerminalProtocolResponse } from '../utils/terminal-input-utils'
+import { acquireSnapshotReplayLock } from './use-terminal-webgl'
 import { getCurrentTerminalTheme } from './use-terminal-font-theme'
+import { XtermSurface } from '../terminal/xterm-surface'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 
 const TERMINAL_INIT_DELAY = 50         // ms after terminal.open() before loading addons
 const TERMINAL_MIN_CONTRAST_RATIO = 2.0
@@ -54,10 +57,12 @@ interface ViewportEventListener {
   target: EventTarget
   type: string
   handler: EventListener
+  capture?: boolean
 }
 
 interface UseTerminalInitParams {
   terminalRef: RefObject<XTerm | null>
+  surfaceRef: RefObject<TerminalSurface | null>
   fitAddonRef: RefObject<FitAddon | null>
   disposedRef: RefObject<boolean>
   containerRef: RefObject<HTMLDivElement | null>
@@ -72,7 +77,7 @@ interface UseTerminalInitParams {
   scrollDisposableRef: RefObject<IDisposable | null>
   syncViewportState: (buffer: XTerm['buffer']['active'], intent?: UserScrollIntent | null) => void
   clearUserViewportInteraction: () => void
-  markUserViewportInteraction: (durationMs: number) => void
+  markUserViewportInteraction: (durationMs: number, direction?: 'up' | 'down') => void
   shouldSendEnhancedEnter: () => boolean
   attachClipboardListeners: (terminal: XTerm, onTextWrite?: (payload: string) => void) => void
   getCtrlVHandler: (terminal: XTerm, onTextWrite?: (payload: string) => void) => (e: KeyboardEvent) => boolean | undefined
@@ -80,8 +85,6 @@ interface UseTerminalInitParams {
   reconcileWebGL: () => void
   syncFontAfterLoad: () => void
   registerTerminalDebugHandle: () => void
-  /** v6: called in terminal.onWriteParsed for post-parse scroll snapshot update */
-  onWriteParsed: () => void
   onResize?: (cols: number, rows: number) => void
 }
 
@@ -92,6 +95,7 @@ interface UseTerminalInitResult {
 export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitResult {
   const {
     terminalRef,
+    surfaceRef,
     fitAddonRef,
     disposedRef,
     containerRef,
@@ -114,7 +118,6 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     reconcileWebGL,
     syncFontAfterLoad,
     registerTerminalDebugHandle,
-    onWriteParsed,
     onResize,
   } = params
 
@@ -178,7 +181,9 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
 
-    terminal.open(container)
+    const surface = new XtermSurface(terminal)
+    surface.mount(container)
+    surfaceRef.current = surface
 
     // Sync fit + PTY resize BEFORE any shell output is written. Moving this out
     // of the deferred setTimeout eliminates the new-pane jump: without it, the
@@ -216,6 +221,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     terminal.loadAddon(webLinksAddon)
 
     // ── Scroll / viewport listeners ──────────────────────────────────────────
+    let reconcilingReadingViewport = false
     const syncScrollPosition = (captureUserIntent = false) => {
       const scrollMachine = scrollMachineRef.current
       const buffer = terminal.buffer.active
@@ -233,37 +239,83 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       )
 
       if (captureUserIntent) {
-        scrollMachine.followOutputOnNextWrite = atBottom
+        const nextIntent = createUserScrollIntent(
+          buffer.baseY,
+          buffer.viewportY,
+          TERMINAL_SCROLL_THRESHOLD
+        )
+        const existingReadingIntent = scrollMachine.readingViewportIntent
+        const preserveUpwardReadingIntent = atBottom
+          && scrollMachine.userScrollDirection === 'up'
+          && existingReadingIntent?.stickToBottom === false
+        if (
+          preserveUpwardReadingIntent
+          && existingReadingIntent
+          && existingReadingIntent.viewportY !== null
+        ) {
+          reconcilingReadingViewport = true
+          terminal.scrollToLine(existingReadingIntent.viewportY)
+          reconcilingReadingViewport = false
+          syncViewportState(terminal.buffer.active, hiddenViewportIntent)
+          return
+        } else {
+          scrollMachine.followOutputOnNextWrite = atBottom
+          scrollMachine.readingViewportIntent = nextIntent
+        }
       }
 
       if (scrollMachine.pendingWriteCount > 0 && !captureUserIntent) return
 
       if (scrollMachine.pendingWriteCount > 0 && captureUserIntent) {
-        scrollMachine.pendingUserScrollIntent = createUserScrollIntent(
-          buffer.baseY,
-          buffer.viewportY,
-          TERMINAL_SCROLL_THRESHOLD
-        )
+        scrollMachine.pendingUserScrollIntent = scrollMachine.readingViewportIntent
+      }
+
+      const readingIntent = scrollMachine.readingViewportIntent
+      if (
+        !captureUserIntent
+        && !reconcilingReadingViewport
+        && readingIntent?.stickToBottom === false
+        && readingIntent.viewportY !== null
+        && buffer.viewportY !== readingIntent.viewportY
+      ) {
+        reconcilingReadingViewport = true
+        terminal.scrollToLine(readingIntent.viewportY)
+        reconcilingReadingViewport = false
+        syncViewportState(terminal.buffer.active, hiddenViewportIntent)
+        return
       }
 
       scrollMachine.isAtBottom = atBottom
       syncViewportState(buffer, hiddenViewportIntent)
     }
 
-    scrollDisposableRef.current = terminal.onScroll(() => syncScrollPosition(false))
-    // v6: fires after each chunk is parsed, before render — used to refresh scroll snapshot
-    terminal.onWriteParsed(onWriteParsed)
-
-    const viewportElement = terminal.element?.querySelector('.xterm-viewport') as HTMLElement | null
+    scrollDisposableRef.current = terminal.onScroll(() => {
+      syncScrollPosition(userViewportInteractingRef.current)
+    })
+    const viewportElement = (
+      terminal.element?.querySelector('.xterm-scrollable-element')
+      ?? terminal.element?.querySelector('.xterm-viewport')
+    ) as HTMLElement | null
     if (viewportElement) {
       const viewportListeners: ViewportEventListener[] = []
-      const addViewportListener = (target: EventTarget, type: string, handler: EventListener) => {
-        target.addEventListener(type, handler)
-        viewportListeners.push({ target, type, handler })
+      const addViewportListener = (
+        target: EventTarget,
+        type: string,
+        handler: EventListener,
+        capture = false
+      ) => {
+        target.addEventListener(type, handler, capture)
+        viewportListeners.push({ target, type, handler, capture })
       }
 
       addViewportListener(viewportElement, 'scroll', () => syncScrollPosition(userViewportInteractingRef.current))
-      addViewportListener(viewportElement, 'wheel', () => markUserViewportInteraction(USER_SCROLL_WHEEL_GRACE))
+      addViewportListener(viewportElement, 'wheel', (event) => {
+        if (!(event instanceof WheelEvent)) return
+        markUserViewportInteraction(
+          USER_SCROLL_WHEEL_GRACE,
+          event.deltaY > 0 ? 'down' : 'up'
+        )
+      })
       addViewportListener(viewportElement, 'pointerdown', (event) => {
         if (!(event instanceof PointerEvent)) return
         if (!isPointerOnViewportScrollbar({
@@ -280,6 +332,17 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       addViewportListener(viewportElement, 'touchstart', () => markUserViewportInteraction(USER_SCROLL_DRAG_GRACE))
       addViewportListener(viewportElement, 'touchend', clearUserViewportInteraction)
       addViewportListener(viewportElement, 'touchcancel', clearUserViewportInteraction)
+      if (terminal.element) {
+        addViewportListener(terminal.element, 'keydown', (event) => {
+          if (!(event instanceof KeyboardEvent)) return
+          if (event.shiftKey && (event.key === 'PageUp' || event.key === 'PageDown')) {
+            markUserViewportInteraction(
+              USER_SCROLL_WHEEL_GRACE,
+              event.key === 'PageUp' ? 'up' : 'down'
+            )
+          }
+        }, true)
+      }
 
       viewportListenersRef.current = viewportListeners
     }
@@ -330,35 +393,35 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         resumeAndFlush(terminalId)
       }
 
-      if (initialOutputRef.current) {
-        terminal.write(stripLeakedTerminalResponses(initialOutputRef.current), () => {
-          requestAnimationFrame(restoreInitialViewport)
-          finishInit()
-        })
-      } else {
-        // No prop-provided initialOutput — fetch snapshot from backend.
-        // V2 design decision: snapshot is clean PTY state, so stripLeakedTerminalResponses
-        // is intentionally NOT applied (snapshot has no raw PTY leak artifacts).
-        window.electron.terminal.getSnapshot(terminalId).then(snap => {
-          if (disposedRef.current || !terminalRef.current) { finishInit(); return }
-          if (snap.data) {
-            terminal.write(snap.data, () => {
-              requestAnimationFrame(restoreInitialViewport)
-              finishInit()
-            })
-          } else {
-            // Empty snapshot (fresh terminal) — restore viewport; SIGWINCH
-            // already sent by the sync resize IPC at open() time.
-            requestAnimationFrame(restoreInitialViewport)
-            finishInit()
+      const hydrateFromCanonicalSnapshot = async () => {
+        const releaseLock = await acquireSnapshotReplayLock(terminalId, true)
+        if (!releaseLock) return
+        try {
+          const snap = await window.electron.terminal.getSnapshot(terminalId)
+          if (disposedRef.current || !terminalRef.current) return
+          const hydrationData = snap.ansi || initialOutputRef.current || ''
+          if (hydrationData) {
+            await (surfaceRef.current?.write(hydrationData)
+              ?? new Promise<void>(resolve => terminal.write(hydrationData, resolve)))
           }
-        }).catch(() => {
-          // Snapshot fetch failed — fall back to viewport restore.
-          if (disposedRef.current || !terminalRef.current) { finishInit(); return }
+          if (disposedRef.current || !terminalRef.current) return
+          requestAnimationFrame(restoreInitialViewport)
+          resumeFromSnapshot(snap)
+        } catch {
+          if (disposedRef.current || !terminalRef.current) return
+          const fallback = initialOutputRef.current
+          if (fallback) {
+            await (surfaceRef.current?.write(fallback)
+              ?? new Promise<void>(resolve => terminal.write(fallback, resolve)))
+          }
+          if (disposedRef.current || !terminalRef.current) return
           requestAnimationFrame(restoreInitialViewport)
           finishInit()
-        })
+        } finally {
+          releaseLock()
+        }
       }
+      void hydrateFromCanonicalSnapshot()
 
       syncFontAfterLoad()
     }, TERMINAL_INIT_DELAY)
@@ -409,7 +472,10 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     // and swallow extra DELs from the IME.
     let imeDelDebt = 0
 
-    terminal.onData((data) => {
+    surface.onComposition((active) => {
+      if (active) imeDelDebt = 0
+    })
+    surface.onInput((data) => {
       // Drop xterm focus-report events (DECSET 1004). Forwarding them causes
       // inline TUI apps (e.g. Claude Code) to re-render on every OS window
       // blur/focus, which shifts the prompt down since the redraw can't
@@ -420,7 +486,11 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
         imeDelDebt--
         return
       }
-      followLiveOutput()
+      // Protocol replies are generated by xterm itself in response to PTY
+      // queries. Forward them, but do not treat them as user input:
+      // doing so would yank a user reading scrollback back to live output.
+      const isProtocolResponse = isTerminalProtocolResponse(data)
+      if (!isProtocolResponse) followLiveOutput()
 
       // Normalize payloads that may carry NFD text; track debt.
       let payload = data
@@ -437,7 +507,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       }
 
       window.electron.terminal.write(terminalId, payload)
-      draftUndo.recordTerminalData(payload)
+      if (!isProtocolResponse) draftUndo.recordTerminalData(payload)
 
       // Enter or Ctrl+C clears the prompt — drop any mirrored attachments.
       if ((data === '\r' || data === '\x03') && useImageStore.getState().getImages(terminalId).length > 0) {
@@ -464,7 +534,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
       window.electron.terminal.resize(terminalId, cols, rows)
       onResize?.(cols, rows)
     }
-    terminal.onResize(({ cols, rows }) => {
+    surface.onResize((cols, rows) => {
       pendingResize = { cols, rows }
       if (resizeTimer) clearTimeout(resizeTimer)
       resizeTimer = setTimeout(flushResize, 80)
@@ -474,6 +544,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     disposedRef,
     containerRef,
     terminalRef,
+    surfaceRef,
     fitAddonRef,
     terminalId,
     isActiveRef,
@@ -492,7 +563,6 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     reconcileWebGL,
     syncFontAfterLoad,
     registerTerminalDebugHandle,
-    onWriteParsed,
     onResize,
   ])
 

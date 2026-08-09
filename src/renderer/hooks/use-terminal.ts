@@ -23,6 +23,7 @@ import { useTerminalScroll } from './use-terminal-scroll'
 import { useTerminalFit } from './use-terminal-fit'
 import { useTerminalDebug } from './use-terminal-debug'
 import type { ViewportEventListener } from './terminal-hook-types'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 
 export const TERMINAL_DISPOSE_DELAY = 100  // Delay to allow xterm's internal setTimeout to complete
 
@@ -46,6 +47,7 @@ export function useTerminal({
   // ── Shared refs ────────────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
+  const surfaceRef = useRef<TerminalSurface | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const disposedRef = useRef(false)
   const isActiveRef = useRef(isActive)
@@ -68,9 +70,9 @@ export function useTerminal({
   const {
     write, scrollToTop, scrollToBottom, followLiveOutput,
     syncViewportState, clearUserViewportInteraction, markUserViewportInteraction,
-    onWriteParsed, isAtBottom, hasScrollback,
+    isAtBottom, hasScrollback,
   } = useTerminalScroll({
-    terminalRef, disposedRef, isHiddenRef, scrollMachineRef,
+    terminalRef, surfaceRef, disposedRef, isHiddenRef, scrollMachineRef,
     userViewportInteractingRef, processKeyboardEnhancementOutput,
   })
 
@@ -85,16 +87,14 @@ export function useTerminal({
 
   const { reconcileWebGL, clearTextureAtlas, webglAddonRef, webglLoadingRef, reloadWebGLForTheme, refreshTerminal } =
     useTerminalWebGL({
-      terminalRef, disposedRef, terminalId, isActiveRef, isHiddenRef,
+      terminalRef, surfaceRef, disposedRef, terminalId, isActiveRef, isHiddenRef,
       onRefresh: (n) => refreshFnRef.current?.(n),
       onRefreshVisibleRows: refreshVisibleRows,
       performFit: (r) => performFitRef.current(r),
     })
 
   const { performFit, cancelScheduledFit, fit } = useTerminalFit({
-    terminalRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
-    // Part D: silent snapshot replay when cols change (reflow-safe scrollback setting gates this)
-    onColsChanged: () => refreshTerminal(false),
+    terminalRef, surfaceRef, fitAddonRef, containerRef, disposedRef, scrollMachineRef, refreshVisibleRows,
   })
   // Wire the ref so WebGL hook can call performFit
   performFitRef.current = performFit
@@ -111,7 +111,7 @@ export function useTerminal({
   })
 
   const { attachClipboardListeners, getCtrlVHandler, followLiveOutputRef } =
-    useTerminalClipboard({ terminalId })
+    useTerminalClipboard({ terminalId, surfaceRef })
   useEffect(() => { followLiveOutputRef.current = followLiveOutput }, [followLiveOutput, followLiveOutputRef])
 
   useTerminalVisibility({
@@ -122,13 +122,13 @@ export function useTerminal({
   useTerminalScrollback({ terminalRef, disposedRef })
 
   const { initTerminal } = useTerminalInit({
-    terminalRef, fitAddonRef, disposedRef, containerRef, terminalId,
+    terminalRef, surfaceRef, fitAddonRef, disposedRef, containerRef, terminalId,
     initialOutput, initialViewportY, isActiveRef, isHiddenRef, scrollMachineRef,
     userViewportInteractingRef, viewportListenersRef, scrollDisposableRef,
     syncViewportState, clearUserViewportInteraction, markUserViewportInteraction,
     shouldSendEnhancedEnter, attachClipboardListeners, getCtrlVHandler,
     followLiveOutput, reconcileWebGL, syncFontAfterLoad, registerTerminalDebugHandle,
-    onWriteParsed, onResize,
+    onResize,
   })
 
   // ── isActive / isHidden prop sync + debounced WebGL toggle ────────────────
@@ -160,21 +160,26 @@ export function useTerminal({
       cancelScheduledFit()
 
       const terminal = terminalRef.current
+      const surface = surfaceRef.current
       const fitAddon = fitAddonRef.current
       const webglAddon = webglAddonRef.current
       const scrollDisposable = scrollDisposableRef.current
       const viewportListeners = viewportListenersRef.current
 
-      terminalRef.current = null; fitAddonRef.current = null; webglAddonRef.current = null
+      terminalRef.current = null; surfaceRef.current = null; fitAddonRef.current = null; webglAddonRef.current = null
       scrollDisposableRef.current = null; viewportListenersRef.current = null
       unregisterTerminalDebugHandle()
 
-      for (const l of viewportListeners ?? []) l.target.removeEventListener(l.type, l.handler)
+      for (const l of viewportListeners ?? []) {
+        l.target.removeEventListener(l.type, l.handler, l.capture)
+      }
 
       setTimeout(() => {
         try {
           scrollDisposable?.dispose()
-          webglAddon?.dispose(); fitAddon?.dispose(); terminal?.dispose()
+          webglAddon?.dispose(); fitAddon?.dispose()
+          if (surface) surface.dispose()
+          else terminal?.dispose()
         } catch { /* may already be disposed */ }
       }, TERMINAL_DISPOSE_DELAY)
     }
@@ -190,7 +195,7 @@ export function useTerminal({
     const t = terminalRef.current
     if (!t) return
     if (t.textarea) t.textarea.focus({ preventScroll: true })
-    else t.focus()
+    else surfaceRef.current?.focus()
   }, [])
   const blur = useCallback(() => { terminalRef.current?.blur() }, [])
   const showCursor = useCallback(() => {

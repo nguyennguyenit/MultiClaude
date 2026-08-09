@@ -5,7 +5,11 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as pty from '@lydell/node-pty'
+import headlessPkg from '@xterm/headless'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { TerminalManager } from '../terminal-manager'
+
+const { Terminal: HeadlessTerminal } = headlessPkg
 
 // --- Mock helpers ---
 
@@ -85,12 +89,13 @@ describe('TerminalManager headless mirror', () => {
     expect(snapshot).toContain('hello')
   })
 
-  it('resizes headless Terminal when PTY is resized', () => {
+  it('resizes headless Terminal in canonical mutation order when PTY is resized', async () => {
     const term = manager.create()
     const proc = (manager as unknown as { terminals: Map<string, { headlessTerm: import('@xterm/headless').Terminal }> })
       .terminals.get(term.id)!
 
     manager.resize(term.id, 120, 40)
+    await manager.getSnapshot(term.id)
 
     expect(proc.headlessTerm.cols).toBe(120)
     expect(proc.headlessTerm.rows).toBe(40)
@@ -141,5 +146,37 @@ describe('TerminalManager headless mirror', () => {
     // proves the headless instance processed the escape correctly.
     expect(typeof snapshot).toBe('string')
     expect(snapshot.length).toBeGreaterThan(0)
+  })
+
+  it('keeps canonical output equivalent to replay after narrow-to-wide reflow', async () => {
+    const raw = Array.from(
+      { length: 30 },
+      (_, index) => `row-${index}: ${'abcdef '.repeat(14)}\r\n`,
+    ).join('')
+    const createSurface = (cols: number) => {
+      const terminal = new HeadlessTerminal({
+        cols,
+        rows: 10,
+        scrollback: 200,
+        allowProposedApi: true,
+      })
+      const serializer = new SerializeAddon()
+      terminal.loadAddon(serializer as unknown as Parameters<typeof terminal.loadAddon>[0])
+      return { terminal, serializer }
+    }
+    const canonical = createSurface(40)
+    const replayed = createSurface(100)
+
+    try {
+      await new Promise<void>(resolve => canonical.terminal.write(raw, resolve))
+      canonical.terminal.resize(100, 10)
+      await new Promise<void>(resolve => replayed.terminal.write(raw, resolve))
+
+      expect(canonical.serializer.serialize({ scrollback: 200 }))
+        .toBe(replayed.serializer.serialize({ scrollback: 200 }))
+    } finally {
+      canonical.terminal.dispose()
+      replayed.terminal.dispose()
+    }
   })
 })

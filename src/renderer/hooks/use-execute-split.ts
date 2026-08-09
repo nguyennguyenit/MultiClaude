@@ -36,7 +36,7 @@ export interface ExecuteSplitDeps {
   terminalLimit: number
   terminalCount: number
   selectedShell: ShellInfo | null
-  windowsShellFallback?: WindowsShell
+  defaultShellFallback?: ShellInfo
   addTerminal: (terminal: Terminal) => void
   notifyLimit: (limit: number) => void
   notifyError: (message: string) => void
@@ -79,7 +79,7 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
     terminalLimit,
     terminalCount,
     selectedShell,
-    windowsShellFallback,
+    defaultShellFallback,
     addTerminal,
     notifyLimit,
     notifyError,
@@ -118,7 +118,9 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
         shellPath: isUnix ? selectedShell?.path : undefined,
         shell: isWin
           ? toWindowsShell(selectedShell)
-          : windowsShellFallback
+          : defaultShellFallback && defaultShellFallback.kind !== 'unix'
+            ? toWindowsShell(defaultShellFallback)
+            : undefined
       })
       let terminal: Terminal
       try {
@@ -189,7 +191,7 @@ export function useExecuteSplit(deps: ExecuteSplitDeps): {
       terminalCount,
       terminalLimit,
       selectedShell,
-      windowsShellFallback,
+      defaultShellFallback,
       projectId,
       projectPath,
       addTerminal,

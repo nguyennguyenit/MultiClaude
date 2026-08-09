@@ -14,6 +14,7 @@ import { useContextMenuStore, type ContextMenuItem } from '../stores/context-men
 import { pasteFromClipboard } from '../utils/paste-from-clipboard'
 import { getSplitHandlers } from '../utils/terminal-context-actions'
 import type { PaneSplitDirection } from '@shared/types'
+import type { TerminalSurface } from '../terminal/terminal-surface'
 
 const ARROW_TO_SPLIT: Record<string, PaneSplitDirection> = {
   ArrowRight: 'right',
@@ -71,6 +72,7 @@ export function normalizeTerminalCopySelection(selection: string, terminal: Sele
 
 interface UseTerminalClipboardParams {
   terminalId: string
+  surfaceRef?: RefObject<TerminalSurface | null>
 }
 
 interface UseTerminalClipboardResult {
@@ -94,7 +96,7 @@ interface UseTerminalClipboardResult {
   followLiveOutputRef: RefObject<(() => void) | null>
 }
 
-export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams): UseTerminalClipboardResult {
+export function useTerminalClipboard({ terminalId, surfaceRef }: UseTerminalClipboardParams): UseTerminalClipboardResult {
 
   /**
    * Ref that orchestrator fills with followLiveOutput() after useTerminalScroll is set up.
@@ -105,7 +107,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
     terminal.element?.addEventListener('contextmenu', (e) => {
       if (!(e instanceof MouseEvent)) return
       e.preventDefault()
-      const selection = terminal.getSelection() || undefined
+      const selection = (surfaceRef?.current?.getSelection() ?? terminal.getSelection()) || undefined
       const items: ContextMenuItem[] = []
       if (selection) {
         items.push({
@@ -140,7 +142,7 @@ export function useTerminalClipboard({ terminalId }: UseTerminalClipboardParams)
 
       useContextMenuStore.getState().openMenu({ x: e.clientX, y: e.clientY, items })
     })
-  }, [terminalId])
+  }, [surfaceRef, terminalId])
 
   const getCtrlVHandler = useCallback((terminal: XTerm, onTextWrite?: (payload: string) => void) => {
     return (e: KeyboardEvent): boolean | undefined => {
