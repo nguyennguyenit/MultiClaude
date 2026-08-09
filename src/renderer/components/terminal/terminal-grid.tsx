@@ -188,6 +188,7 @@ function ProjectPaneView({
 
   return (
     <div
+      className="project-terminal-grid"
       role="region"
       aria-label={`Terminal grid for project ${projectId}`}
       aria-hidden={!isActive}
@@ -252,4 +253,3 @@ function ProjectPaneView({
     </div>
   )
 }
-

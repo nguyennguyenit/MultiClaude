@@ -350,6 +350,14 @@ button, input, select, textarea, optgroup, option {
   background-clip: content-box;
 }
 
+/* xterm v6 renders scrollbars as custom composited elements. Inactive project
+ * terminals stay mounted to preserve their buffers, so remove only those bars
+ * from paint while the owning project grid is hidden. */
+.project-terminal-grid[aria-hidden='true']
+  .xterm-scrollable-element > .scrollbar {
+  display: none !important;
+}
+
 .terminal-container.image-hover .xterm-screen {
   cursor: pointer !important;
 }
