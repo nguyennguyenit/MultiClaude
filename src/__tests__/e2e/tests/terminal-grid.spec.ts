@@ -22,24 +22,23 @@ test.describe('Terminal Grid Layout', () => {
     await window.waitForTimeout(WAIT_TIMES.LONG)
   })
 
-  test.skip('empty state shows "No terminals open" message and add button', async ({ window }) => {
-    // Skip: App restores session from previous run, empty state not reliably testable
-    const emptyMessage = window.locator('text=No terminals open')
-    await expect(emptyMessage).toBeVisible()
+  test('empty state explains how to create the first terminal', async ({ window }) => {
+    await expect(window.getByRole('heading', { name: 'Multi Terminals' })).toBeVisible()
+    await expect(window.getByRole('button', { name: '+ New Terminal' })).toBeVisible()
   })
 
   test('terminal pane is visible and has reasonable size', async ({ window }) => {
     // Get initial count
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
 
     // Add a terminal if none exist
     if (initialCount === 0) {
       await addTerminal(window)
-      await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+      await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
     }
 
     // Verify terminal pane is visible
-    const terminalPane = window.locator('.terminal-pane').first()
+    const terminalPane = window.locator('[data-terminal-id]').first()
     await expect(terminalPane).toBeVisible()
 
     // Verify terminal has a reasonable bounding box
@@ -55,36 +54,36 @@ test.describe('Terminal Grid Layout', () => {
 
   test('adding terminals increases count', async ({ window }) => {
     // Get initial count
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
 
     // Add a terminal
     await addTerminal(window)
-    await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+    await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
 
     // Verify count increased
-    const newCount = await window.locator('.terminal-pane').count()
+    const newCount = await window.locator('[data-terminal-id]').count()
     expect(newCount).toBe(initialCount + 1)
   })
 
   test('multiple terminals display in grid layout', async ({ window }) => {
     // Get initial count
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
 
     // Ensure we have at least 2 terminals
     const terminalsToAdd = Math.max(0, 2 - initialCount)
     for (let i = 0; i < terminalsToAdd; i++) {
       await addTerminal(window)
       if (i === 0 && initialCount === 0) {
-        await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+        await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
       }
     }
 
     // Verify we have at least 2 terminals
-    const terminalCount = await window.locator('.terminal-pane').count()
+    const terminalCount = await window.locator('[data-terminal-id]').count()
     expect(terminalCount).toBeGreaterThanOrEqual(2)
 
     // Get terminal panes
-    const terminalPanes = window.locator('.terminal-pane')
+    const terminalPanes = window.locator('[data-terminal-id]')
     const pane1 = await terminalPanes.nth(0).boundingBox()
     const pane2 = await terminalPanes.nth(1).boundingBox()
 
@@ -102,23 +101,23 @@ test.describe('Terminal Grid Layout', () => {
 
   test('grid adapts to terminal count', async ({ window }) => {
     // Get initial count
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
 
     // Add terminals to reach 4 total
     const terminalsToAdd = Math.max(0, 4 - initialCount)
     for (let i = 0; i < terminalsToAdd; i++) {
       await addTerminal(window)
       if (i === 0 && initialCount === 0) {
-        await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+        await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
       }
     }
 
     // Verify we have at least 4 terminals
-    const terminalCount = await window.locator('.terminal-pane').count()
+    const terminalCount = await window.locator('[data-terminal-id]').count()
     expect(terminalCount).toBeGreaterThanOrEqual(4)
 
     // Get all terminal pane bounding boxes
-    const terminalPanes = window.locator('.terminal-pane')
+    const terminalPanes = window.locator('[data-terminal-id]')
     const boxes: Array<{ x: number; y: number }> = []
     const count = await terminalPanes.count()
     for (let i = 0; i < Math.min(count, 4); i++) {
@@ -136,24 +135,44 @@ test.describe('Terminal Grid Layout', () => {
     expect(uniqueXs.length).toBe(2) // 2 columns
   })
 
-  test.skip('9 terminals in 3x3 grid', async ({ window: _window }) => {
-    // Skip: Takes too long with session restoration issues
-  })
+  test('9 terminals form a usable 3x3 grid', async ({ window }) => {
+    test.setTimeout(60_000)
 
-  test.skip('12 terminals in 3x4 grid', async ({ window: _window }) => {
-    // Skip: Takes too long and max terminals may be limited
+    const initialCount = await window.locator('[data-terminal-id]').count()
+    for (let i = initialCount; i < 9; i++) {
+      await addTerminal(window)
+    }
+
+    const terminals = window.locator('[data-terminal-id]')
+    await expect(terminals).toHaveCount(9)
+
+    const boxes = await terminals.evaluateAll((panes) =>
+      panes.map((pane) => {
+        const rect = pane.getBoundingClientRect()
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: rect.width,
+          height: rect.height
+        }
+      })
+    )
+
+    expect(boxes.every(({ width, height }) => width > 200 && height > 100)).toBe(true)
+    expect(new Set(boxes.map(({ x }) => x)).size).toBe(3)
+    expect(new Set(boxes.map(({ y }) => y)).size).toBe(3)
   })
 
   test('grid layout screenshot', async ({ window }) => {
     // Get initial count
-    const initialCount = await window.locator('.terminal-pane').count()
+    const initialCount = await window.locator('[data-terminal-id]').count()
 
     // Add terminals to reach 4 total for 2x2 grid screenshot
     const terminalsToAdd = Math.max(0, 4 - initialCount)
     for (let i = 0; i < terminalsToAdd; i++) {
       await addTerminal(window)
       if (i === 0 && initialCount === 0) {
-        await window.waitForSelector('.terminal-pane', { timeout: 5000 })
+        await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
       }
     }
 
@@ -164,7 +183,9 @@ test.describe('Terminal Grid Layout', () => {
     await clearAllTerminalsForScreenshot(window)
 
     // Take screenshot of grid area
-    const gridArea = window.locator('.terminal-pane').first().locator('..')
+    const gridArea = window.getByRole('region', {
+      name: `Terminal grid for project ${mockProject.id}`
+    })
     await expect(gridArea).toHaveScreenshot('terminal-grid-2x2.png', {
       maxDiffPixelRatio: 0.02
     })

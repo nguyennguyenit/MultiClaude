@@ -79,23 +79,18 @@ test.describe('Keyboard Shortcuts', () => {
   })
 
   test.describe('Terminal Management', () => {
-    // Skip: Flaky - Ctrl+N terminal creation timing varies in E2E
-    test.skip('Ctrl+N creates new terminal (count increases)', async ({ window }) => {
+    test('Ctrl+N creates new terminal (count increases)', async ({ window }) => {
       // First select a project to enable terminal creation
       const projectTab = window.locator('[data-testid="project-tab-test-project-1"]')
       await projectTab.click()
       await window.waitForTimeout(200)
 
       // Count initial terminals (may be 0 or 1 depending on auto-creation)
-      const initialTerminals = await window.locator('.terminal-pane').count()
+      const initialTerminals = await window.locator('[data-terminal-id]').count()
 
       // Press Ctrl+N to create new terminal
       await window.keyboard.press('Control+n')
-      await window.waitForTimeout(300)
-
-      // Verify terminal count increased
-      const newTerminals = await window.locator('.terminal-pane').count()
-      expect(newTerminals).toBeGreaterThan(initialTerminals)
+      await expect(window.locator('[data-terminal-id]')).toHaveCount(initialTerminals + 1)
     })
 
     test('Ctrl+W closes active terminal (count decreases)', async ({ window }) => {
@@ -106,20 +101,16 @@ test.describe('Keyboard Shortcuts', () => {
 
       // Create a terminal first using Ctrl+N
       await window.keyboard.press('Control+n')
-      await window.waitForTimeout(300)
+      await expect(window.locator('[data-terminal-id]')).toHaveCount(1)
 
       // Count terminals before closing
-      const beforeCount = await window.locator('.terminal-pane').count()
+      const beforeCount = await window.locator('[data-terminal-id]').count()
 
       // Only proceed if there are terminals to close
       if (beforeCount > 0) {
         // Press Ctrl+W to close active terminal
         await window.keyboard.press('Control+w')
-        await window.waitForTimeout(300)
-
-        // Verify terminal count decreased
-        const afterCount = await window.locator('.terminal-pane').count()
-        expect(afterCount).toBeLessThan(beforeCount)
+        await expect(window.locator('[data-terminal-id]')).toHaveCount(beforeCount - 1)
       }
     })
   })

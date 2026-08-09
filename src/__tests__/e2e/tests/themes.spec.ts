@@ -6,129 +6,143 @@ import type { Page } from '@playwright/test'
  * Tests color theme application and theme mode switching.
  */
 
-// Actual color themes from the codebase
 const colorThemes = [
-  'default',
-  'dusk',
-  'lime',
-  'ocean',
-  'retro',
-  'neo',
-  'forest',
-  'neon-cyber',
-  'pro-dark',
-  'vibrant'
+  ['tokyo-night', '#7aa2f7'],
+  ['catppuccin', '#89b4fa'],
+  ['dracula', '#bd93f9'],
+  ['rose-pine', '#c4a7e7'],
+  ['pro-dark', '#3b82f6']
 ] as const
 
-const SETTINGS_KEY = 'multiclaude-settings'
-
 /**
- * Helper to set theme via localStorage and reload.
+ * Write through the canonical main-owned settings API, then reload the
+ * renderer so persistence and startup application are both exercised.
  */
 async function setTheme(
   window: Page,
   theme: string,
   mode: string
 ): Promise<void> {
+  const previous = await window.evaluate(async () => ({
+    settings: await globalThis.window.electron.settings.get(),
+    accent: getComputedStyle(document.documentElement).getPropertyValue('--mc-accent').trim()
+  }))
+
   await window.evaluate(
-    ({ theme, mode, key }: { theme: string; mode: string; key: string }) => {
-      const existing = localStorage.getItem(key)
-      const settings = existing ? JSON.parse(existing) : {}
-      settings.colorTheme = theme
-      settings.themeMode = mode
-      localStorage.setItem(key, JSON.stringify(settings))
+    async ({ theme, mode }: { theme: string; mode: string }) => {
+      await globalThis.window.electron.settings.set({
+        colorTheme: theme,
+        themeMode: mode
+      } as Parameters<typeof globalThis.window.electron.settings.set>[0])
     },
-    { theme, mode, key: SETTINGS_KEY }
+    { theme, mode }
   )
   await window.reload()
   await window.waitForLoadState('domcontentloaded')
-  // Wait for React to apply theme classes
-  await window.waitForTimeout(100)
+  await expect.poll(() => window.evaluate(async () => {
+    const settings = await globalThis.window.electron.settings.get()
+    return { colorTheme: settings.colorTheme, themeMode: settings.themeMode }
+  })).toEqual({ colorTheme: theme, themeMode: mode })
+
+  if (previous.settings.colorTheme !== theme) {
+    await expect.poll(() => window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--mc-accent').trim()
+    )).not.toBe(previous.accent)
+  }
 }
 
 test.describe('Color Theme Application', () => {
-  for (const theme of colorThemes) {
+  for (const [theme, expectedAccent] of colorThemes) {
     test(`${theme} theme applies correctly`, async ({ window }) => {
-      // Set the theme via localStorage
       await setTheme(window, theme, 'dark')
 
-      // Verify html element has the theme class
-      const html = window.locator('html')
-      await expect(html).toHaveClass(new RegExp(`theme-${theme}`))
-
-      // Verify CSS variable --mc-accent exists and has a value
-      const accentColor = await window.evaluate(() => {
-        return getComputedStyle(document.documentElement).getPropertyValue('--mc-accent')
-      })
-      expect(accentColor.trim()).toBeTruthy()
+      await expect.poll(() => window.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--mc-accent').trim().toLowerCase()
+      )).toBe(expectedAccent)
     })
   }
 })
 
 test.describe('Theme Mode Application', () => {
   test('light mode applies correctly', async ({ window }) => {
-    await setTheme(window, 'default', 'light')
+    await setTheme(window, 'tokyo-night', 'light')
 
     const html = window.locator('html')
-    await expect(html).toHaveClass(/\blight\b/)
-    await expect(html).not.toHaveClass(/\bdark\b/)
+    await expect(html).toHaveAttribute('data-theme-mode', 'light')
   })
 
   test('dark mode applies correctly', async ({ window }) => {
-    await setTheme(window, 'default', 'dark')
+    await setTheme(window, 'tokyo-night', 'dark')
 
     const html = window.locator('html')
-    await expect(html).toHaveClass(/\bdark\b/)
-    await expect(html).not.toHaveClass(/\blight\b/)
+    await expect(html).toHaveAttribute('data-theme-mode', 'dark')
   })
 
   test('system mode follows OS preference (dark)', async ({ window }) => {
     // Emulate dark color scheme preference
     await window.emulateMedia({ colorScheme: 'dark' })
-    await setTheme(window, 'default', 'system')
+    await setTheme(window, 'tokyo-night', 'system')
 
     const html = window.locator('html')
-    await expect(html).toHaveClass(/\bdark\b/)
+    await expect(html).toHaveAttribute('data-theme-mode', 'dark')
   })
 
   test('system mode follows OS preference (light)', async ({ window }) => {
     // Emulate light color scheme preference
     await window.emulateMedia({ colorScheme: 'light' })
-    await setTheme(window, 'default', 'system')
+    await setTheme(window, 'tokyo-night', 'system')
 
     const html = window.locator('html')
-    await expect(html).toHaveClass(/\blight\b/)
+    await expect(html).toHaveAttribute('data-theme-mode', 'light')
+  })
+
+  test('system mode reacts to OS preference changes without reload', async ({ window }) => {
+    await window.emulateMedia({ colorScheme: 'light' })
+    await setTheme(window, 'tokyo-night', 'system')
+
+    const html = window.locator('html')
+    await expect(html).toHaveAttribute('data-theme-mode', 'light')
+    await expect.poll(() => window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--terminal-bg').trim().toLowerCase()
+    )).toBe('#f8fafc')
+
+    await window.emulateMedia({ colorScheme: 'dark' })
+
+    await expect(html).toHaveAttribute('data-theme-mode', 'dark')
+    await expect.poll(() => window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--terminal-bg').trim().toLowerCase()
+    )).toBe('#1a1b26')
   })
 })
 
 test.describe('Theme Persistence', () => {
   test('theme persists after reload', async ({ window }) => {
     // Set a non-default theme
-    await setTheme(window, 'ocean', 'dark')
+    await setTheme(window, 'dracula', 'dark')
 
     // Reload page
     await window.reload()
     await window.waitForLoadState('domcontentloaded')
-    await window.waitForTimeout(100)
-
-    // Verify theme is still applied
-    const html = window.locator('html')
-    await expect(html).toHaveClass(/theme-ocean/)
-    await expect(html).toHaveClass(/\bdark\b/)
+    await expect.poll(() => window.evaluate(async () =>
+      (await globalThis.window.electron.settings.get()).colorTheme
+    )).toBe('dracula')
+    await expect.poll(() => window.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--mc-accent').trim().toLowerCase()
+    )).toBe('#bd93f9')
   })
 
   test('mode persists after reload', async ({ window }) => {
     // Set light mode
-    await setTheme(window, 'default', 'light')
+    await setTheme(window, 'tokyo-night', 'light')
 
     // Reload page
     await window.reload()
     await window.waitForLoadState('domcontentloaded')
-    await window.waitForTimeout(100)
-
-    // Verify mode is still applied
     const html = window.locator('html')
-    await expect(html).toHaveClass(/\blight\b/)
+    await expect(html).toHaveAttribute('data-theme-mode', 'light')
+    await expect.poll(() => window.evaluate(async () =>
+      (await globalThis.window.electron.settings.get()).themeMode
+    )).toBe('light')
   })
 })
 
@@ -144,7 +158,7 @@ test.describe('Theme CSS Variables', () => {
   ]
 
   test('all essential CSS variables are defined', async ({ window }) => {
-    await setTheme(window, 'default', 'dark')
+    await setTheme(window, 'tokyo-night', 'dark')
 
     for (const varName of cssVarsToCheck) {
       const value = await window.evaluate((name) => {
@@ -155,31 +169,28 @@ test.describe('Theme CSS Variables', () => {
   })
 
   test('CSS variables change with theme', async ({ window }) => {
-    // Get accent color for default theme
-    await setTheme(window, 'default', 'dark')
-    const defaultAccent = await window.evaluate(() => {
+    await setTheme(window, 'tokyo-night', 'dark')
+    const tokyoAccent = await window.evaluate(() => {
       return getComputedStyle(document.documentElement).getPropertyValue('--mc-accent')
     })
 
-    // Get accent color for ocean theme
-    await setTheme(window, 'ocean', 'dark')
-    const oceanAccent = await window.evaluate(() => {
+    await setTheme(window, 'dracula', 'dark')
+    const draculaAccent = await window.evaluate(() => {
       return getComputedStyle(document.documentElement).getPropertyValue('--mc-accent')
     })
 
-    // Accents should be different between themes
-    expect(defaultAccent.trim()).not.toBe(oceanAccent.trim())
+    expect(tokyoAccent.trim()).not.toBe(draculaAccent.trim())
   })
 
   test('CSS variables change with mode', async ({ window }) => {
     // Get background for dark mode
-    await setTheme(window, 'default', 'dark')
+    await setTheme(window, 'tokyo-night', 'dark')
     const darkBg = await window.evaluate(() => {
       return getComputedStyle(document.documentElement).getPropertyValue('--mc-bg-primary')
     })
 
     // Get background for light mode
-    await setTheme(window, 'default', 'light')
+    await setTheme(window, 'tokyo-night', 'light')
     const lightBg = await window.evaluate(() => {
       return getComputedStyle(document.documentElement).getPropertyValue('--mc-bg-primary')
     })
