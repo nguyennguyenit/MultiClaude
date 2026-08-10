@@ -143,6 +143,7 @@ export function DiagnosticsSettings() {
   const setTerminalRendererPolicy = useSettingsStore(state => state.setTerminalRendererPolicy)
   const terminals = useAppStore(state => state.terminals)
   const rendererStatuses = useTerminalRendererStatusStore(state => state.statuses)
+  const rendererSessionCount = useTerminalRendererStatusStore(state => state.sessionCount)
   const [terminalDiagnostics, setTerminalDiagnostics] = useState<TerminalPlatformDiagnostic[]>([])
   const [diagnosticError, setDiagnosticError] = useState<string | null>(null)
 
@@ -230,7 +231,11 @@ export function DiagnosticsSettings() {
         </select>
       </div>
 
-      <div className="settings-card rounded-xl flex flex-col gap-3">
+      <div
+        data-testid="terminal-stream-diagnostics"
+        data-renderer-registry-count={rendererSessionCount}
+        className="settings-card rounded-xl flex flex-col gap-3"
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-base font-semibold text-[var(--mc-text-primary)]">Terminal Stream</p>

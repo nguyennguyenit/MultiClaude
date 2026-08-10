@@ -17,6 +17,8 @@ describe('terminal renderer status store', () => {
     const token = Symbol('session')
     claimTerminalRendererSession('term-1', token)
 
+    expect(useTerminalRendererStatusStore.getState().sessionCount).toBe(1)
+
     expect(setTerminalRendererStatus('term-1', token, {
       effective: 'dom',
       fallbackReason: 'webgl-load-failed',
@@ -97,6 +99,7 @@ describe('terminal renderer status store', () => {
 
     expect(getTerminalRendererStatus('term-1')).toBeUndefined()
     expect(retryTerminalRenderer('term-1')).toBe(false)
+    expect(useTerminalRendererStatusStore.getState().sessionCount).toBe(0)
   })
 
   it('lets only the current session unregister its retry callback', () => {

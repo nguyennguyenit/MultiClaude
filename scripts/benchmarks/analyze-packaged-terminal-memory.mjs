@@ -6,6 +6,7 @@ import {
   evaluateMemoryAcceptance,
   readSingleFlag,
   summarizeSteadyStateTrend,
+  validateTerminalEvidence,
   workspaceRelativeEvidenceSource,
 } from './packaged-terminal-soak-lib.mjs'
 
@@ -31,12 +32,12 @@ const results = evidence.results.map(result => {
   return {
     paneCount: result.paneCount,
     elapsedSeconds: result.elapsedSeconds,
-    correctness: result.terminalEvidence.ok,
+    correctness: validateTerminalEvidence(result.terminalEvidence).ok,
     acceptance: evaluateMemoryAcceptance({
       samples,
       paneCount: result.paneCount,
       elapsedSeconds: result.elapsedSeconds,
-      correctness: result.terminalEvidence.ok,
+      correctness: validateTerminalEvidence(result.terminalEvidence).ok,
     }),
     steadyState: {
       mainPrivateMiB: summarizeSteadyStateTrend(samples, 'mainPrivateMiB'),

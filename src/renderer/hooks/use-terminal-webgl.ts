@@ -126,6 +126,7 @@ interface SnapshotReplayParams {
   isHiddenRef?: RefObject<boolean>
   clearTextureAtlas: () => void
   webglAddonRef?: RefObject<WebglAddon | null>
+  invalidateQueuedLoad?: () => void
   disposeWebGL?: () => void
   reconcileWebGL: () => void
   performFit: (restoreViewport?: boolean) => boolean
@@ -141,6 +142,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     disposedRef,
     clearTextureAtlas,
     webglAddonRef,
+    invalidateQueuedLoad,
     disposeWebGL,
     reconcileWebGL,
     performFit,
@@ -159,6 +161,7 @@ export async function performSnapshotReplay(params: SnapshotReplayParams): Promi
     }
 
     const terminal = terminalRef.current
+    invalidateQueuedLoad?.()
     clearTextureAtlas()
     if (disposeWebGL) {
       disposeWebGL()
@@ -432,6 +435,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         surfaceRef,
         disposedRef,
         clearTextureAtlas,
+        invalidateQueuedLoad,
         disposeWebGL,
         reconcileWebGL,
         performFit,
@@ -442,6 +446,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
     clearTextureAtlas,
     disposedRef,
     disposeWebGL,
+    invalidateQueuedLoad,
     performFit,
     reconcileWebGL,
     sessionToken,
@@ -460,6 +465,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
         surfaceRef,
         disposedRef,
         clearTextureAtlas,
+        invalidateQueuedLoad,
         disposeWebGL,
         reconcileWebGL,
         performFit,
@@ -471,6 +477,7 @@ export function useTerminalWebGL(params: UseTerminalWebGLParams): UseTerminalWeb
     clearTextureAtlas,
     disposedRef,
     disposeWebGL,
+    invalidateQueuedLoad,
     performFit,
     reconcileWebGL,
     sessionToken,

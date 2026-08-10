@@ -15,6 +15,7 @@ import {
   summarizeProcessSamples,
   validateAttributionSample,
   validateTerminalEvidence,
+  validateRendererCleanupEvidence,
   validateRendererEvidence,
 } from './packaged-terminal-soak-lib.mjs'
 
@@ -186,7 +187,7 @@ async function collectRendererEvidence(window, terminalIds) {
   return statuses
 }
 
-async function verifyRendererStatusCleanup(window, terminalIds) {
+async function verifyRendererStatusCleanup(window, terminalIds, rendererPolicy) {
   const closedTerminalId = terminalIds.at(-1)
   if (!closedTerminalId) throw new Error('renderer cleanup requires a live terminal')
   await window.locator(
@@ -203,8 +204,15 @@ async function verifyRendererStatusCleanup(window, terminalIds) {
   await window.locator('[data-testid="settings-button"]').click()
   await window.locator('[data-testid="settings-tab-diagnostics"]').click()
   const rows = window.locator('[data-renderer-terminal-id]')
+  const diagnostics = window.getByTestId('terminal-stream-diagnostics')
   const statusDeadline = Date.now() + 10_000
-  while (await rows.count() !== expectedLiveCount) {
+  while (
+    await rows.count() !== expectedLiveCount
+    || Number(await diagnostics.getAttribute('data-renderer-registry-count')) !== expectedLiveCount
+    || !await rows.evaluateAll(elements => elements.every(element =>
+      element.getAttribute('data-renderer-effective') !== 'unavailable'
+    ))
+  ) {
     if (Date.now() >= statusDeadline) throw new Error('renderer status did not clean up after terminal close')
     await delay(50)
   }
@@ -214,8 +222,32 @@ async function verifyRendererStatusCleanup(window, terminalIds) {
   const remainingTerminalIds = await rows.evaluateAll(elements =>
     elements.map(element => element.getAttribute('data-renderer-terminal-id')).filter(Boolean)
   )
+  const statuses = await rows.evaluateAll(elements => elements.map(element => ({
+    terminalId: element.getAttribute('data-renderer-terminal-id'),
+    effective: element.getAttribute('data-renderer-effective'),
+    fallbackReason: element.getAttribute('data-renderer-fallback'),
+  })))
+  const registryCount = Number(await diagnostics.getAttribute('data-renderer-registry-count'))
+  const cleanupEvidence = validateRendererCleanupEvidence({
+    originalTerminalIds: terminalIds,
+    closedTerminalId,
+    remainingTerminalIds,
+    registryCount,
+    statuses,
+    policy: rendererPolicy,
+  })
+  if (!cleanupEvidence.ok) {
+    throw new Error(`renderer cleanup evidence failed: ${cleanupEvidence.failures.join('; ')}`)
+  }
   await window.locator('[aria-label="Close Settings"]').click()
-  return { closedTerminalId, expectedLiveCount, remainingTerminalIds, ok: true }
+  return {
+    closedTerminalId,
+    expectedLiveCount,
+    remainingTerminalIds,
+    registryCount,
+    statuses,
+    ok: true,
+  }
 }
 
 async function installStreamProbe(window) {
@@ -494,7 +526,20 @@ async function runPaneConfiguration({
     const streams = await window.evaluate(() => window.__MC_PACKAGED_SOAK__.probe.streams)
     const evidence = validateTerminalEvidence({ terminalIds, streams, liveMarkers, canonicalMarkers })
     if (!evidence.ok) throw new Error(`terminal correctness evidence failed: ${evidence.failures.join('; ')}`)
-    const rendererCleanup = await verifyRendererStatusCleanup(window, terminalIds)
+    const finalRendererStatuses = await collectRendererEvidence(window, terminalIds)
+    const finalRendererEvidence = validateRendererEvidence({
+      terminalIds,
+      statuses: finalRendererStatuses,
+      policy: rendererPolicy,
+    })
+    if (!finalRendererEvidence.ok) {
+      throw new Error(`final renderer evidence failed: ${finalRendererEvidence.failures.join('; ')}`)
+    }
+    const rendererCleanup = await verifyRendererStatusCleanup(
+      window,
+      terminalIds,
+      rendererPolicy,
+    )
 
     return {
       paneCount,
@@ -507,8 +552,9 @@ async function runPaneConfiguration({
       rendererEvidence: {
         policy: rendererPolicy,
         statuses: rendererStatuses,
+        finalStatuses: finalRendererStatuses,
         cleanup: rendererCleanup,
-        ok: true,
+        ok: rendererEvidence.ok && finalRendererEvidence.ok && rendererCleanup.ok,
       },
       settingsEvidence,
       processMetrics: summarizeProcessSamples(processSamples),

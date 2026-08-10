@@ -98,6 +98,7 @@ describe('DiagnosticsSettings renderer policy', () => {
     expect(document.body.textContent).not.toContain('main-orphan')
     expect(document.body.textContent).not.toContain('renderer-orphan')
     expect(document.body.textContent).not.toContain('SECRET')
+    expect(screen.getByTestId('terminal-stream-diagnostics').getAttribute('data-renderer-registry-count')).toBe('2')
   })
 
   it('keeps local renderer status visible when the first main request fails', async () => {
@@ -176,6 +177,7 @@ describe('DiagnosticsSettings renderer policy', () => {
 
     act(() => { useAppStore.setState({ terminals: [] }) })
     await waitFor(() => expect(screen.queryByText('term-safe-id')).toBeNull())
+    expect(screen.getByTestId('terminal-stream-diagnostics').getAttribute('data-renderer-registry-count')).toBe('1')
     view.unmount()
   })
 })

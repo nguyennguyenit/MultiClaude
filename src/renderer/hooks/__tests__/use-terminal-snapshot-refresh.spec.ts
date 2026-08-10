@@ -252,6 +252,29 @@ describe('refreshTerminal with snapshot replay', () => {
     }
   })
 
+  it('invalidates queued WebGL work before replacing a snapshot', async () => {
+    vi.useRealTimers()
+    const order: string[] = []
+    const surface = {
+      replaceSnapshot: vi.fn(async () => { order.push('replace') }),
+    }
+
+    await performSnapshotReplay({
+      terminalId: 'test-term',
+      terminalRef: { current: extendedMock } as never,
+      surfaceRef: { current: surface } as never,
+      disposedRef: { current: false },
+      clearTextureAtlas: vi.fn(),
+      invalidateQueuedLoad: vi.fn(() => { order.push('invalidate') }),
+      disposeWebGL: vi.fn(() => { order.push('dispose') }),
+      reconcileWebGL: vi.fn(),
+      performFit: vi.fn().mockReturnValue(true),
+      silent: true,
+    })
+
+    expect(order).toEqual(['invalidate', 'dispose', 'replace'])
+  })
+
   it('restores alternate-buffer state from the canonical snapshot', async () => {
     vi.useRealTimers()
     const reference = createTerminalStateHarness()

@@ -12,6 +12,7 @@ export interface TerminalRendererStatus {
 
 interface TerminalRendererStatusState {
   statuses: Record<string, TerminalRendererStatus>
+  sessionCount: number
 }
 
 interface RetryControl {
@@ -32,6 +33,7 @@ const retryControls = new Map<string, RetryControl>()
 
 export const useTerminalRendererStatusStore = create<TerminalRendererStatusState>(() => ({
   statuses: {},
+  sessionCount: 0,
 }))
 
 function removeStatus(terminalId: string): void {
@@ -47,6 +49,7 @@ export function claimTerminalRendererSession(terminalId: string, token: symbol):
   sessionOwners.set(terminalId, token)
   retryControls.delete(terminalId)
   removeStatus(terminalId)
+  useTerminalRendererStatusStore.setState({ sessionCount: sessionOwners.size })
 }
 
 export function setTerminalRendererStatus(
@@ -98,10 +101,11 @@ export function releaseTerminalRendererSession(terminalId: string, token: symbol
   sessionOwners.delete(terminalId)
   retryControls.delete(terminalId)
   removeStatus(terminalId)
+  useTerminalRendererStatusStore.setState({ sessionCount: sessionOwners.size })
 }
 
 export function resetTerminalRendererStatusStoreForTests(): void {
   sessionOwners.clear()
   retryControls.clear()
-  useTerminalRendererStatusStore.setState({ statuses: {} })
+  useTerminalRendererStatusStore.setState({ statuses: {}, sessionCount: 0 })
 }

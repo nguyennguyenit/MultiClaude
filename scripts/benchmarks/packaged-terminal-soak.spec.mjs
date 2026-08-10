@@ -18,6 +18,7 @@ import {
   summarizeSteadyStateTrend,
   summarizeTrendWindow,
   validateTerminalEvidence,
+  validateRendererCleanupEvidence,
   validateRendererEvidence,
   workspaceRelativeEvidenceSource,
 } from './packaged-terminal-soak-lib.mjs'
@@ -142,27 +143,139 @@ test('validateRendererEvidence accepts typed fallback and rejects orphans, arbit
   assert.equal(failed.ok, false)
   assert.match(failed.failures.join(' '), /unsupported fields|not live|missing renderer status/)
   assert.doesNotMatch(JSON.stringify(failed), /SECRET|driver error/)
+
+  for (const incompatible of [
+    {
+      policy: 'automatic',
+      statuses: [{ terminalId: 't1', effective: 'dom', fallbackReason: 'policy-safe' }],
+    },
+    {
+      policy: 'prefer-gpu',
+      statuses: [{ terminalId: 't1', effective: 'dom', fallbackReason: 'automatic-agent-safe' }],
+    },
+    {
+      policy: 'safe-dom',
+      statuses: [{ terminalId: 't1', effective: 'dom', fallbackReason: 'webgl-load-failed' }],
+    },
+  ]) {
+    assert.equal(validateRendererEvidence({
+      terminalIds: ['t1'],
+      ...incompatible,
+    }).ok, false)
+  }
+})
+
+test('validateRendererCleanupEvidence requires typed remaining statuses and exact registry cleanup', () => {
+  const valid = {
+    originalTerminalIds: ['t1', 't2'],
+    closedTerminalId: 't2',
+    remainingTerminalIds: ['t1'],
+    registryCount: 1,
+    statuses: [{ terminalId: 't1', effective: 'webgl', fallbackReason: 'none' }],
+    policy: 'automatic',
+  }
+  assert.equal(validateRendererCleanupEvidence(valid).ok, true)
+  assert.equal(validateRendererCleanupEvidence({ ...valid, registryCount: 2 }).ok, false)
+  assert.equal(validateRendererCleanupEvidence({ ...valid, statuses: [] }).ok, false)
 })
 
 test('attestSingleSoakEvidence rejects failures, substitutions, and multi-result documents', () => {
+  const terminalEvidence = {
+    terminalIds: ['t1'],
+    streams: {
+      t1: { firstSequence: 1, lastSequence: 1, chunks: 1, gaps: 0, duplicates: 0, epochs: ['e1'] },
+    },
+    liveMarkers: { t1: true },
+    canonicalMarkers: { t1: true },
+    ok: true,
+  }
+  const rendererEvidence = {
+    policy: 'automatic',
+    statuses: [{ terminalId: 't1', effective: 'webgl', fallbackReason: 'none' }],
+    finalStatuses: [{ terminalId: 't1', effective: 'webgl', fallbackReason: 'none' }],
+    cleanup: {
+      closedTerminalId: 't1',
+      remainingTerminalIds: [],
+      registryCount: 0,
+      statuses: [],
+      ok: true,
+    },
+    ok: true,
+  }
+  const rawAttributionSamples = [{
+    recordedAtMs: 1,
+    mainPrivateMiB: 120,
+    mainSharedMiB: 40,
+    mainHeapUsedMiB: 25,
+    mainHeapTotalMiB: 32,
+    canonicalBytes: 1_000,
+    canonicalWatermark: 10,
+    terminalCount: 1,
+  }]
   const valid = {
-    environment: { rendererPolicy: 'automatic', paneCounts: [4] },
-    results: [{ paneCount: 4 }],
+    environment: { rendererPolicy: 'automatic', paneCounts: [1] },
+    results: [{ paneCount: 1, terminalEvidence, rendererEvidence, rawAttributionSamples }],
   }
   assert.equal(attestSingleSoakEvidence(valid, {
     expectedPolicy: 'automatic',
-    expectedPaneCount: 4,
+    expectedPaneCount: 1,
   }).ok, true)
 
   for (const evidence of [
     { ...valid, failure: { code: 'run-failed' } },
-    { ...valid, results: [{ paneCount: 4 }, { paneCount: 9 }] },
-    { ...valid, environment: { rendererPolicy: 'safe-dom', paneCounts: [4] } },
+    { ...valid, results: [...valid.results, ...valid.results] },
+    { ...valid, environment: { rendererPolicy: 'safe-dom', paneCounts: [1] } },
     { ...valid, environment: { rendererPolicy: 'automatic', paneCounts: [9] } },
+    {
+      ...valid,
+      results: [{
+        ...valid.results[0],
+        rendererEvidence: {
+          ...rendererEvidence,
+          policy: 'safe-dom',
+          statuses: [{ terminalId: 't1', effective: 'dom', fallbackReason: 'policy-safe' }],
+          finalStatuses: [{ terminalId: 't1', effective: 'dom', fallbackReason: 'policy-safe' }],
+        },
+      }],
+    },
+    {
+      ...valid,
+      results: [{
+        ...valid.results[0],
+        terminalEvidence: { ...terminalEvidence, ok: true, liveMarkers: { t1: false } },
+      }],
+    },
+    {
+      ...valid,
+      results: [{
+        ...valid.results[0],
+        rawAttributionSamples: [{ ...rawAttributionSamples[0], terminalCount: 9 }],
+      }],
+    },
+    {
+      ...valid,
+      results: [{
+        ...valid.results[0],
+        rendererEvidence: {
+          ...rendererEvidence,
+          statuses: [{ terminalId: 't1', effective: 'dom', fallbackReason: 'policy-safe' }],
+        },
+      }],
+    },
+    {
+      ...valid,
+      results: [{
+        ...valid.results[0],
+        rendererEvidence: {
+          ...rendererEvidence,
+          cleanup: { ...rendererEvidence.cleanup, registryCount: 1, ok: true },
+        },
+      }],
+    },
   ]) {
     assert.equal(attestSingleSoakEvidence(evidence, {
       expectedPolicy: 'automatic',
-      expectedPaneCount: 4,
+      expectedPaneCount: 1,
     }).ok, false)
   }
 })
@@ -187,7 +300,11 @@ test('evidenceExecutableIdentifier redacts executables outside the workspace', (
   )
   assert.equal(
     evidenceExecutableIdentifier('/tmp/private-build/MultiClaude', workspace),
-    'external-artifact/MultiClaude',
+    'external-artifact/redacted',
+  )
+  assert.equal(
+    evidenceExecutableIdentifier('/tmp/private-build/customer-acme-debug-build', workspace),
+    'external-artifact/redacted',
   )
 })
 
