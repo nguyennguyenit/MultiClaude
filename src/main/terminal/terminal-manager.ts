@@ -226,7 +226,7 @@ export class TerminalManager extends EventEmitter {
 
     const powerShellRoots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)']]
       .filter((root): root is string => typeof root === 'string' && root.length > 0)
-      .map(root => path.join(root, 'PowerShell'))
+      .map(root => path.win32.join(root, 'PowerShell'))
 
     for (const root of powerShellRoots) {
       if (!existsSync(root)) continue
@@ -234,7 +234,7 @@ export class TerminalManager extends EventEmitter {
       try {
         const candidates = readdirSync(root, { withFileTypes: true })
           .filter(entry => entry.isDirectory())
-          .map(entry => path.join(root, entry.name, 'pwsh.exe'))
+          .map(entry => path.win32.join(root, entry.name, 'pwsh.exe'))
           .filter(candidate => existsSync(candidate))
           .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
 
