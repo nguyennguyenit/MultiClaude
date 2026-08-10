@@ -41,13 +41,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify types, lint, and unit tests
-        run: |
-          npm run typecheck
-          npm run lint
-          npm test
-          npm run test:benchmarks
-          npm run test:release
+      # Keep each native command in its own step. PowerShell does not fail a
+      # multiline step when an earlier native command exits non-zero, which can
+      # otherwise hide a failed test suite on Windows.
+      - name: Verify types
+        run: npm run typecheck
+
+      - name: Verify lint
+        run: npm run lint
+
+      - name: Verify unit tests
+        run: npm test
+
+      - name: Verify benchmarks
+        run: npm run test:benchmarks
+
+      - name: Verify release scripts
+        run: npm run test:release
 
       - name: Build with manifests (all platforms)
         run: npm run build:ci

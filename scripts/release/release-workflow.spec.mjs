@@ -33,3 +33,17 @@ test('keeps macOS releases compatible with the previous ad-hoc signing contract'
     assert.doesNotMatch(workflow, new RegExp(productionOnlySetting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
 })
+
+test('runs every verification command in a fail-fast workflow step', () => {
+  for (const [name, command] of [
+    ['Verify types', 'npm run typecheck'],
+    ['Verify lint', 'npm run lint'],
+    ['Verify unit tests', 'npm test'],
+    ['Verify benchmarks', 'npm run test:benchmarks'],
+    ['Verify release scripts', 'npm run test:release'],
+  ]) {
+    assert.match(workflow, new RegExp(`- name: ${name}\\n\\s+run: ${command.replace(/\//g, '\\/')}`))
+  }
+
+  assert.doesNotMatch(workflow, /run: \|\n(?:\s+npm (?:run )?[^\n]+\n){2,}/)
+})
