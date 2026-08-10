@@ -39,7 +39,10 @@ function validateExplicitProfileDirectory(candidate) {
   const physicalHome = resolveThroughExistingAncestor(path.resolve(os.homedir()))
   const physicalWorkspace = resolveThroughExistingAncestor(path.resolve(process.cwd()))
   const temporaryRoots = [os.tmpdir()]
-  if (process.platform !== 'win32') temporaryRoots.push('/tmp', '/var/tmp')
+  // Keep the common macOS spelling even on Linux. `/private/tmp` is normally a
+  // symlink to `/tmp` on macOS, but can be a distinct (or absent) broad path on
+  // Linux; both spellings must be rejected before a profile is created there.
+  if (process.platform !== 'win32') temporaryRoots.push('/tmp', '/private/tmp', '/var/tmp')
   const physicalTemporaryRoots = temporaryRoots.map(root =>
     resolveThroughExistingAncestor(path.resolve(root))
   )

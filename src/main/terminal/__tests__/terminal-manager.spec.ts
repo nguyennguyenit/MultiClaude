@@ -289,7 +289,7 @@ describe('TerminalManager', () => {
       process.env.ProgramFiles = 'C:\\Program Files'
       mockSpawnSync.mockReturnValue({ status: 1 })
       mockExistsSync.mockImplementation((target: string) => (
-        target === 'C:\\Program Files/PowerShell' || target === 'C:\\Program Files/PowerShell/7/pwsh.exe'
+        target === 'C:\\Program Files\\PowerShell' || target === 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
       ))
       mockReaddirSync.mockReturnValue([
         {
@@ -302,7 +302,7 @@ describe('TerminalManager', () => {
       winManager.create({ shell: { type: 'powershell' } })
 
       expect(pty.spawn).toHaveBeenCalledWith(
-        'C:\\Program Files/PowerShell/7/pwsh.exe',
+        'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
         ['-NoLogo'],
         expect.objectContaining({ name: 'xterm-256color' })
       )
