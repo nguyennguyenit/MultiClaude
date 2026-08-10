@@ -1,6 +1,6 @@
 import Store from 'electron-store'
 import { app } from 'electron'
-import type { AppSettings, ThemeMode, TerminalRenderMode, TerminalFontId, AppFontId, ShellInfo, TerminalEngine } from '@shared/types'
+import type { AppSettings, ThemeMode, TerminalRendererPolicy, TerminalFontId, AppFontId, ShellInfo, TerminalEngine } from '@shared/types'
 import { DEFAULT_SETTINGS, SCROLLBACK_MIN, SCROLLBACK_MAX, THEMES } from '@shared/constants'
 import { getNativeTerminalCapability, resolveTerminalEngine } from '../terminal/native-terminal-capability'
 import { CURRENT_SETTINGS_SCHEMA_VERSION, migrateSettings } from './settings-migrations'
@@ -38,7 +38,7 @@ interface SettingsStoreOptions {
 // Allowed values for enum-like settings
 const VALID_THEME_MODES: ThemeMode[] = ['light', 'dark', 'system']
 const VALID_COLOR_THEMES = new Set(THEMES.map(theme => theme.id))
-const VALID_RENDER_MODES: TerminalRenderMode[] = ['performance', 'balanced', 'quality']
+const VALID_RENDERER_POLICIES: TerminalRendererPolicy[] = ['automatic', 'prefer-gpu', 'safe-dom']
 const VALID_TERMINAL_PRESETS = [2, 4, 9, 'custom'] as const
 const VALID_TERMINAL_FONT_IDS: TerminalFontId[] = ['system', 'jetbrains-mono', 'source-code-pro', 'fira-code', 'vt323', 'ibm-plex-mono', 'space-mono']
 const VALID_APP_FONT_IDS: AppFontId[] = ['system', 'inter', 'geist', 'plus-jakarta-sans', 'roboto', 'ubuntu', 'segoe-ui']
@@ -76,18 +76,12 @@ export function validateSettings(settings: Partial<AppSettings>, defaults: AppSe
     )
   }
 
-  // Validate terminalRenderMode
-  if (settings.terminalRenderMode !== undefined) {
-    validated.terminalRenderMode = VALID_RENDER_MODES.includes(settings.terminalRenderMode)
-      ? settings.terminalRenderMode
-      : defaults.terminalRenderMode
-  }
-
-  if (settings.gpuRendererForClaudeTerminals !== undefined) {
-    validated.gpuRendererForClaudeTerminals =
-      typeof settings.gpuRendererForClaudeTerminals === 'boolean'
-        ? settings.gpuRendererForClaudeTerminals
-        : defaults.gpuRendererForClaudeTerminals
+  if (settings.terminalRendererPolicy !== undefined) {
+    validated.terminalRendererPolicy = VALID_RENDERER_POLICIES.includes(
+      settings.terminalRendererPolicy,
+    )
+      ? settings.terminalRendererPolicy
+      : defaults.terminalRendererPolicy
   }
 
   // Validate scrollbackLines (clamp to allowed range; fall back to default on non-numeric input)
@@ -205,13 +199,10 @@ export class SettingsStore {
     const transaction = this.store.get('settingsMigration')
     const recovered = recoverSettingsMigrationOnLaunch(raw, transaction)
     if (transaction) {
-      const recoveredSettings = recovered.restoredBackup
-        ? this.completeSettingsProfile(recovered.settings)
-        : recovered.settings as unknown as AppSettings
-      this.store.set('settings', recoveredSettings)
-      this.store.set('settingsMigration', recovered.transaction)
-      if (recovered.restoredBackup) return
-      if (recovered.transaction?.phase === 'next-launch-expiry-pending') return
+      if (!recovered.restoredBackup) {
+        this.store.set('settingsMigration', recovered.transaction)
+        if (recovered.transaction?.phase === 'next-launch-expiry-pending') return
+      }
     }
 
     const migrated = {
@@ -227,31 +218,32 @@ export class SettingsStore {
     candidateSettings.terminalEngine = resolveTerminalEngine(candidateSettings.terminalEngine)
     if (JSON.stringify(recovered.settings) === JSON.stringify(candidateSettings)) return
 
-    const backup = structuredClone(
-      this.completeSettingsProfile(recovered.settings),
-    ) as unknown as Record<string, unknown>
+    const backup = structuredClone(recovered.settings)
     const candidate = structuredClone(candidateSettings) as unknown as Record<string, unknown>
-    this.store.set('settingsMigration', {
-      phase: 'backup-written',
-      backup,
-      candidate,
-    })
-    this.store.set('settingsMigration', beginSettingsMigration(backup, candidate))
-    this.store.set('settings', candidateSettings)
+    try {
+      this.store.set('settingsMigration', {
+        phase: 'backup-written',
+        backup,
+        candidate,
+      })
+      this.store.set('settingsMigration', beginSettingsMigration(backup, candidate))
+      this.store.set('settings', candidateSettings)
 
-    const persistedCandidate = this.store.get('settings')
-    const readValidated = {
-      ...this.channelDefaults,
-      ...validateSettings(persistedCandidate ?? {}, this.channelDefaults),
-      settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
-    } as AppSettings
-    readValidated.terminalEngine = resolveTerminalEngine(readValidated.terminalEngine)
-    if (
-      JSON.stringify(persistedCandidate) !== JSON.stringify(candidateSettings) ||
-      JSON.stringify(readValidated) !== JSON.stringify(candidateSettings)
-    ) {
-      this.store.set('settings', backup as unknown as AppSettings)
-      this.store.set('settingsMigration', null)
+      const persistedCandidate = this.store.get('settings')
+      const readValidated = {
+        ...this.channelDefaults,
+        ...validateSettings(persistedCandidate ?? {}, this.channelDefaults),
+        settingsSchemaVersion: CURRENT_SETTINGS_SCHEMA_VERSION,
+      } as AppSettings
+      readValidated.terminalEngine = resolveTerminalEngine(readValidated.terminalEngine)
+      if (
+        JSON.stringify(persistedCandidate) !== JSON.stringify(candidateSettings) ||
+        JSON.stringify(readValidated) !== JSON.stringify(candidateSettings)
+      ) {
+        throw new Error('candidate verification mismatch')
+      }
+    } catch {
+      throw new Error('Settings migration failed; restart MultiClaude to retry.')
     }
   }
 

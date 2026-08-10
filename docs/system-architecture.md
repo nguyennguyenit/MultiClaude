@@ -156,6 +156,20 @@ Restore behavior:
 - `skipAppendRef` suppresses duplicate appends during restore
 - `addTerminal()` and `removeTerminal()` clear stale buffer entries for reused or closed terminal IDs
 
+#### Renderer Policy And Session Ownership
+
+`src/renderer/utils/terminal-renderer-policy.ts` owns the pure policy decision.
+`src/renderer/hooks/use-terminal-webgl.ts` is the only production WebGL addon
+constructor and owns lazy allocation, loss-listener setup, one-way session
+fallback, retry, and disposal. Successful WebGL stays attached while a pane is
+hidden or inactive; first allocation remains active-and-visible lazy.
+
+Each mounted renderer receives an opaque session token. Snapshot locks, output
+pause/resume, handler registration, lifecycle subscriptions, and the local
+status/retry registry all validate that token so late work cannot mutate a
+replacement terminal with the same ID. The local registry is joined with main
+terminal diagnostics only in the Diagnostics presentation layer; it adds no IPC.
+
 #### Legacy Raw Buffer (outputBuffer)
 
 `PTYProcess.outputBuffer` is a bounded local restore/diagnostic tail. A separate bounded `notificationTail` serves explicitly enabled Telegram output and smart-summary commands. Neither is the normal UI source of truth; canonical refresh uses the headless snapshot, while renderer live buffering is the failure path when that snapshot is unavailable.
@@ -270,7 +284,7 @@ The current architecture keeps the hot path small:
 - The output buffer is plain module state, not reactive store state
 - One shared IPC listener replaces N per-terminal output subscriptions
 - `TerminalView` owns xterm write timing, scrollback restore, and visible-data bookkeeping
-- Terminal limits and WebGL rendering modes still cap resource usage
+- Terminal limits plus lazy, fallback-capable WebGL allocation cap resource usage
 
 ## Build And Release
 

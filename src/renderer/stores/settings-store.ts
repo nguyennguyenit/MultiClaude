@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRenderMode, TerminalEngine, WslInfo, TerminalFontId, AppFontId, ShellInfo } from '@shared/types'
+import type { AppSettings, ThemeMode, ColorTheme, TerminalLimit, TerminalRendererPolicy, TerminalEngine, WslInfo, TerminalFontId, AppFontId, ShellInfo } from '@shared/types'
 import { DEFAULT_SETTINGS, APP_FONTS } from '@shared/constants'
 import { useToastStore } from './toast-store'
 
@@ -50,9 +50,8 @@ interface SettingsState {
   setThemeMode: (mode: ThemeMode) => void
   setColorTheme: (theme: ColorTheme) => void
   setTerminalLimit: (limit: TerminalLimit) => void
-  setTerminalRenderMode: (mode: TerminalRenderMode) => void
+  setTerminalRendererPolicy: (policy: TerminalRendererPolicy) => void
   setTerminalEngine: (engine: TerminalEngine) => void
-  setGpuRendererForClaudeTerminals: (enabled: boolean) => void
   setScrollbackLines: (lines: number) => void
   setEnableContextWindow: (enabled: boolean) => void
   setEnableContextWindowAdvanced: (enabled: boolean) => void
@@ -80,8 +79,7 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
   // Compare primitive fields
   if (a.themeMode !== b.themeMode) return false
   if (a.colorTheme !== b.colorTheme) return false
-  if (a.terminalRenderMode !== b.terminalRenderMode) return false
-  if (a.gpuRendererForClaudeTerminals !== b.gpuRendererForClaudeTerminals) return false
+  if (a.terminalRendererPolicy !== b.terminalRendererPolicy) return false
   if (a.scrollbackLines !== b.scrollbackLines) return false
   if (a.modernFontFamily !== b.modernFontFamily) return false
   if (a.terminalFontFamily !== b.terminalFontFamily) return false
@@ -106,7 +104,13 @@ function areSettingsEqual(a: AppSettings, b: AppSettings): boolean {
  * untouched default profile. A current main-owned preference always wins.
  */
 export function shouldImportLegacySettings(mainSettings: AppSettings): boolean {
-  return areSettingsEqual(mainSettings, DEFAULT_SETTINGS)
+  return areSettingsEqual(
+    {
+      ...mainSettings,
+      enableContextWindowAdvanced: DEFAULT_SETTINGS.enableContextWindowAdvanced,
+    },
+    DEFAULT_SETTINGS,
+  )
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -147,24 +151,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     })
   },
 
-  setTerminalRenderMode: (mode) => {
-    const pending = { ...get().pendingSettings, terminalRenderMode: mode }
+  setTerminalRendererPolicy: (policy) => {
+    const pending = { ...get().pendingSettings, terminalRendererPolicy: policy }
     set({
       pendingSettings: pending,
+      settings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
     })
   },
 
   setTerminalEngine: (engine) => {
     const pending = { ...get().pendingSettings, terminalEngine: engine }
-    set({
-      pendingSettings: pending,
-      hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
-    })
-  },
-
-  setGpuRendererForClaudeTerminals: (enabled) => {
-    const pending = { ...get().pendingSettings, gpuRendererForClaudeTerminals: enabled }
     set({
       pendingSettings: pending,
       hasUnsavedChanges: !areSettingsEqual(pending, get().savedSettings)
@@ -210,8 +207,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         settings: pending,
         hasUnsavedChanges: !areSettingsEqual(pending, updated)
       })
-    } catch (err) {
-      console.error('[settings] Failed to persist defaultShell:', err)
+    } catch {
+      console.error('[settings] Failed to persist default shell.')
       const pending = get().pendingSettings
       set({
         savedSettings: saved,
@@ -244,10 +241,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   saveSettings: async () => {
     const pending = get().pendingSettings
     const saved = get().savedSettings
-    console.log('[settings] Saving settings:', pending)
     try {
       const result = await window.electron.settings.set(pending)
-      console.log('[settings] Save result from main:', result)
       set({
         savedSettings: result,
         pendingSettings: result,
@@ -255,9 +250,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         hasUnsavedChanges: false
       })
       if (result.modernFontFamily) applyAppFont(result.modernFontFamily)
-      console.log('[settings] savedSettings updated to:', get().savedSettings)
     } catch (err) {
-      console.error('Failed to save settings:', err)
+      console.error('[settings] Failed to save settings.')
       set({
         savedSettings: saved,
         pendingSettings: saved,
@@ -274,6 +268,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const saved = get().savedSettings
     set({
       pendingSettings: { ...saved },
+      settings: { ...saved },
       hasUnsavedChanges: false
     })
     if (saved.modernFontFamily) applyAppFont(saved.modernFontFamily)
@@ -314,21 +309,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
               hasUnsavedChanges: false
             })
             localStorage.removeItem(STORAGE_KEY)
-          } catch (migrationErr) {
-            // Log migration errors for debugging but don't fail the app
-            console.warn('[settings] localStorage migration failed:', migrationErr)
+          } catch {
+            console.warn('[settings] Legacy settings import failed.')
           }
         }
       }
-    } catch (err) {
-      console.error('Failed to load settings from disk:', err)
+    } catch {
+      console.error('[settings] Failed to load settings from disk.')
       useToastStore.getState().addToast(
         'Failed to load settings. Using defaults.',
         'warning'
       )
       set({
         savedSettings: DEFAULT_SETTINGS,
-        pendingSettings: DEFAULT_SETTINGS
+        pendingSettings: DEFAULT_SETTINGS,
+        settings: DEFAULT_SETTINGS,
+        hasUnsavedChanges: false,
       })
     }
   },

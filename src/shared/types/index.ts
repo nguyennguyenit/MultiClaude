@@ -194,8 +194,7 @@ export type ColorTheme =
   // New VibeTerminal themes
   | 'tokyo-night' | 'catppuccin' | 'dracula' | 'rose-pine' | 'pro-dark'
 
-// Terminal rendering mode: performance (no WebGL), balanced (WebGL for active only), quality (always WebGL)
-export type TerminalRenderMode = 'performance' | 'balanced' | 'quality'
+export type TerminalRendererPolicy = 'automatic' | 'prefer-gpu' | 'safe-dom'
 export type TerminalEngine = 'xterm' | 'ghostty'
 
 // UI Style types for Terminal/TUI mode
@@ -267,8 +266,7 @@ export interface AppSettings {
   terminalEngine: TerminalEngine
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
-  terminalRenderMode: TerminalRenderMode
-  gpuRendererForClaudeTerminals?: boolean
+  terminalRendererPolicy: TerminalRendererPolicy
   /**
    * Number of lines xterm.js keeps in the scrollback buffer.
    * Higher values let the user scroll further back but use more memory

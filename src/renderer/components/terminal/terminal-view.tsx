@@ -99,7 +99,7 @@ export const TerminalView = memo(function TerminalView({
   onRefreshReady,
   onOutput
 }: TerminalViewProps) {
-  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef } = useTerminal({
+  const { containerRef, initTerminal, write, fit, focus, blur, showCursor, restoreActiveRender, refresh, scrollToTop, scrollToBottom, getViewportSnapshot, terminalRef, sessionToken } = useTerminal({
     terminalId,
     initialOutput,
     initialViewportY,
@@ -312,8 +312,8 @@ export const TerminalView = memo(function TerminalView({
         skipAppend: skipAppendRef.current,
         appendOutput
       })
-    }, () => refresh(false))
-  }, [terminalId, write, appendOutput, onOutput, refresh])
+    }, () => refresh(false), sessionToken)
+  }, [terminalId, write, appendOutput, onOutput, refresh, sessionToken])
 
   // Focus when becomes active, blur when inactive
   // Note: scroll restoration and cursor are handled by visibility effect in use-terminal.ts

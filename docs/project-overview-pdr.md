@@ -28,8 +28,8 @@
 |----|-------------|--------|
 | FR-1.1 | Spawn/destroy PTY processes via node-pty; system suspend/resume handling | Complete |
 | FR-1.2 | Grid layout auto-adjusts based on terminal count; configurable terminal limits (2, 4, 9, custom) | Complete |
-| FR-1.3 | Terminal rendering modes: Performance (no WebGL), Balanced (active only), Quality (always on) | Complete |
-| FR-1.4 | Claude-safe mode: experimental toggle for GPU rendering on Claude terminals | Complete |
+| FR-1.3 | Terminal renderer policy: Automatic, Prefer GPU, or Compatibility with terminal-local fallback | Complete |
+| FR-1.4 | Automatic keeps Claude and Codex on safer DOM rendering while regular shells attempt WebGL | Complete |
 | FR-1.5 | Terminal title editing via double-click; Claude mode indicator badge | Complete |
 | FR-1.6 | Windows shell selection: cmd, PowerShell (pwsh), WSL distros with validation and cleanup | Complete |
 | FR-1.7 | Terminal keyboard enhancements: OSC title updates via escape sequences; input buffering; smart scroll with smart scroll-to-bottom button | Complete |
@@ -77,7 +77,7 @@
 | FR-6.1 | 7 UI color themes + Light/Dark/System modes (Default, Dusk, Lime, Ocean, Retro, Neo, Forest) | Complete | Applied to app chrome |
 | FR-6.2 | 5 Terminal ANSI palette themes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark) | Complete | xterm v6 color integration |
 | FR-6.3 | Settings slide panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | Complete | Modal-free slide from right/bottom |
-| FR-6.4 | Terminal rendering mode selector (Performance/Balanced/Quality) with Claude-safe toggle | Complete | WebGL + GPU control + xterm v6 |
+| FR-6.4 | Diagnostics renderer policy plus effective `DOM`/`WebGL` status and recoverable per-terminal retry | Complete | xterm v6 DOM/WebGL controller |
 | FR-6.5 | Terminal limit presets (2, 4, 9, custom) to constrain concurrent terminals | Complete | Enforced at spawn time |
 | FR-6.6 | Windows shell selector: cmd, PowerShell, WSL distros with persistent storage | Complete | Per-project shell choice |
 | FR-6.7 | Settings pending/saved flow: preview changes before persisting; hasUnsavedChanges tracking | Complete | Field-by-field equality check |
@@ -138,7 +138,7 @@
 - Multi-agent detection (Claude, Codex, Gemini, Aider) in notifications
 - Notification watcher with tool-approval, error, warning, review-needed patterns
 - 7 UI themes + 5 terminal ANSI palettes (Tokyo Night, Catppuccin Mocha, Dracula, Rosé Pine, Pro Dark)
-- Terminal rendering modes (Performance/Balanced/Quality) with Claude-safe toggle
+- Automatic terminal renderer policy with typed per-pane fallback and diagnostics
 - Windows shell selection (cmd, PowerShell, WSL distros) with UNC path conversion
 - System suspend/resume handling with powerMonitor + 2s debounce
 - Vietnamese IME auto-patch with status detection

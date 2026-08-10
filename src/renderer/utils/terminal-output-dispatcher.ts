@@ -23,6 +23,22 @@ interface StreamState {
   recoveryTimer?: ReturnType<typeof setTimeout>
   recoveryInFlight: boolean
   explicitlyPaused: boolean
+  ownerToken?: symbol
+}
+
+function isOwnedBy(state: StreamState, token?: symbol): boolean {
+  return token === undefined || state.ownerToken === token
+}
+
+export function claimTerminalOutputSession(id: string, token: symbol): void {
+  const state = getState(id)
+  if (state.ownerToken === token) return
+  state.ownerToken = token
+  state.handler = undefined
+  state.recoveryHandler = undefined
+  state.status = 'hydrating'
+  state.explicitlyPaused = true
+  clearRecovery(state)
 }
 
 const states = new Map<string, StreamState>()
@@ -131,8 +147,9 @@ function flushPending(id: string, state: StreamState): void {
 }
 
 /** Pause delivery while a full terminal snapshot is being applied. */
-export function pauseAndBuffer(id: string): void {
+export function pauseAndBuffer(id: string, token?: symbol): void {
   const state = getState(id)
+  if (!isOwnedBy(state, token)) return
   if (state.status !== 'disposed') {
     state.status = 'hydrating'
     state.explicitlyPaused = true
@@ -143,9 +160,9 @@ export function pauseAndBuffer(id: string): void {
  * Complete hydration at an atomic snapshot watermark and apply only later
  * envelopes from the same terminal lifetime.
  */
-export function resumeFromSnapshot(snapshot: TerminalSnapshot): void {
+export function resumeFromSnapshot(snapshot: TerminalSnapshot, token?: symbol): void {
   const state = states.get(snapshot.terminalId)
-  if (!state) return
+  if (!state || !isOwnedBy(state, token)) return
   clearRecovery(state)
   state.streamEpoch = snapshot.streamEpoch
   state.lastAppliedSequence = snapshot.watermark
@@ -158,9 +175,9 @@ export function resumeFromSnapshot(snapshot: TerminalSnapshot): void {
  * Resume sequenced live delivery when snapshot hydration is unavailable.
  * Normal snapshot paths must call resumeFromSnapshot().
  */
-export function resumeAndFlush(id: string): void {
+export function resumeAndFlush(id: string, token?: symbol): void {
   const state = states.get(id)
-  if (!state) return
+  if (!state || !isOwnedBy(state, token)) return
   if (!state.streamEpoch) {
     const first = state.pending[0]
     state.streamEpoch = first?.streamEpoch ?? null
@@ -175,9 +192,11 @@ export function resumeAndFlush(id: string): void {
 export function registerTerminalOutputHandler(
   id: string,
   handler: TerminalOutputHandler,
-  recoveryHandler?: RecoveryHandler
+  recoveryHandler?: RecoveryHandler,
+  token?: symbol,
 ): () => void {
   const state = getState(id)
+  if (!isOwnedBy(state, token)) return () => undefined
   state.handler = handler
   state.recoveryHandler = recoveryHandler
   if (state.status === 'live') flushPending(id, state)
@@ -186,7 +205,7 @@ export function registerTerminalOutputHandler(
 
   return () => {
     const current = states.get(id)
-    if (!current || current.handler !== handler) return
+    if (!current || !isOwnedBy(current, token) || current.handler !== handler) return
     current.handler = undefined
     current.recoveryHandler = undefined
     if (current.status === 'live') current.status = 'gap'

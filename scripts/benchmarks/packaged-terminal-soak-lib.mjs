@@ -1,4 +1,59 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import process from 'node:process'
+
 const SUPPORTED_PANE_COUNTS = new Set([1, 4, 9])
+const SUPPORTED_RENDERER_POLICIES = new Set(['automatic', 'prefer-gpu', 'safe-dom'])
+const SUPPORTED_SETTINGS_OPERATIONS = new Set(['observe', 'reset'])
+const EFFECTIVE_RENDERERS = new Set(['dom', 'webgl'])
+const RENDERER_FALLBACK_REASONS = new Set([
+  'automatic-agent-safe',
+  'policy-safe',
+  'webgl-unavailable',
+  'webgl-load-failed',
+  'webgl-context-lost',
+  'none',
+])
+
+function resolveThroughExistingAncestor(candidate) {
+  let ancestor = candidate
+  const missingSegments = []
+  while (!fs.existsSync(ancestor)) {
+    const parent = path.dirname(ancestor)
+    if (parent === ancestor) break
+    missingSegments.unshift(path.basename(ancestor))
+    ancestor = parent
+  }
+  return path.resolve(fs.realpathSync(ancestor), ...missingSegments)
+}
+
+function isSameOrAncestor(candidate, target) {
+  const relative = path.relative(candidate, target)
+  return relative === ''
+    || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`))
+}
+
+function validateExplicitProfileDirectory(candidate) {
+  const physicalCandidate = resolveThroughExistingAncestor(candidate)
+  const physicalHome = resolveThroughExistingAncestor(path.resolve(os.homedir()))
+  const physicalWorkspace = resolveThroughExistingAncestor(path.resolve(process.cwd()))
+  const temporaryRoots = [os.tmpdir()]
+  if (process.platform !== 'win32') temporaryRoots.push('/tmp', '/var/tmp')
+  const physicalTemporaryRoots = temporaryRoots.map(root =>
+    resolveThroughExistingAncestor(path.resolve(root))
+  )
+  const isBroadHomePath = isSameOrAncestor(physicalCandidate, physicalHome)
+  const overlapsWorkspace = isSameOrAncestor(physicalCandidate, physicalWorkspace)
+    || isSameOrAncestor(physicalWorkspace, physicalCandidate)
+  const isBroadTemporaryPath = physicalTemporaryRoots.some(root =>
+    isSameOrAncestor(physicalCandidate, root)
+  )
+
+  if (isBroadHomePath || overlapsWorkspace || isBroadTemporaryPath) {
+    throw new Error('--profile-dir must be a dedicated directory outside broad home, workspace, and temporary roots')
+  }
+}
 
 function positiveInteger(value, flagName) {
   if (!/^[1-9]\d*$/.test(value)) {
@@ -36,6 +91,30 @@ export function parseSoakArguments(argumentsList) {
     throw new Error('--pane-counts must not contain duplicates')
   }
 
+  const rendererPolicy = readSingleFlag(argumentsList, 'renderer-policy', 'automatic')
+  if (!SUPPORTED_RENDERER_POLICIES.has(rendererPolicy)) {
+    throw new Error('--renderer-policy must be automatic, prefer-gpu, or safe-dom')
+  }
+  const settingsOperationValue = readSingleFlag(argumentsList, 'settings-operation', '')
+  if (settingsOperationValue && !SUPPORTED_SETTINGS_OPERATIONS.has(settingsOperationValue)) {
+    throw new Error('--settings-operation must be observe or reset')
+  }
+  const profileDirectoryValue = readSingleFlag(argumentsList, 'profile-dir', '')
+  let profileDirectory = null
+  if (profileDirectoryValue) {
+    if (!path.isAbsolute(profileDirectoryValue)) {
+      throw new Error('--profile-dir must be an absolute path')
+    }
+    profileDirectory = path.resolve(profileDirectoryValue)
+    if (profileDirectory === path.parse(profileDirectory).root) {
+      throw new Error('--profile-dir must not be a filesystem root')
+    }
+    validateExplicitProfileDirectory(profileDirectory)
+    if (paneCounts.length !== 1) {
+      throw new Error('--profile-dir requires exactly one pane count')
+    }
+  }
+
   return {
     paneCounts,
     durationSeconds: positiveInteger(readSingleFlag(argumentsList, 'duration-seconds', '30'), '--duration-seconds'),
@@ -44,7 +123,208 @@ export function parseSoakArguments(argumentsList) {
       readSingleFlag(argumentsList, 'canonical-interval-seconds', '0'),
       '--canonical-interval-seconds',
     ),
+    rendererPolicy,
+    profileDirectory,
+    settingsOperation: settingsOperationValue || null,
   }
+}
+
+export function createProfileDirectoryPlan({ profileDirectory, paneCount, makeTemporaryDirectory }) {
+  if (profileDirectory) return { profileDirectory, cleanup: false }
+  return {
+    profileDirectory: makeTemporaryDirectory(`multiclaude-packaged-soak-${paneCount}-`),
+    cleanup: true,
+  }
+}
+
+export function validateRendererEvidence({
+  terminalIds,
+  statuses,
+  policy,
+  safeAgentTerminalIds = [],
+}) {
+  const failures = []
+  if (!SUPPORTED_RENDERER_POLICIES.has(policy)) failures.push('renderer policy is invalid')
+  const expectedIds = new Set(terminalIds)
+  const safeAgentIds = new Set(safeAgentTerminalIds)
+  const observedIds = new Set()
+  for (const status of statuses) {
+    const keys = Object.keys(status).sort()
+    if (keys.join(',') !== 'effective,fallbackReason,terminalId') {
+      failures.push(`${status.terminalId ?? 'unknown'}: renderer evidence contains unsupported fields`)
+      continue
+    }
+    if (!expectedIds.has(status.terminalId)) failures.push(`${status.terminalId}: renderer status is not live`)
+    if (observedIds.has(status.terminalId)) failures.push(`${status.terminalId}: duplicate renderer status`)
+    observedIds.add(status.terminalId)
+    if (!EFFECTIVE_RENDERERS.has(status.effective)) failures.push(`${status.terminalId}: invalid effective renderer`)
+    if (!RENDERER_FALLBACK_REASONS.has(status.fallbackReason)) failures.push(`${status.terminalId}: invalid fallback reason`)
+    if (status.effective === 'webgl' && status.fallbackReason !== 'none') {
+      failures.push(`${status.terminalId}: WebGL status must not have a fallback reason`)
+    }
+    if (policy === 'safe-dom' && status.effective !== 'dom') {
+      failures.push(`${status.terminalId}: Compatibility must resolve to DOM`)
+    }
+    const expectedPolicyReason = policy === 'safe-dom'
+      ? 'policy-safe'
+      : policy === 'automatic' && safeAgentIds.has(status.terminalId)
+        ? 'automatic-agent-safe'
+        : null
+    if (expectedPolicyReason !== null) {
+      if (status.effective !== 'dom' || status.fallbackReason !== expectedPolicyReason) {
+        failures.push(`${status.terminalId}: renderer status contradicts the selected policy`)
+      }
+    } else {
+      const validWebGLResult = status.effective === 'webgl' && status.fallbackReason === 'none'
+      const validWebGLFallback = status.effective === 'dom'
+        && ['webgl-unavailable', 'webgl-load-failed', 'webgl-context-lost'].includes(status.fallbackReason)
+      if (!validWebGLResult && !validWebGLFallback) {
+        failures.push(`${status.terminalId}: renderer status contradicts a WebGL attempt`)
+      }
+    }
+  }
+  for (const terminalId of terminalIds) {
+    if (!statuses.some(status => status.terminalId === terminalId)) {
+      failures.push(`${terminalId}: missing renderer status`)
+    }
+  }
+  return { ok: failures.length === 0, failures }
+}
+
+export function validateRendererCleanupEvidence({
+  originalTerminalIds,
+  closedTerminalId,
+  remainingTerminalIds,
+  registryCount,
+  statuses,
+  policy,
+}) {
+  const failures = []
+  const expectedRemainingIds = originalTerminalIds.filter(id => id !== closedTerminalId)
+  if (!originalTerminalIds.includes(closedTerminalId)) {
+    failures.push('closed terminal was not part of the live renderer set')
+  }
+  if (registryCount !== expectedRemainingIds.length) {
+    failures.push('renderer registry count did not match the remaining terminal count')
+  }
+  if (
+    [...remainingTerminalIds].sort().join(',')
+    !== [...expectedRemainingIds].sort().join(',')
+  ) {
+    failures.push('remaining renderer terminal IDs did not match the live terminal set')
+  }
+  const statusValidation = validateRendererEvidence({
+    terminalIds: expectedRemainingIds,
+    statuses,
+    policy,
+  })
+  failures.push(...statusValidation.failures)
+  return { ok: failures.length === 0, failures }
+}
+
+export function attestSingleSoakEvidence(evidence, { expectedPolicy, expectedPaneCount }) {
+  const failures = []
+  if (evidence?.failure) failures.push('soak evidence contains a top-level failure')
+  if (!Array.isArray(evidence?.results) || evidence.results.length !== 1) {
+    failures.push('soak evidence must contain exactly one result')
+  }
+  if (!SUPPORTED_RENDERER_POLICIES.has(expectedPolicy)) failures.push('expected renderer policy is invalid')
+  if (!SUPPORTED_PANE_COUNTS.has(expectedPaneCount)) failures.push('expected pane count must be 1, 4, or 9')
+  if (evidence?.environment?.rendererPolicy !== expectedPolicy) {
+    failures.push('renderer policy provenance mismatch')
+  }
+  const provenanceCounts = evidence?.environment?.paneCounts
+  if (!Array.isArray(provenanceCounts)
+    || provenanceCounts.length !== 1
+    || provenanceCounts[0] !== expectedPaneCount) {
+    failures.push('pane count provenance mismatch')
+  }
+  if (evidence?.results?.[0]?.paneCount !== expectedPaneCount) {
+    failures.push('result pane count mismatch')
+  }
+  const result = evidence?.results?.length === 1 ? evidence.results[0] : null
+  if (result) {
+    const terminalEvidence = result.terminalEvidence
+    const terminalIds = terminalEvidence?.terminalIds
+    if (!Array.isArray(terminalIds)
+      || terminalIds.length !== expectedPaneCount
+      || new Set(terminalIds).size !== terminalIds.length) {
+      failures.push('terminal evidence count mismatch')
+    } else {
+      const terminalValidation = validateTerminalEvidence(terminalEvidence)
+      if (!terminalValidation.ok || terminalEvidence.ok !== true) {
+        failures.push('terminal correctness evidence is invalid')
+      }
+      const rendererEvidence = result.rendererEvidence
+      const rendererValidation = validateRendererEvidence({
+        terminalIds,
+        statuses: Array.isArray(rendererEvidence?.statuses) ? rendererEvidence.statuses : [],
+        policy: rendererEvidence?.policy,
+      })
+      const cleanup = rendererEvidence?.cleanup
+      const cleanupValidation = validateRendererCleanupEvidence({
+        originalTerminalIds: terminalIds,
+        closedTerminalId: cleanup?.closedTerminalId,
+        remainingTerminalIds: Array.isArray(cleanup?.remainingTerminalIds)
+          ? cleanup.remainingTerminalIds
+          : [],
+        registryCount: cleanup?.registryCount,
+        statuses: Array.isArray(cleanup?.statuses) ? cleanup.statuses : [],
+        policy: rendererEvidence?.policy,
+      })
+      if (rendererEvidence?.policy !== expectedPolicy
+        || !rendererValidation.ok
+        || rendererEvidence?.ok !== true
+        || cleanup?.ok !== true
+        || !cleanupValidation.ok) {
+        failures.push('renderer evidence is invalid')
+      }
+      if (!Array.isArray(rendererEvidence?.finalStatuses)) {
+        failures.push('final renderer evidence is required')
+      } else {
+        const finalValidation = validateRendererEvidence({
+          terminalIds,
+          statuses: rendererEvidence.finalStatuses,
+          policy: rendererEvidence.policy,
+        })
+        if (!finalValidation.ok) failures.push('final renderer evidence is invalid')
+      }
+    }
+
+    if (!Array.isArray(result.rawAttributionSamples) || result.rawAttributionSamples.length === 0) {
+      failures.push('raw attribution samples are required')
+    } else {
+      for (const sample of result.rawAttributionSamples) {
+        try {
+          validateAttributionSample(sample)
+          if (sample.terminalCount !== expectedPaneCount) {
+            failures.push('attribution sample terminal count mismatch')
+            break
+          }
+        } catch {
+          failures.push('raw attribution sample is invalid')
+          break
+        }
+      }
+    }
+  }
+  return { ok: failures.length === 0, failures }
+}
+
+export function workspaceRelativeEvidenceSource(inputPath, workspacePath) {
+  const relative = path.relative(path.resolve(workspacePath), path.resolve(inputPath))
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('soak evidence source must be inside the workspace')
+  }
+  return relative.split(path.sep).join('/')
+}
+
+export function evidenceExecutableIdentifier(executablePath, workspacePath) {
+  const relative = path.relative(path.resolve(workspacePath), path.resolve(executablePath))
+  if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+    return relative.split(path.sep).join('/')
+  }
+  return 'external-artifact/redacted'
 }
 
 function round(value) {
@@ -220,6 +500,9 @@ export function evaluateMemoryAcceptance({ samples, paneCount, elapsedSeconds, c
   if (correctness !== true) failures.push('terminal correctness failed')
   if (!Number.isInteger(paneCount) || paneCount <= 0) failures.push('paneCount must be a positive integer')
   if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 1_800) failures.push('memory soak must run for at least 1800 seconds')
+  if (samples.some(sample => sample.terminalCount !== undefined && sample.terminalCount !== paneCount)) {
+    failures.push('attribution sample terminal count mismatch')
+  }
   if (failures.length > 0) return { ok: false, failures }
 
   const startAtMs = elapsedSeconds * 1_000 - 10 * 60_000

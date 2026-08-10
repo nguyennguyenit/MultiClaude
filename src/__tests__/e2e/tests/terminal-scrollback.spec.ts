@@ -61,8 +61,13 @@ test.describe('Terminal Scrollback', () => {
       `[data-terminal-id="${terminalId}"] .xterm-helper-textarea`
     )
     await terminalInput.focus()
-    for (let step = 0; step < 10; step += 1) {
+    for (let step = 0; step < 30; step += 1) {
+      const previousViewportY = (await getTerminalDebugSnapshot(window, terminalId))?.viewportY
+      if (previousViewportY === 0) break
       await window.keyboard.press('Shift+PageUp')
+      await expect.poll(async () => {
+        return (await getTerminalDebugSnapshot(window, terminalId))?.viewportY ?? previousViewportY
+      }).toBeLessThan(previousViewportY ?? Number.POSITIVE_INFINITY)
     }
     await expect.poll(async () => {
       return (await getTerminalDebugSnapshot(window, terminalId))?.viewportY

@@ -70,7 +70,7 @@ multiclaude/
 - `@xterm/xterm`: Terminal rendering v6 with keyboard enhancements
 - `@xterm/addon-fit`: Auto-resize with debounce
 - `@xterm/addon-serialize`: Snapshot serialization for warp-style refresh
-- `@xterm/addon-webgl`: GPU rendering (3 modes: Performance/Balanced/Quality)
+- `@xterm/addon-webgl`: Lazy GPU rendering under the Automatic/Prefer GPU/Compatibility policy
 - `zustand`: State management (app + settings + pane-tree + context stores)
 - `tailwindcss`: Styling with CSS variable overrides for 7 themes
 - `@fontsource/*`: Font families with Nerd Font symbol fallbacks
@@ -78,7 +78,7 @@ multiclaude/
 
 ### Shared
 - `@shared/types`: Terminal, Project, Settings, NotificationEvent, TerminalLimit, WindowsShell
-- `@shared/constants`: IPC channels, theme definitions, terminal rendering modes
+- `@shared/constants`: IPC channels, theme definitions, and canonical renderer policy defaults
 
 ### Shared Components
 - `ToggleSwitch`: Reusable settings control for boolean toggles
@@ -118,8 +118,8 @@ multiclaude/
 7. **Terminal Limits**: Configurable per-app (2, 4, 9, custom 1-99), enforced at spawn
 8. **System Suspend/Resume**: powerMonitor pause + 2s debounce resync (prevents SIGTRAP)
 9. **rAF-Coalesced Divider**: Drag updates batched (eliminates 100Hz trackpad bursts)
-10. **Three Rendering Modes**: Performance (no GPU), Balanced (active only), Quality (always)
-11. **Claude-safe Mode**: Toggle to keep Claude terminals on canvas renderer (experimental)
+10. **Renderer Policy**: Automatic (default), Prefer GPU, or Compatibility (`safe-dom`)
+11. **Session-local Fallback**: one xterm.js DOM/WebGL controller owns lazy load, context-loss suppression, retry, and disposal; Claude and Codex resolve to DOM under Automatic
 12. **GitHub CLI for Auth**: Use `gh` CLI for OAuth (proven, maintained)
 13. **Windows Shell Selection**: cmd, PowerShell, WSL distros with validation + UNC conversion
 14. **Context Window Analyzer**: 300ms debounce snapshot, 6-category breakdown, 1h TTL

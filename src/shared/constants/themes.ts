@@ -320,12 +320,11 @@ export const COLOR_THEMES: ColorThemeDefinition[] = [
 export const DEFAULT_ACTIVITY_BAR_STATE = 'collapsed' as const
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  settingsSchemaVersion: 1,
+  settingsSchemaVersion: 2,
   terminalEngine: 'xterm',
   colorTheme: 'tokyo-night',
   terminalLimit: { preset: 9 },
-  terminalRenderMode: 'balanced',
-  gpuRendererForClaudeTerminals: false,
+  terminalRendererPolicy: 'automatic',
   scrollbackLines: SCROLLBACK_DEFAULT,
   terminalFontFamily: 'jetbrains-mono',
   // Legacy fields - kept for backward compat with saved user settings + use-terminal hook

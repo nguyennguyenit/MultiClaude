@@ -75,6 +75,7 @@ test.describe('Terminal Pane Interactions', () => {
       const terminalId = await createTerminalForActiveProject(window)
       expect(terminalId).toBeTruthy()
       await window.waitForSelector('[data-terminal-id]', { timeout: 5000 })
+      await window.waitForTimeout(WAIT_TIMES.STANDARD)
     }
   })
 
@@ -169,7 +170,7 @@ test.describe('Terminal Pane Interactions', () => {
 
     // Type new title then press Escape
     await titleInput.fill('Cancelled Title')
-    await titleInput.press('Escape')
+    await window.keyboard.press('Escape')
 
     // Verify original title is restored
     await expect(titleInput).not.toBeVisible({ timeout: 1000 })

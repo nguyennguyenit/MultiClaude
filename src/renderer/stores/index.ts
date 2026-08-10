@@ -2,6 +2,11 @@ export { useAppStore, type ActiveView } from './app-store'
 export { useSettingsStore } from './settings-store'
 export { useNotificationStore, setupNotificationListener } from './notification-store'
 export { useToastStore } from './toast-store'
+export {
+  retryTerminalRenderer,
+  useTerminalRendererStatusStore,
+  type TerminalRendererStatus,
+} from './terminal-renderer-status-store'
 export { useUpdateStore, setupUpdateListener } from './update-store'
 export { useImageStore, type ImageEntry, type MediaType } from './image-store'
 export { useContextWindowStore } from './context-window-store'

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   attachTerminalOutputDispatcher,
+  claimTerminalOutputSession,
   pauseAndBuffer,
   registerTerminalOutputHandler,
   resetTerminalOutputDispatcherForTests,
@@ -127,6 +128,50 @@ describe('terminal-output-dispatcher', () => {
     expect(newerHandler).toHaveBeenCalledWith('hello')
 
     unsubscribe()
+  })
+
+  it('rejects stale same-ID resume work from an old renderer session', () => {
+    const oldToken = Symbol('old')
+    const newToken = Symbol('new')
+    const oldHandler = vi.fn()
+    const newHandler = vi.fn()
+    claimTerminalOutputSession('term-1', oldToken)
+    registerTerminalOutputHandler('term-1', oldHandler, undefined, oldToken)
+    pauseAndBuffer('term-1', oldToken)
+    attachTerminalOutputDispatcher(callback => {
+      callback(chunk('term-1', 1, 'owned-by-current-session'))
+      return vi.fn()
+    })
+
+    claimTerminalOutputSession('term-1', newToken)
+    registerTerminalOutputHandler('term-1', newHandler, undefined, newToken)
+    pauseAndBuffer('term-1', newToken)
+    resumeAndFlush('term-1', oldToken)
+    expect(oldHandler).not.toHaveBeenCalled()
+    expect(newHandler).not.toHaveBeenCalled()
+
+    resumeAndFlush('term-1', newToken)
+    expect(newHandler).toHaveBeenCalledWith('owned-by-current-session')
+  })
+
+  it('rejects a stale snapshot watermark from an old renderer session', () => {
+    const oldToken = Symbol('old')
+    const newToken = Symbol('new')
+    const newHandler = vi.fn()
+    claimTerminalOutputSession('term-1', oldToken)
+    claimTerminalOutputSession('term-1', newToken)
+    registerTerminalOutputHandler('term-1', newHandler, undefined, newToken)
+    pauseAndBuffer('term-1', newToken)
+    attachTerminalOutputDispatcher(callback => {
+      callback(chunk('term-1', 1, 'new-session-output'))
+      return vi.fn()
+    })
+
+    resumeFromSnapshot(emptySnapshot('term-1', 99), oldToken)
+    expect(newHandler).not.toHaveBeenCalled()
+
+    resumeFromSnapshot(emptySnapshot('term-1'), newToken)
+    expect(newHandler).toHaveBeenCalledWith('new-session-output')
   })
 
   it('attach helper returns the unsubscribe from the underlying subscribe function', () => {

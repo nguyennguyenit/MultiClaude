@@ -53,12 +53,15 @@ erDiagram
     }
 
     APP_SETTINGS {
+        number settingsSchemaVersion
         string themeMode
         string colorTheme
         object terminalLimit
-        string terminalRenderMode
-        boolean glassmorphismEnabled
-        object windowsShell
+        string terminalEngine
+        string terminalRendererPolicy
+        number scrollbackLines
+        string terminalFontFamily
+        object defaultShell
     }
 ```
 
@@ -165,10 +168,20 @@ interface SettingsStoreSchema {
 | `themeMode` | `'light' \| 'dark' \| 'system'` | `'system'` | Color mode preference |
 | `colorTheme` | ColorTheme | `'tokyo-night'` | Color theme selection |
 | `terminalLimit` | TerminalLimit | `{ preset: 9 }` | Max terminals per project |
-| `terminalRenderMode` | `'performance' \| 'balanced' \| 'quality'` | `'balanced'` | WebGL rendering mode |
-| `glassmorphismEnabled` | boolean | `true` | Glass effect toggle |
-| `windowsShell` | WindowsShell | undefined | Default shell (Windows) |
+| `settingsSchemaVersion` | number | `2` | Settings migration schema |
+| `terminalEngine` | `'xterm' \| 'ghostty'` | `'xterm'` | Terminal engine selection; current capability resolution remains xterm |
+| `terminalRendererPolicy` | `'automatic' \| 'prefer-gpu' \| 'safe-dom'` | `'automatic'` | Canonical renderer policy |
+| `scrollbackLines` | number | `20000` | xterm scrollback size, clamped to the supported range |
+| `terminalFontFamily` | TerminalFontId | `'jetbrains-mono'` | Terminal content font |
+| `defaultShell` | ShellInfo | undefined | Persisted cross-platform default shell |
+| `themeMode` | `'light' \| 'dark' \| 'system'` | `'dark'` | Optional color mode preference |
+| `modernFontFamily` | AppFontId | `'system'` | Optional application UI font |
 | `enableContextWindow` | boolean | `true` | Context analyzer enabled (startup-only) |
+| `enableContextWindowAdvanced` | boolean | channel-aware | Advanced context features; enabled by default on prerelease channels |
+
+Schema v2 retires `terminalRenderMode` and `gpuRendererForClaudeTerminals`.
+`src/main/settings/settings-migrations.ts` owns the presence-aware, idempotent
+migration and deletes both retired keys before persistence.
 
 #### E-07: TerminalLimit
 
@@ -235,8 +248,8 @@ Settings validation is performed before saving:
 ```typescript
 // Enum validation
 const VALID_THEME_MODES = ['light', 'dark', 'system']
-const VALID_COLOR_THEMES = ['default', 'dusk', 'lime', ...]
-const VALID_RENDER_MODES = ['performance', 'balanced', 'quality']
+const VALID_COLOR_THEMES = ['tokyo-night', 'catppuccin', 'dracula', 'rose-pine', 'pro-dark']
+const VALID_RENDERER_POLICIES = ['automatic', 'prefer-gpu', 'safe-dom']
 const VALID_TERMINAL_PRESETS = [2, 4, 9, 'custom']
 
 // Custom terminal limit: 1-99 range

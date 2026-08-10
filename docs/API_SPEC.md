@@ -227,20 +227,24 @@ interface GitHubAuth {
 }
 
 interface AppSettings {
-  themeMode: 'light' | 'dark' | 'system'
+  settingsSchemaVersion: number
+  terminalEngine: 'xterm' | 'ghostty'
   colorTheme: ColorTheme
   terminalLimit: TerminalLimit
-  terminalRenderMode: 'performance' | 'balanced' | 'quality'
-  glassmorphismEnabled: boolean
-  windowsShell?: WindowsShell
-  uiStyle: 'modern' | 'terminal'
-  terminalStyleOptions: {
-    colorPreset: 'green' | 'blue' | 'white'
-    fontFamily: 'jetbrains-mono' | 'source-code-pro' | 'fira-code' | 'vt323' | 'ibm-plex-mono' | 'space-mono'
-    useBorderChars: boolean
-  }
+  terminalRendererPolicy: 'automatic' | 'prefer-gpu' | 'safe-dom'
+  scrollbackLines?: number
+  terminalFontFamily: TerminalFontId
+  defaultShell?: ShellInfo
+  themeMode?: 'light' | 'dark' | 'system'
+  modernFontFamily?: AppFontId
+  enableContextWindow?: boolean
+  enableContextWindowAdvanced?: boolean
 }
 ```
+
+Effective renderer state and Retry GPU are renderer-local. They are not added
+to `TerminalPlatformDiagnostic` and do not cross IPC; Diagnostics joins the
+local registry with existing main metadata by terminal ID.
 
 ## 5. Security
 

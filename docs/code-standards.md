@@ -647,7 +647,7 @@ scope: terminal, git, notification, settings, etc.
 ```
 
 Examples:
-- `feat(terminal): add WebGL rendering modes`
+- `feat(terminal): add automatic renderer policy`
 - `fix(notification): prevent pattern spam with debounce`
 - `refactor(sidebar): extract navigation-item component`
 

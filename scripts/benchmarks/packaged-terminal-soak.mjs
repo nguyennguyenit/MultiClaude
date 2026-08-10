@@ -7,12 +7,16 @@ import { _electron as electron } from '@playwright/test'
 
 import {
   aggregateCanonicalEvidence,
+  createProfileDirectoryPlan,
+  evidenceExecutableIdentifier,
   parseSoakArguments,
   readSingleFlag,
   summarizeAttributionSamples,
   summarizeProcessSamples,
   validateAttributionSample,
   validateTerminalEvidence,
+  validateRendererCleanupEvidence,
+  validateRendererEvidence,
 } from './packaged-terminal-soak-lib.mjs'
 
 const DEFAULT_EXECUTABLE = path.resolve('release/mac-arm64/MultiClaude.app/Contents/MacOS/MultiClaude')
@@ -99,6 +103,151 @@ async function installSoakProject(window, projectPath) {
   }, project)
   if (!installed) throw new Error('renderer app store is unavailable')
   await window.waitForSelector('[data-testid="project-tab-packaged-soak-project"]', { timeout: 5_000 })
+}
+
+function redactSettings(settings) {
+  return {
+    settingsSchemaVersion: Number.isSafeInteger(settings?.settingsSchemaVersion)
+      ? settings.settingsSchemaVersion
+      : null,
+    terminalRendererPolicy: ['automatic', 'prefer-gpu', 'safe-dom'].includes(settings?.terminalRendererPolicy)
+      ? settings.terminalRendererPolicy
+      : null,
+    hasRetiredRendererKeys: Boolean(
+      settings
+      && (Object.hasOwn(settings, 'terminalRenderMode')
+        || Object.hasOwn(settings, 'gpuRendererForClaudeTerminals'))
+    ),
+  }
+}
+
+async function prepareSettings(window, rendererPolicy, settingsOperation) {
+  const before = await window.evaluate(() => window.electron.settings.get())
+  let after = before
+  if (settingsOperation === 'reset') {
+    after = await window.evaluate(() => window.electron.settings.reset())
+  } else if (settingsOperation === null) {
+    after = await window.evaluate(policy => window.electron.settings.set({
+      terminalRendererPolicy: policy,
+    }), rendererPolicy)
+  }
+  return { operation: settingsOperation ?? 'apply-policy', before: redactSettings(before), after: redactSettings(after) }
+}
+
+async function collectRendererEvidence(window, terminalIds) {
+  for (const terminalId of terminalIds) {
+    const activated = await window.evaluate(id => {
+      const store = window.__APP_STORE__
+      if (!store) return false
+      store.getState().setActiveTerminal(id)
+      return true
+    }, terminalId)
+    if (!activated) throw new Error('renderer app store is unavailable during pane activation')
+    const activePane = window.locator(`[data-terminal-id="${terminalId}"] .pane-tab.active`)
+    const activationDeadline = Date.now() + 5_000
+    while (await activePane.count() !== 1) {
+      if (Date.now() >= activationDeadline) throw new Error('terminal pane did not become active')
+      await delay(25)
+    }
+    await delay(100)
+    await window.evaluate(() => new Promise(resolve => requestAnimationFrame(() => resolve())))
+    await window.evaluate(() => new Promise(resolve => requestAnimationFrame(() => resolve())))
+    await window.locator('[data-testid="settings-button"]').click()
+    await window.locator('[data-testid="settings-tab-diagnostics"]').click()
+    const activeStatus = window.locator(`[data-renderer-terminal-id="${terminalId}"]`)
+    const statusDeadline = Date.now() + 10_000
+    while (true) {
+      const effective = await activeStatus.getAttribute('data-renderer-effective')
+      const fallback = await activeStatus.getAttribute('data-renderer-fallback')
+      if (effective === 'webgl' || (effective === 'dom' && fallback !== 'none')) break
+      if (Date.now() >= statusDeadline) throw new Error('active terminal never reached a semantic renderer state')
+      await delay(50)
+    }
+    await window.locator('[aria-label="Close Settings"]').click()
+  }
+  await window.locator('[data-testid="settings-button"]').click()
+  await window.locator('[data-testid="settings-tab-diagnostics"]').click()
+  const rows = window.locator('[data-renderer-terminal-id]')
+  const deadline = Date.now() + 10_000
+  while (
+    await rows.count() !== terminalIds.length
+    || !await rows.evaluateAll(elements => elements.every(element =>
+      element.getAttribute('data-renderer-effective') !== 'unavailable'
+    ))
+  ) {
+    if (Date.now() >= deadline) throw new Error('renderer diagnostics did not match live terminal count')
+    await delay(50)
+  }
+  const statuses = await rows.evaluateAll(elements => elements.map(element => ({
+    terminalId: element.getAttribute('data-renderer-terminal-id'),
+    effective: element.getAttribute('data-renderer-effective'),
+    fallbackReason: element.getAttribute('data-renderer-fallback'),
+  })))
+  await window.locator('[aria-label="Close Settings"]').click()
+  return statuses
+}
+
+async function verifyRendererStatusCleanup(window, terminalIds, rendererPolicy) {
+  const closedTerminalId = terminalIds.at(-1)
+  if (!closedTerminalId) throw new Error('renderer cleanup requires a live terminal')
+  await window.locator(
+    `[data-terminal-id="${closedTerminalId}"] [aria-label="Close terminal"]`,
+  ).click()
+
+  const expectedLiveCount = terminalIds.length - 1
+  const paneDeadline = Date.now() + 10_000
+  while (await window.locator('[data-terminal-id]').count() !== expectedLiveCount) {
+    if (Date.now() >= paneDeadline) throw new Error('closed terminal pane did not leave the live set')
+    await delay(50)
+  }
+
+  await window.locator('[data-testid="settings-button"]').click()
+  await window.locator('[data-testid="settings-tab-diagnostics"]').click()
+  const rows = window.locator('[data-renderer-terminal-id]')
+  const diagnostics = window.getByTestId('terminal-stream-diagnostics')
+  const statusDeadline = Date.now() + 10_000
+  while (
+    await rows.count() !== expectedLiveCount
+    || Number(await diagnostics.getAttribute('data-renderer-registry-count')) !== expectedLiveCount
+    || !await rows.evaluateAll(elements => elements.every(element =>
+      element.getAttribute('data-renderer-effective') !== 'unavailable'
+    ))
+  ) {
+    if (Date.now() >= statusDeadline) throw new Error('renderer status did not clean up after terminal close')
+    await delay(50)
+  }
+  if (await window.locator(`[data-renderer-terminal-id="${closedTerminalId}"]`).count() !== 0) {
+    throw new Error('closed terminal retained a renderer status')
+  }
+  const remainingTerminalIds = await rows.evaluateAll(elements =>
+    elements.map(element => element.getAttribute('data-renderer-terminal-id')).filter(Boolean)
+  )
+  const statuses = await rows.evaluateAll(elements => elements.map(element => ({
+    terminalId: element.getAttribute('data-renderer-terminal-id'),
+    effective: element.getAttribute('data-renderer-effective'),
+    fallbackReason: element.getAttribute('data-renderer-fallback'),
+  })))
+  const registryCount = Number(await diagnostics.getAttribute('data-renderer-registry-count'))
+  const cleanupEvidence = validateRendererCleanupEvidence({
+    originalTerminalIds: terminalIds,
+    closedTerminalId,
+    remainingTerminalIds,
+    registryCount,
+    statuses,
+    policy: rendererPolicy,
+  })
+  if (!cleanupEvidence.ok) {
+    throw new Error(`renderer cleanup evidence failed: ${cleanupEvidence.failures.join('; ')}`)
+  }
+  await window.locator('[aria-label="Close Settings"]').click()
+  return {
+    closedTerminalId,
+    expectedLiveCount,
+    remainingTerminalIds,
+    registryCount,
+    statuses,
+    ok: true,
+  }
 }
 
 async function installStreamProbe(window) {
@@ -214,8 +363,17 @@ async function runPaneConfiguration({
   sampleIntervalMs,
   canonicalIntervalSeconds,
   executablePath,
+  rendererPolicy,
+  requestedProfileDirectory,
+  settingsOperation,
 }) {
-  const profileDirectory = fs.mkdtempSync(path.join(os.tmpdir(), `multiclaude-packaged-soak-${paneCount}-`))
+  const profilePlan = createProfileDirectoryPlan({
+    profileDirectory: requestedProfileDirectory,
+    paneCount,
+    makeTemporaryDirectory: prefix => fs.mkdtempSync(path.join(os.tmpdir(), prefix)),
+  })
+  const profileDirectory = profilePlan.profileDirectory
+  fs.mkdirSync(profileDirectory, { recursive: true })
   let app
 
   try {
@@ -237,6 +395,21 @@ async function runPaneConfiguration({
     await window.waitForLoadState('domcontentloaded')
     await window.waitForSelector('#root', { state: 'attached', timeout: 10_000 })
     await delay(300)
+    const settingsEvidence = await prepareSettings(window, rendererPolicy, settingsOperation)
+    if (settingsOperation !== null) {
+      return {
+        paneCount,
+        runtime,
+        settingsOnly: true,
+        settingsEvidence,
+      }
+    }
+    if (settingsOperation !== 'observe') {
+      await window.reload()
+      await window.waitForLoadState('domcontentloaded')
+      await window.waitForSelector('#root', { state: 'attached', timeout: 10_000 })
+      await delay(300)
+    }
     await installSoakProject(window, profileDirectory)
     await installStreamProbe(window)
 
@@ -248,6 +421,15 @@ async function runPaneConfiguration({
       throw new Error(`expected ${paneCount} terminals, found ${terminalIds.length}`)
     }
     await waitForTerminalStreams(window, terminalIds)
+    const rendererStatuses = await collectRendererEvidence(window, terminalIds)
+    const rendererEvidence = validateRendererEvidence({
+      terminalIds,
+      statuses: rendererStatuses,
+      policy: rendererPolicy,
+    })
+    if (!rendererEvidence.ok) {
+      throw new Error(`renderer evidence failed: ${rendererEvidence.failures.join('; ')}`)
+    }
 
     const startedAt = Date.now()
     const deadline = startedAt + durationSeconds * 1_000
@@ -344,6 +526,20 @@ async function runPaneConfiguration({
     const streams = await window.evaluate(() => window.__MC_PACKAGED_SOAK__.probe.streams)
     const evidence = validateTerminalEvidence({ terminalIds, streams, liveMarkers, canonicalMarkers })
     if (!evidence.ok) throw new Error(`terminal correctness evidence failed: ${evidence.failures.join('; ')}`)
+    const finalRendererStatuses = await collectRendererEvidence(window, terminalIds)
+    const finalRendererEvidence = validateRendererEvidence({
+      terminalIds,
+      statuses: finalRendererStatuses,
+      policy: rendererPolicy,
+    })
+    if (!finalRendererEvidence.ok) {
+      throw new Error(`final renderer evidence failed: ${finalRendererEvidence.failures.join('; ')}`)
+    }
+    const rendererCleanup = await verifyRendererStatusCleanup(
+      window,
+      terminalIds,
+      rendererPolicy,
+    )
 
     return {
       paneCount,
@@ -353,6 +549,14 @@ async function runPaneConfiguration({
       cycles,
       canonicalChecks,
       terminalEvidence: { terminalIds, streams, liveMarkers, canonicalMarkers, ok: true },
+      rendererEvidence: {
+        policy: rendererPolicy,
+        statuses: rendererStatuses,
+        finalStatuses: finalRendererStatuses,
+        cleanup: rendererCleanup,
+        ok: rendererEvidence.ok && finalRendererEvidence.ok && rendererCleanup.ok,
+      },
+      settingsEvidence,
       processMetrics: summarizeProcessSamples(processSamples),
       memoryAttribution: summarizeAttributionSamples(attributionSamples),
       rawProcessSamples: processSamples,
@@ -360,7 +564,7 @@ async function runPaneConfiguration({
     }
   } finally {
     if (app) await closeElectronApp(app)
-    fs.rmSync(profileDirectory, { recursive: true, force: true })
+    if (profilePlan.cleanup) fs.rmSync(profileDirectory, { recursive: true, force: true })
   }
 }
 
@@ -380,7 +584,7 @@ async function main() {
       osRelease: os.release(),
       cpuModel: os.cpus()[0]?.model ?? 'unknown',
       totalMemoryGiB: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(2)),
-      executablePath: path.relative(process.cwd(), executablePath),
+      executablePath: evidenceExecutableIdentifier(executablePath, process.cwd()),
       executableSha256: sha256File(executablePath),
       appArchiveSha256: fs.existsSync(appArchivePath) ? sha256File(appArchivePath) : null,
       appVersion: results[0]?.runtime.appVersion ?? null,
@@ -388,6 +592,9 @@ async function main() {
       runStartedAt,
       runCompletedAt: new Date().toISOString(),
       paneCounts: options.paneCounts,
+      rendererPolicy: options.rendererPolicy,
+      profileOwnership: options.profileDirectory ? 'caller' : 'runner',
+      settingsOperation: options.settingsOperation ?? 'apply-policy',
       durationSecondsPerPaneCount: options.durationSeconds,
       sampleIntervalMs: options.sampleIntervalMs,
       canonicalIntervalSeconds: options.canonicalIntervalSeconds,
@@ -399,15 +606,17 @@ async function main() {
 
   try {
     for (const paneCount of options.paneCounts) {
-      results.push(await runPaneConfiguration({ ...options, paneCount, executablePath }))
+      results.push(await runPaneConfiguration({
+        ...options,
+        paneCount,
+        executablePath,
+        requestedProfileDirectory: options.profileDirectory,
+      }))
       if (outputPath) writeJsonAtomic(outputPath, buildDocument())
     }
   } catch (error) {
     if (outputPath) {
-      writeJsonAtomic(outputPath, buildDocument({
-        message: error instanceof Error ? error.message : String(error),
-        failedAt: new Date().toISOString(),
-      }))
+      writeJsonAtomic(outputPath, buildDocument({ code: 'run-failed', failedAt: new Date().toISOString() }))
     }
     throw error
   }

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNotificationStore, useSettingsStore } from '../../stores'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { useNotificationStore, useSettingsStore, useToastStore } from '../../stores'
 import { SettingsSidebar, type SettingsTab } from './settings-sidebar'
 import { ThemeSelector } from './theme-selector'
 import { TerminalSettings } from './terminal-settings'
@@ -17,6 +17,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
   const [isSaving, setIsSaving] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
+  const isSavingRef = useRef(false)
+  const isOpenRef = useRef(isOpen)
+  const wasOpenRef = useRef(isOpen)
+  const closeRollbackHandledRef = useRef(false)
   const { saveSettings, cancelSettings, hasUnsavedChanges } = useSettingsStore()
   const {
     saveSettings: saveNotificationSettings,
@@ -26,11 +30,35 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   } = useNotificationStore()
   const hasAnyUnsavedChanges = hasUnsavedChanges || hasUnsavedNotificationChanges
 
-  const handleCancel = useCallback(() => {
+  const rollbackPendingSettings = useCallback(() => {
     cancelSettings()
     cancelNotificationSettings()
+  }, [cancelNotificationSettings, cancelSettings])
+
+  const handleCancel = useCallback(() => {
+    if (isSavingRef.current) return
+    if (!closeRollbackHandledRef.current) {
+      closeRollbackHandledRef.current = true
+      rollbackPendingSettings()
+    }
     onClose()
-  }, [cancelNotificationSettings, cancelSettings, onClose])
+  }, [onClose, rollbackPendingSettings])
+
+  // App owns modal visibility, so a prop-driven close must discard previews too.
+  // Layout timing prevents a dirty preview from reaching the next paint.
+  useLayoutEffect(() => {
+    const wasOpen = wasOpenRef.current
+    isOpenRef.current = isOpen
+
+    if (isOpen && !wasOpen) {
+      closeRollbackHandledRef.current = false
+    } else if (wasOpen && !isOpen && !isSavingRef.current && !closeRollbackHandledRef.current) {
+      closeRollbackHandledRef.current = true
+      rollbackPendingSettings()
+    }
+
+    wasOpenRef.current = isOpen
+  }, [isOpen, rollbackPendingSettings])
 
   // Keep keyboard focus inside the modal and restore it on close.
   useEffect(() => {
@@ -43,7 +71,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     })
     const handleKeyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        handleCancel()
+        if (!isSavingRef.current) handleCancel()
         return
       }
       if (event.key !== 'Tab' || !modalRef.current) return
@@ -78,6 +106,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   }, [isOpen, loadNotificationSettings])
 
   const handleSave = async () => {
+    if (isSavingRef.current) return
+    isSavingRef.current = true
     setIsSaving(true)
     try {
       const saveOperations: Promise<void>[] = []
@@ -90,11 +120,18 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         saveOperations.push(saveNotificationSettings())
       }
 
-      await Promise.all(saveOperations)
-      onClose()
-    } catch (err) {
-      console.error('Failed to save settings:', err)
+      const results = await Promise.allSettled(saveOperations)
+      if (results.some(({ status }) => status === 'rejected')) {
+        cancelNotificationSettings()
+        useToastStore.getState().addToast(
+          'Failed to save settings. Please try again.',
+          'error'
+        )
+      } else if (isOpenRef.current) {
+        onClose()
+      }
     } finally {
+      isSavingRef.current = false
       setIsSaving(false)
     }
   }
@@ -108,7 +145,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         data-testid="settings-backdrop"
         className="absolute inset-0"
         style={{ background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }}
-        onClick={handleCancel}
+        onClick={isSaving ? undefined : handleCancel}
         aria-hidden="true"
       />
 
@@ -118,6 +155,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         ref={modalRef}
         role="dialog"
         aria-modal="true"
+        aria-busy={isSaving}
         aria-labelledby="settings-dialog-title"
         className="relative bg-[var(--mc-bg-primary)] shadow-xl flex flex-col overflow-hidden rounded-xl"
         style={{ border: '1px solid color-mix(in srgb, var(--mc-accent) 30%, var(--mc-border))', width: 'calc(100% - 80px)', height: 'calc(100% - 60px)' }}
@@ -134,8 +172,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <button
             data-testid="settings-close-button"
             onClick={handleCancel}
-            className="p-1.5 rounded transition-colors hover:bg-[var(--mc-bg-hover)]"
-            style={{ color: 'var(--mc-accent)', border: 'none', background: 'transparent', cursor: 'pointer' }}
+            disabled={isSaving}
+            className="p-1.5 rounded transition-colors hover:bg-[var(--mc-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ color: 'var(--mc-accent)', border: 'none', background: 'transparent', cursor: isSaving ? 'not-allowed' : 'pointer' }}
             title="Close"
             aria-label="Close Settings"
           >
@@ -143,42 +182,49 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex flex-1 overflow-hidden">
-          <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-          <div className="flex-1 overflow-y-scroll text-left" style={{ padding: '32px 40px', scrollbarGutter: 'stable' }}>
-            {activeTab === 'appearance' && <ThemeSelector />}
-            {activeTab === 'terminals' && <TerminalSettings />}
-            {activeTab === 'notifications' && <NotificationSettings onNavigateToMobile={() => setActiveTab('agents-integrations')} />}
-            {activeTab === 'diagnostics' && <DiagnosticsSettings />}
-            {activeTab === 'agents-integrations' && <AgentsIntegrationsSettings />}
-            {activeTab === 'updates' && <UpdateSettings />}
+        <fieldset
+          data-testid="settings-form"
+          disabled={isSaving}
+          className="m-0 min-w-0 border-0 p-0 flex flex-1 flex-col overflow-hidden"
+        >
+          {/* Body */}
+          <div className="flex flex-1 overflow-hidden">
+            <SettingsSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+            <div className="flex-1 overflow-y-scroll text-left" style={{ padding: '32px 40px', scrollbarGutter: 'stable' }}>
+              {activeTab === 'appearance' && <ThemeSelector />}
+              {activeTab === 'terminals' && <TerminalSettings />}
+              {activeTab === 'notifications' && <NotificationSettings onNavigateToMobile={() => setActiveTab('agents-integrations')} />}
+              {activeTab === 'diagnostics' && <DiagnosticsSettings />}
+              {activeTab === 'agents-integrations' && <AgentsIntegrationsSettings />}
+              {activeTab === 'updates' && <UpdateSettings />}
+            </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-4" style={{ padding: '25px 40px 25px 32px', borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
-          <button
-            data-testid="settings-cancel-button"
-            onClick={handleCancel}
-            className="rounded-lg text-base font-semibold transition-all"
-            style={{ padding: '10px 28px', background: 'transparent', border: '2px solid var(--mc-text-secondary)', color: 'var(--mc-text-primary)' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-primary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--mc-bg-hover)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-          >
-            Cancel
-          </button>
-          <button
-            data-testid="settings-save-button"
-            onClick={handleSave}
-            disabled={!hasAnyUnsavedChanges || isSaving}
-            className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
-          >
-            <SaveIcon />
-            {isSaving ? 'Saving…' : 'Save Settings'}
-          </button>
-        </div>
+          {/* Footer */}
+          <div className="flex justify-end gap-4" style={{ padding: '25px 40px 25px 32px', borderTop: '1px solid color-mix(in srgb, var(--mc-accent) 20%, var(--mc-border))' }}>
+            <button
+              data-testid="settings-cancel-button"
+              onClick={handleCancel}
+              disabled={isSaving}
+              className="rounded-lg text-base font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ padding: '10px 28px', background: 'transparent', border: '2px solid var(--mc-text-secondary)', color: 'var(--mc-text-primary)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-primary)'; (e.currentTarget as HTMLButtonElement).style.background = 'var(--mc-bg-hover)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--mc-text-secondary)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+            >
+              Cancel
+            </button>
+            <button
+              data-testid="settings-save-button"
+              onClick={handleSave}
+              disabled={!hasAnyUnsavedChanges || isSaving}
+              className="rounded-lg text-base font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              style={{ padding: '10px 28px', background: 'var(--mc-accent)', color: 'var(--mc-bg-primary)', border: '2px solid var(--mc-accent)', boxShadow: '0 0 12px color-mix(in srgb, var(--mc-accent) 50%, transparent)' }}
+            >
+              <SaveIcon />
+              {isSaving ? 'Saving…' : 'Save Settings'}
+            </button>
+          </div>
+        </fieldset>
       </div>
     </div>
   )

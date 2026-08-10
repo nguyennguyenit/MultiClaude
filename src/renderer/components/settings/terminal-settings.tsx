@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSettingsStore } from '../../stores'
 import { getShellKey, shellInfoToWindowsShell } from '../../utils'
-import type { ShellInfo, TerminalLimitPreset, TerminalRenderMode } from '@shared/types'
+import type { ShellInfo, TerminalLimitPreset } from '@shared/types'
 import {
   CANONICAL_SCROLLBACK_LINES,
   SCROLLBACK_DEFAULT,
@@ -36,65 +36,12 @@ const PRESET_OPTIONS: { value: TerminalLimitPreset; label: string }[] = [
   { value: 'custom', label: 'Custom' }
 ]
 
-// Icons for render modes
-const RENDER_MODE_ICONS: Record<string, string> = {
-  performance: '⚡',
-  balanced: '⚖️',
-  quality: '✨'
-}
-
-// Render mode definitions for UI display
-const RENDER_MODES: { id: TerminalRenderMode; name: string; description: string }[] = [
-  { id: 'performance', name: 'Performance', description: 'No WebGL, best for many terminals' },
-  { id: 'balanced', name: 'Balanced', description: 'WebGL only for active terminal' },
-  { id: 'quality', name: 'Quality', description: 'WebGL always, best visual quality' }
-]
-
-const CLAUDE_RENDERER_HELPER_COPY = {
-  performance: {
-    badge: 'GPU unavailable',
-    description: 'Performance mode disables GPU rendering for all terminals.',
-    tooltip: 'Switch to Balanced or Quality to choose whether Claude terminals can use GPU rendering.',
-    toggleDescription: 'Unavailable in Performance mode because GPU rendering is off for all terminals.',
-    disabled: true
-  },
-  safe: {
-    badge: 'Claude-safe mode',
-    description: 'Claude terminals stay on the safer canvas renderer.',
-    tooltip: 'Balanced and Quality still use WebGL for non-Claude terminals. Turn on the experimental switch below to let Claude terminals use GPU rendering too.',
-    toggleDescription: 'Experimental. When disabled, Claude terminals always use the safer canvas renderer.',
-    disabled: false
-  },
-  followMode: {
-    badge: 'Claude follows mode',
-    description: 'Claude terminals use the selected render mode.',
-    tooltip: 'Performance keeps canvas everywhere. Balanced uses WebGL for the active terminal. Quality uses WebGL for all visible terminals.',
-    toggleDescription: 'Experimental. When enabled, Claude terminals use the selected GPU render mode.',
-    disabled: false
-  }
-} as const
-
-export function getClaudeRendererControlState(
-  terminalRenderMode: TerminalRenderMode,
-  gpuRendererForClaudeTerminals: boolean | undefined
-) {
-  if (terminalRenderMode === 'performance') {
-    return CLAUDE_RENDERER_HELPER_COPY.performance
-  }
-
-  return gpuRendererForClaudeTerminals
-    ? CLAUDE_RENDERER_HELPER_COPY.followMode
-    : CLAUDE_RENDERER_HELPER_COPY.safe
-}
-
 export function TerminalSettings() {
   const {
     pendingSettings,
     wslInfo,
     setTerminalLimit,
-    setTerminalRenderMode,
     setTerminalEngine,
-    setGpuRendererForClaudeTerminals,
     setScrollbackLines,
     setEnableContextWindow,
     setEnableContextWindowAdvanced,
@@ -208,11 +155,6 @@ export function TerminalSettings() {
       }
     )
   )
-  const claudeRendererHelper = getClaudeRendererControlState(
-    pendingSettings.terminalRenderMode,
-    pendingSettings.gpuRendererForClaudeTerminals
-  )
-
   return (
     <div className="flex flex-col gap-6 pb-16 max-w-2xl">
       <SettingsTitle description="Configure terminal behavior and limits">
@@ -328,77 +270,6 @@ export function TerminalSettings() {
           </div>
         </div>
       )}
-
-      {/* Rendering Mode */}
-      <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm font-semibold text-[var(--mc-text-primary)] uppercase tracking-wider">Rendering Mode</p>
-            <p className="text-xs text-[var(--mc-text-muted)] mt-1">Optimize terminal performance vs visual quality</p>
-          </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30 capitalize">
-            {pendingSettings.terminalRenderMode}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {RENDER_MODES.map((mode) => {
-            const isSelected = pendingSettings.terminalRenderMode === mode.id
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => setTerminalRenderMode(mode.id)}
-                className={`
-                  flex flex-col items-start px-4 py-3.5 rounded-xl
-                  transition-all duration-200
-                  ${isSelected
-                    ? 'bg-[var(--mc-bg-active)] border-2 border-[var(--mc-accent)] shadow-md shadow-[var(--mc-accent)]/20'
-                    : 'bg-[var(--mc-bg-hover)] border-2 border-transparent hover:border-[var(--mc-accent)]/30 hover:bg-[var(--mc-bg-active)]'}
-                `}
-              >
-                <span className={`flex items-center gap-1.5 text-sm font-semibold ${isSelected ? 'text-[var(--mc-accent)]' : 'text-[var(--mc-text-primary)]'}`}>
-                  <span className="text-base leading-none">{RENDER_MODE_ICONS[mode.id]}</span>
-                  {mode.name}
-                </span>
-                <span className="text-xs text-[var(--mc-text-muted)] mt-0.5 text-left leading-relaxed">{mode.description}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        <div
-          title={claudeRendererHelper.tooltip}
-          className="flex items-start gap-3 rounded-xl border border-[var(--mc-border)]/70 bg-[var(--mc-bg-hover)]/70 px-3.5 py-3"
-        >
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full bg-[var(--mc-accent)]/15 text-[var(--mc-accent)] border border-[var(--mc-accent)]/30">
-            {claudeRendererHelper.badge}
-          </span>
-          <p className="text-xs leading-relaxed text-[var(--mc-text-muted)]">
-            {claudeRendererHelper.description}
-          </p>
-        </div>
-
-        <div className="pt-2 border-t border-[var(--mc-border)]/70 flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <ToggleSwitch
-              ariaLabel="Use GPU renderer for Claude terminals"
-              checked={Boolean(pendingSettings.gpuRendererForClaudeTerminals)}
-              onChange={setGpuRendererForClaudeTerminals}
-              disabled={claudeRendererHelper.disabled}
-            />
-            <div>
-              <p className="text-sm font-medium text-[var(--mc-text-primary)]">
-                Use GPU renderer for Claude terminals
-              </p>
-              <p className="text-xs text-[var(--mc-text-muted)] mt-0.5">
-                {claudeRendererHelper.toggleDescription}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Scrollback Lines */}
       <div className="settings-card rounded-2xl flex flex-col gap-4 p-5">

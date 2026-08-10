@@ -59,8 +59,8 @@ PTY output
 
 Key pieces:
 
-- `src/renderer/utils/terminal-output-dispatcher.ts` keeps a `Map<terminalId, handler>`
-- `src/renderer/components/terminal/terminal-view.tsx` registers a handler for the terminal it owns
+- `src/renderer/utils/terminal-output-dispatcher.ts` owns token-guarded per-terminal stream state
+- `src/renderer/components/terminal/terminal-view.tsx` registers a handler with its mounted renderer-session token
 - `src/renderer/components/terminal/terminal-output-handler.ts` wraps `write()`, `onOutput`, and visible-output buffering
 - `src/renderer/stores/terminal-output-buffer.ts` stores scrollback in a plain module-level `Map`
 - `src/renderer/stores/app-store.ts` keeps the old facade methods so call sites still read and append output through the store API
@@ -71,6 +71,13 @@ Important behavior:
 - `TerminalPane` restores from `initialOutput ?? useAppStore.getState().getTerminalOutput(terminalId)`
 - `addTerminal()` and `removeTerminal()` clear stale buffers for terminal reuse and cleanup
 - `skipAppendRef` suppresses duplicate appends during restore
+
+Renderer policy navigation:
+
+- `src/renderer/utils/terminal-renderer-policy.ts` — pure desired renderer and closed fallback reasons
+- `src/renderer/hooks/use-terminal-webgl.ts` — sole WebGL lifecycle controller
+- `src/renderer/stores/terminal-renderer-status-store.ts` — renderer-local effective status and retry ownership
+- `src/renderer/components/settings/diagnostics-settings.tsx` — live-ID presentation join and policy controls
 
 ### Terminal UI Flow
 

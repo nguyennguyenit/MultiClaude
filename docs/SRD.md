@@ -93,7 +93,7 @@
 | FR-06.1 | 7 UI color themes + 5 terminal ANSI palettes | ✅ Complete | S-04 |
 | FR-06.2 | Light/Dark/System mode | ✅ Complete | S-04 |
 | FR-06.3 | Settings slide panel with 4 tabs (Appearance, Terminals, Notifications, Updates) | ✅ Complete | S-04 |
-| FR-06.4 | Terminal rendering mode selector (Performance/Balanced/Quality) with Claude-safe toggle | ✅ Complete | S-04 |
+| FR-06.4 | Diagnostics renderer policy (`Automatic`, `Prefer GPU`, `Compatibility`) with effective per-terminal status and recoverable Retry GPU | ✅ Complete | S-04 |
 | FR-06.5 | Context window analyzer toggle in Terminal Settings | ✅ Complete | S-04 |
 
 ### FR-07: Auto-Update
@@ -162,7 +162,7 @@
 - [x] Telegram mobile control with HTML preview
 - [x] Multi-agent notification detection
 - [x] 7 UI themes + 5 terminal ANSI palettes
-- [x] Terminal rendering modes (Performance/Balanced/Quality)
+- [x] Automatic terminal renderer policy with per-pane fallback and diagnostics
 - [x] Full Git/GitHub integration with visual operations
 - [x] Auto-update system with changelog display
 - [x] WSL shell support with UNC path conversion
