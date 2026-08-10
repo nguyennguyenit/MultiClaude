@@ -35,15 +35,24 @@ test('keeps macOS releases compatible with the previous ad-hoc signing contract'
 })
 
 test('runs every verification command in a fail-fast workflow step', () => {
-  for (const [name, command] of [
-    ['Verify types', 'npm run typecheck'],
-    ['Verify lint', 'npm run lint'],
-    ['Verify unit tests', 'npm test'],
-    ['Verify benchmarks', 'npm run test:benchmarks'],
-    ['Verify release scripts', 'npm run test:release'],
-  ]) {
-    assert.match(workflow, new RegExp(`- name: ${name}\\n\\s+run: ${command.replace(/\//g, '\\/')}`))
-  }
+  for (const newline of ['\n', '\r\n']) {
+    const workflowWithPlatformNewlines = workflow.replace(/\r?\n/g, newline)
+    for (const [name, command] of [
+      ['Verify types', 'npm run typecheck'],
+      ['Verify lint', 'npm run lint'],
+      ['Verify unit tests', 'npm test'],
+      ['Verify benchmarks', 'npm run test:benchmarks'],
+      ['Verify release scripts', 'npm run test:release'],
+    ]) {
+      assert.match(
+        workflowWithPlatformNewlines,
+        new RegExp(`- name: ${name}\\r?\\n\\s+run: ${command.replace(/\//g, '\\/')}`),
+      )
+    }
 
-  assert.doesNotMatch(workflow, /run: \|\n(?:\s+npm (?:run )?[^\n]+\n){2,}/)
+    assert.doesNotMatch(
+      workflowWithPlatformNewlines,
+      /run: \|\r?\n(?:\s+npm (?:run )?[^\r\n]+\r?\n){2,}/,
+    )
+  }
 })
