@@ -4,12 +4,8 @@
  * Responsibilities:
  *   - Save scroll position synchronously when terminal becomes hidden
  *     (must happen before display:none takes effect — uses useLayoutEffect)
- *   - Restore scroll position and focus when terminal becomes visible again,
- *     using a 5-stage timeout cascade with explicit cancellation support
- *   - Call reconcileVisibleTerminal (fit + repaint) on re-show
- *
- * The 5-stage cascade uses 80 / 200 / 500 / 1000 / 1500 ms delays.
- * These values are intentional and must NOT be changed.
+ *   - Refit and repaint each terminal once when its project becomes visible
+ *   - Restore scroll position for every pane and focus only the active pane
  *
  * Sub-hooks must NOT import from each other; all orchestration lives in use-terminal.ts.
  */
@@ -29,13 +25,12 @@ interface UseTerminalVisibilityParams {
   isActive: boolean
   isHidden: boolean
   prevHiddenRef: RefObject<boolean>
-  isActiveRef: RefObject<boolean>
-  /** webglLoadingRef from useTerminalWebGL — polled before restoring scroll */
+  /** webglLoadingRef from useTerminalWebGL — polled before repainting */
   webglLoadingRef: RefObject<boolean>
   scrollMachineRef: RefObject<TerminalScrollMachine>
-  performFit: (restoreViewport?: boolean) => boolean
   reconcileWebGL: () => void
-  clearTextureAtlas: () => void
+  performFit: (restoreViewport?: boolean) => boolean
+  refreshVisibleRows: () => void
 }
 
 export function useTerminalVisibility(params: UseTerminalVisibilityParams): void {
@@ -45,31 +40,16 @@ export function useTerminalVisibility(params: UseTerminalVisibilityParams): void
     isActive,
     isHidden,
     prevHiddenRef,
-    isActiveRef,
     webglLoadingRef,
     scrollMachineRef,
+    reconcileWebGL,
     performFit,
-    clearTextureAtlas,
+    refreshVisibleRows,
   } = params
 
-  // Stable ref to avoid stale-closure issues inside the cascade
+  // Stable ref to avoid stale active state inside deferred reconciliation.
   const isActiveRefLocal = useRef(isActive)
   isActiveRefLocal.current = isActive
-
-  const reconcileVisibleTerminal = (savedViewportY: number | null, stickToBottom = false) => {
-    if (!terminalRef.current || disposedRef.current) return
-
-    clearTextureAtlas()
-    performFit(false)
-
-    if (stickToBottom && terminalRef.current) {
-      const terminal = terminalRef.current
-      withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
-    } else if (savedViewportY !== null && savedViewportY >= 0 && terminalRef.current) {
-      const terminal = terminalRef.current
-      withInstantTerminalScroll(terminal, () => terminal.scrollToLine(savedViewportY))
-    }
-  }
 
   useLayoutEffect(() => {
     const wasHidden = prevHiddenRef.current
@@ -87,12 +67,18 @@ export function useTerminalVisibility(params: UseTerminalVisibilityParams): void
       )
     }
 
-    // RESTORE scroll position and focus when becoming visible
-    if (wasHidden && !isHidden && isActive && terminalRef.current) {
+    // Repaint every pane when its project becomes visible. Only the active pane
+    // receives focus, but inactive sibling renderers need the same visibility
+    // reconciliation or their retained canvases can stay blank or stale.
+    if (wasHidden && !isHidden && terminalRef.current) {
       let cancelled = false
+      let completed = false
+      let retryTimer: ReturnType<typeof setTimeout> | null = null
+      let fallbackTimer: ReturnType<typeof setTimeout> | null = null
 
-      const restoreScrollAndCursor = () => {
-        if (cancelled || disposedRef.current || !terminalRef.current) return
+      const restoreVisibleTerminal = () => {
+        if (cancelled || completed || disposedRef.current || !terminalRef.current) return
+        completed = true
 
         const scrollMachine = scrollMachineRef.current
         const hiddenViewportIntent = scrollMachine.hiddenViewportIntent
@@ -100,42 +86,46 @@ export function useTerminalVisibility(params: UseTerminalVisibilityParams): void
           ? null
           : hiddenViewportIntent?.viewportY ?? scrollMachine.savedViewportY
 
-        reconcileVisibleTerminal(savedViewportY, hiddenViewportIntent?.stickToBottom ?? false)
+        if (!performFit(false)) refreshVisibleRows()
 
-        terminalRef.current.focus()
+        const terminal = terminalRef.current
+        if (hiddenViewportIntent?.stickToBottom) {
+          withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
+        } else if (savedViewportY !== null && savedViewportY >= 0) {
+          withInstantTerminalScroll(terminal, () => terminal.scrollToLine(savedViewportY))
+        }
+
+        if (isActiveRefLocal.current) terminal.focus()
+
+        if (retryTimer) clearTimeout(retryTimer)
+        if (fallbackTimer) clearTimeout(fallbackTimer)
       }
 
       const restoreWithWebGLCheck = () => {
-        if (cancelled || disposedRef.current || !terminalRef.current || !isActiveRef.current) return
+        if (cancelled || completed || disposedRef.current || !terminalRef.current) return
 
-        // If WebGL is still loading, retry after a short delay
         if (webglLoadingRef.current) {
-          setTimeout(restoreWithWebGLCheck, 30)
+          retryTimer = setTimeout(restoreWithWebGLCheck, 30)
           return
         }
 
-        restoreScrollAndCursor()
+        restoreVisibleTerminal()
       }
 
-      // 5-stage cascade — values are intentional, do not modify
-      const timer1 = setTimeout(restoreWithWebGLCheck, 80)
-      const timer2 = setTimeout(restoreWithWebGLCheck, 200)
-      const timer3 = setTimeout(restoreWithWebGLCheck, 500)
-      const timer4 = setTimeout(restoreWithWebGLCheck, 1000)
-      const timer5 = setTimeout(() => {
-        if (cancelled || disposedRef.current || !terminalRef.current || !isActiveRef.current) return
-        restoreScrollAndCursor()
-      }, 1500)
+      // Reconcile after the visibility style has reached layout. The fallback
+      // guarantees one repaint if WebGL never reports ready, without repeatedly
+      // clearing or repainting an already-visible terminal.
+      reconcileWebGL()
+      fallbackTimer = setTimeout(restoreVisibleTerminal, 1500)
+      const frame = requestAnimationFrame(restoreWithWebGLCheck)
 
       return () => {
         cancelled = true
-        clearTimeout(timer1)
-        clearTimeout(timer2)
-        clearTimeout(timer3)
-        clearTimeout(timer4)
-        clearTimeout(timer5)
+        cancelAnimationFrame(frame)
+        if (retryTimer) clearTimeout(retryTimer)
+        if (fallbackTimer) clearTimeout(fallbackTimer)
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHidden, isActive])
+  }, [isHidden])
 }

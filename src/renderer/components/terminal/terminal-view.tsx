@@ -109,6 +109,7 @@ export const TerminalView = memo(function TerminalView({
   const appendOutput = useAppStore((state) => state.appendOutput)
   // Skip appending output right after restore to prevent duplicates from shell prompt redraws
   const skipAppendRef = useRef(!!initialOutput)
+  const previousHiddenRef = useRef(hidden)
 
   // Hover highlight state for image path (position within row)
   const [highlightArea, setHighlightArea] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
@@ -318,19 +319,23 @@ export const TerminalView = memo(function TerminalView({
   // Focus when becomes active, blur when inactive
   // Note: scroll restoration and cursor are handled by visibility effect in use-terminal.ts
   useEffect(() => {
-    if (isActive) {
+    const becameVisible = previousHiddenRef.current && !hidden
+    previousHiddenRef.current = hidden
+
+    if (isActive && !hidden) {
       focus()
-      restoreActiveRender()
+      // The visibility hook repaints once after a project reveal. Repaint here
+      // only for pane activation inside an already-visible project.
+      if (!becameVisible) restoreActiveRender()
       // Delayed cursor restore to handle WebGL reload timing
       const timer = setTimeout(() => {
-        restoreActiveRender()
         showCursor()
       }, 100)
       return () => clearTimeout(timer)
     } else {
       blur()
     }
-  }, [isActive, focus, blur, showCursor, restoreActiveRender])
+  }, [isActive, hidden, focus, blur, showCursor, restoreActiveRender])
 
   useEffect(() => {
     if (!isActive) return

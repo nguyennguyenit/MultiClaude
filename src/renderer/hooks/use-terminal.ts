@@ -55,6 +55,8 @@ export function useTerminal({
   const disposedRef = useRef(false)
   const isActiveRef = useRef(isActive)
   const isHiddenRef = useRef(isHidden)
+  isActiveRef.current = isActive
+  isHiddenRef.current = isHidden
   const prevHiddenRef = useRef(isHidden)
   const scrollMachineRef = useRef(new TerminalScrollMachine())
   const userViewportInteractingRef = useRef(false)
@@ -135,8 +137,8 @@ export function useTerminal({
   useEffect(() => { followLiveOutputRef.current = followLiveOutput }, [followLiveOutput, followLiveOutputRef])
 
   useTerminalVisibility({
-    terminalRef, disposedRef, isActive, isHidden, prevHiddenRef, isActiveRef,
-    webglLoadingRef, scrollMachineRef, performFit, reconcileWebGL, clearTextureAtlas,
+    terminalRef, disposedRef, isActive, isHidden, prevHiddenRef,
+    webglLoadingRef, scrollMachineRef, reconcileWebGL, performFit, refreshVisibleRows,
   })
 
   useTerminalScrollback({ terminalRef, disposedRef })
@@ -154,8 +156,6 @@ export function useTerminal({
 
   // ── isActive / isHidden prop sync + debounced WebGL toggle ────────────────
   useEffect(() => {
-    isActiveRef.current = isActive
-    isHiddenRef.current = isHidden
     if (!terminalRef.current || disposedRef.current) return
     if (webglToggleTimerRef.current) clearTimeout(webglToggleTimerRef.current)
     webglToggleTimerRef.current = setTimeout(reconcileWebGL, 50)
@@ -228,9 +228,8 @@ export function useTerminal({
   const restoreActiveRender = useCallback(() => {
     const t = terminalRef.current
     if (!t || disposedRef.current) return
-    clearTextureAtlas()
     if (!performFit(false)) refreshVisibleRows()
-  }, [clearTextureAtlas, performFit, refreshVisibleRows])
+  }, [performFit, refreshVisibleRows])
   const clear = useCallback(() => { terminalRef.current?.clear() }, [])
   const getViewportSnapshot = useCallback(() => {
     const t = terminalRef.current
