@@ -362,11 +362,14 @@ button, input, select, textarea, optgroup, option {
   cursor: pointer !important;
 }
 
-/* IME composition view - follows theme accent */
+/* Keep uncommitted IME text visually continuous with the terminal line. xterm
+ * anchors this element at the pre-composition cursor, so an opaque terminal
+ * background masks that cursor while the right border shows the live caret. */
 .terminal-container .composition-view {
-  background: var(--accent) !important;
-  color: var(--bg-primary) !important;
-  padding: 0 2px !important;
+  background: var(--terminal-bg) !important;
+  color: var(--text-primary) !important;
+  border-right: 1px solid var(--cursor);
+  padding: 0 !important;
 }
 
 /* ============================================

@@ -71,6 +71,50 @@ test.describe('Terminal renderer policy', () => {
     await window.waitForSelector('[data-terminal-id]', { timeout: 5_000 })
   })
 
+  test('renders active IME composition as inline terminal text with a trailing caret', async ({ window }) => {
+    const terminalId = await firstTerminalId(window)
+    await activateTerminalPane(window, terminalId)
+
+    const appearance = await window.evaluate(async id => {
+      const pane = document.querySelector(`[data-terminal-id="${id}"]`)
+      const textarea = pane?.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement | null
+      const composition = pane?.querySelector('.composition-view') as HTMLElement | null
+      const terminal = pane?.querySelector('.xterm') as HTMLElement | null
+      if (!textarea || !composition || !terminal) {
+        throw new Error('Terminal IME elements are unavailable')
+      }
+
+      textarea.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }))
+      textarea.value = 'resume'
+      textarea.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'resume' }))
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      const style = getComputedStyle(composition)
+      const result = {
+        text: composition.textContent,
+        background: style.backgroundColor,
+        terminalBackground: getComputedStyle(terminal).backgroundColor,
+        paddingLeft: style.paddingLeft,
+        paddingRight: style.paddingRight,
+        caretWidth: style.borderRightWidth,
+        caretStyle: style.borderRightStyle,
+      }
+
+      textarea.dispatchEvent(new CompositionEvent('compositionend', { data: 'resume' }))
+      return result
+    }, terminalId)
+
+    expect(appearance).toEqual({
+      text: 'resume',
+      background: appearance.terminalBackground,
+      terminalBackground: appearance.terminalBackground,
+      paddingLeft: '0px',
+      paddingRight: '0px',
+      caretWidth: '1px',
+      caretStyle: 'solid',
+    })
+  })
+
   test('shows typed status across Automatic, Prefer GPU, and Compatibility', async ({ window }) => {
     const terminalId = await firstTerminalId(window)
     const markers = ['MC_POLICY_AUTOMATIC_913', 'MC_POLICY_GPU_913', 'MC_POLICY_DOM_913']
