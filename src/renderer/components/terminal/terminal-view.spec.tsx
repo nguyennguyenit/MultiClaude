@@ -48,7 +48,7 @@ describe('TerminalView activation render restore', () => {
 
     vi.advanceTimersByTime(100)
 
-    expect(terminalHook.restoreActiveRender).toHaveBeenCalledTimes(2)
+    expect(terminalHook.restoreActiveRender).toHaveBeenCalledTimes(1)
     expect(terminalHook.showCursor).toHaveBeenCalled()
   })
 
@@ -60,6 +60,20 @@ describe('TerminalView activation render restore', () => {
 
     expect(terminalHook.focus).toHaveBeenCalled()
     expect(terminalHook.restoreActiveRender).toHaveBeenCalled()
+    expect(terminalHook.showCursor).toHaveBeenCalled()
+  })
+
+  it('lets the visibility lifecycle own repaint when an active pane project is revealed', () => {
+    const view = render(<TerminalView terminalId="term-1" isActive={false} hidden />)
+    vi.clearAllMocks()
+
+    view.rerender(<TerminalView terminalId="term-1" isActive hidden={false} />)
+
+    expect(terminalHook.focus).toHaveBeenCalled()
+    expect(terminalHook.restoreActiveRender).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(100)
+
     expect(terminalHook.showCursor).toHaveBeenCalled()
   })
 
