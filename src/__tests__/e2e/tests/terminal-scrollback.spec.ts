@@ -32,6 +32,79 @@ async function getTerminalDebugSnapshot(
 }
 
 test.describe('Terminal Scrollback', () => {
+  test('keeps the custom scrollbar thumb synchronized with top, bottom, and pointer drag', async ({ window }) => {
+    const [project] = mockProjects
+    await injectMockProject(window, [project])
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+    await addTerminal(window)
+
+    const terminalId = await getActiveTerminalId(window)
+    expect(terminalId).toBeTruthy()
+    if (!terminalId) throw new Error('Expected an active terminal')
+
+    await window.waitForSelector(`[data-terminal-id="${terminalId}"] .xterm-scrollable-element`)
+    await window.evaluate((id) => {
+      const appWindow = window as typeof window & {
+        electron: { terminal: { write: (terminalId: string, data: string) => void } }
+      }
+      const command = navigator.userAgent.includes('Windows')
+        ? 'powershell -NoProfile -Command "1..1000"\r'
+        : 'seq 1 1000\n'
+      appWindow.electron.terminal.write(id, command)
+    }, terminalId)
+
+    await expect.poll(async () => {
+      return (await getTerminalDebugSnapshot(window, terminalId))?.baseY ?? 0
+    }, { timeout: 5_000 }).toBeGreaterThan(700)
+
+    const scrollbar = window.locator(
+      `[data-terminal-id="${terminalId}"] .xterm-scrollable-element > .scrollbar.vertical`
+    )
+    const thumb = scrollbar.locator('.slider')
+    await expect(thumb).toBeVisible()
+
+    await window.getByRole('button', { name: 'Scroll to top' }).click()
+    await expect.poll(async () => {
+      return (await getTerminalDebugSnapshot(window, terminalId))?.viewportY
+    }).toBe(0)
+
+    const topTrackBox = await scrollbar.boundingBox()
+    const topThumbBox = await thumb.boundingBox()
+    expect(topTrackBox).not.toBeNull()
+    expect(topThumbBox).not.toBeNull()
+    expect(Math.abs((topThumbBox?.y ?? 0) - (topTrackBox?.y ?? 0))).toBeLessThan(2)
+
+    await window.getByRole('button', { name: 'Scroll to bottom' }).click()
+    const bottomSnapshot = await getTerminalDebugSnapshot(window, terminalId)
+    expect(bottomSnapshot?.viewportY).toBe(bottomSnapshot?.baseY)
+
+    await expect.poll(async () => {
+      const trackBox = await scrollbar.boundingBox()
+      const thumbBox = await thumb.boundingBox()
+      if (!trackBox || !thumbBox) return Number.POSITIVE_INFINITY
+      return Math.abs(
+        (thumbBox.y + thumbBox.height) - (trackBox.y + trackBox.height)
+      )
+    }).toBeLessThan(2)
+
+    const bottomTrackBox = await scrollbar.boundingBox()
+    const bottomThumbBox = await thumb.boundingBox()
+
+    if (!bottomTrackBox || !bottomThumbBox) throw new Error('Expected scrollbar geometry')
+    const pointerX = bottomThumbBox.x + bottomThumbBox.width / 2
+    await window.mouse.move(pointerX, bottomThumbBox.y + bottomThumbBox.height / 2)
+    await window.mouse.down()
+    await window.mouse.move(pointerX, bottomTrackBox.y + bottomThumbBox.height / 2, { steps: 8 })
+    await window.mouse.up()
+
+    await expect.poll(async () => {
+      return (await getTerminalDebugSnapshot(window, terminalId))?.viewportY
+    }).toBe(0)
+    const draggedThumbBox = await thumb.boundingBox()
+    expect(draggedThumbBox).not.toBeNull()
+    expect(Math.abs((draggedThumbBox?.y ?? 0) - bottomTrackBox.y)).toBeLessThan(2)
+  })
+
   test('keeps the reading position while the active terminal streams output', async ({ window }) => {
     const [project] = mockProjects
     await injectMockProject(window, [project])

@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { TerminalScrollMachine } from '../../utils/terminal-scroll-machine'
+import type { UserScrollIntent } from '../../utils/terminal-scroll-utils'
 
 vi.mock('@xterm/xterm')
 
@@ -28,6 +29,56 @@ describe('useTerminalScroll', () => {
   it.todo('resumes following when user scrolls back to bottom')
   it.todo('handles rapid writes without scroll jumping (write guard pattern)')
   it.todo('restores hidden viewport intent on show')
+
+  it('publishes the top intent before xterm emits a programmatic scroll event', () => {
+    const scrollMachine = new TerminalScrollMachine()
+    scrollMachine.readingViewportIntent = { viewportY: 40, stickToBottom: false }
+    mockTerminalInstance.buffer.active = { viewportY: 40, baseY: 100 }
+    let intentDuringScroll: UserScrollIntent | null = scrollMachine.readingViewportIntent
+    mockTerminalInstance.scrollToLine.mockImplementationOnce(() => {
+      intentDuringScroll = scrollMachine.readingViewportIntent
+      mockTerminalInstance.buffer.active.viewportY = 0
+    })
+
+    const { result } = renderHook(() => useTerminalScroll({
+      terminalRef: { current: mockTerminalInstance } as never,
+      surfaceRef: { current: null } as never,
+      disposedRef: { current: false },
+      isHiddenRef: { current: false },
+      scrollMachineRef: { current: scrollMachine },
+      userViewportInteractingRef: { current: false },
+      processKeyboardEnhancementOutput: data => data,
+    }))
+
+    act(() => result.current.scrollToTop())
+
+    expect(intentDuringScroll).toEqual({ viewportY: 0, stickToBottom: false })
+  })
+
+  it('publishes the bottom intent before xterm emits a programmatic scroll event', () => {
+    const scrollMachine = new TerminalScrollMachine()
+    scrollMachine.readingViewportIntent = { viewportY: 0, stickToBottom: false }
+    mockTerminalInstance.buffer.active = { viewportY: 0, baseY: 100 }
+    let intentDuringScroll: UserScrollIntent | null = scrollMachine.readingViewportIntent
+    mockTerminalInstance.scrollToBottom.mockImplementationOnce(() => {
+      intentDuringScroll = scrollMachine.readingViewportIntent
+      mockTerminalInstance.buffer.active.viewportY = 100
+    })
+
+    const { result } = renderHook(() => useTerminalScroll({
+      terminalRef: { current: mockTerminalInstance } as never,
+      surfaceRef: { current: null } as never,
+      disposedRef: { current: false },
+      isHiddenRef: { current: false },
+      scrollMachineRef: { current: scrollMachine },
+      userViewportInteractingRef: { current: false },
+      processKeyboardEnhancementOutput: data => data,
+    }))
+
+    act(() => result.current.scrollToBottom())
+
+    expect(intentDuringScroll).toEqual({ viewportY: null, stickToBottom: true })
+  })
 
   it('preserves reading position during streaming after xterm parses live output', async () => {
     const finishWrites: Array<() => void> = []

@@ -211,15 +211,19 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal) return
 
-    withInstantTerminalScroll(terminal, () => terminal.scrollToLine(0))
     const scrollMachine = scrollMachineRef.current
-    scrollMachine.hiddenViewportIntent = createUserScrollIntent(
+    const targetIntent = createUserScrollIntent(
       terminal.buffer.active.baseY,
-      terminal.buffer.active.viewportY,
+      0,
       TERMINAL_SCROLL_THRESHOLD
     )
-    scrollMachine.pendingUserScrollIntent = scrollMachine.hiddenViewportIntent
-    scrollMachine.readingViewportIntent = scrollMachine.hiddenViewportIntent
+    // Publish the target before xterm emits onScroll. Otherwise the listener
+    // can reconcile the custom scrollbar back to the previous reading intent
+    // while the buffer is already moving to the requested position.
+    scrollMachine.hiddenViewportIntent = targetIntent
+    scrollMachine.pendingUserScrollIntent = targetIntent
+    scrollMachine.readingViewportIntent = targetIntent
+    withInstantTerminalScroll(terminal, () => terminal.scrollToLine(0))
     syncViewportState(terminal.buffer.active, isHiddenRef.current ? scrollMachine.hiddenViewportIntent : null)
   }, [isHiddenRef, scrollMachineRef, syncViewportState, terminalRef])
 
@@ -227,15 +231,16 @@ export function useTerminalScroll(params: UseTerminalScrollParams): UseTerminalS
     const terminal = terminalRef.current
     if (!terminal) return
 
-    withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
     const scrollMachine = scrollMachineRef.current
-    scrollMachine.hiddenViewportIntent = createUserScrollIntent(
+    const targetIntent = createUserScrollIntent(
       terminal.buffer.active.baseY,
-      terminal.buffer.active.viewportY,
+      terminal.buffer.active.baseY,
       TERMINAL_SCROLL_THRESHOLD
     )
-    scrollMachine.pendingUserScrollIntent = scrollMachine.hiddenViewportIntent
-    scrollMachine.readingViewportIntent = scrollMachine.hiddenViewportIntent
+    scrollMachine.hiddenViewportIntent = targetIntent
+    scrollMachine.pendingUserScrollIntent = targetIntent
+    scrollMachine.readingViewportIntent = targetIntent
+    withInstantTerminalScroll(terminal, () => terminal.scrollToBottom())
     syncViewportState(terminal.buffer.active, isHiddenRef.current ? scrollMachine.hiddenViewportIntent : null)
   }, [isHiddenRef, scrollMachineRef, syncViewportState, terminalRef])
 
