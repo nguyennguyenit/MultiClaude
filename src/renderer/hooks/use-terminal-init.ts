@@ -333,7 +333,8 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
           clientX: event.clientX,
           viewportClientWidth: viewportElement.clientWidth,
           viewportOffsetWidth: viewportElement.offsetWidth,
-          viewportRight: viewportElement.getBoundingClientRect().right
+          viewportRight: viewportElement.getBoundingClientRect().right,
+          eventPath: event.composedPath()
         })) return
 
         markUserViewportInteraction(USER_SCROLL_DRAG_GRACE)

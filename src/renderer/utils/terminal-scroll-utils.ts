@@ -39,13 +39,23 @@ export function isPointerOnViewportScrollbar({
   clientX,
   viewportClientWidth,
   viewportOffsetWidth,
-  viewportRight
+  viewportRight,
+  eventPath = []
 }: {
   clientX: number
   viewportClientWidth: number
   viewportOffsetWidth: number
   viewportRight: number
+  eventPath?: readonly EventTarget[]
 }): boolean {
+  const isCustomVerticalScrollbar = eventPath.some((target) => {
+    const classList = (target as EventTarget & {
+      classList?: Pick<DOMTokenList, 'contains'>
+    }).classList
+    return classList?.contains('scrollbar') === true && classList.contains('vertical')
+  })
+  if (isCustomVerticalScrollbar) return true
+
   const scrollbarWidth = viewportOffsetWidth - viewportClientWidth
   if (scrollbarWidth <= 0) return false
 

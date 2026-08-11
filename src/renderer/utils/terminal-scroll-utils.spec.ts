@@ -147,6 +147,22 @@ describe('terminal-scroll-utils', () => {
     })).toBe(false)
   })
 
+  it('recognizes xterm custom vertical scrollbar pointer events without a native gutter', () => {
+    const customScrollbar = {
+      classList: {
+        contains: (className: string) => className === 'scrollbar' || className === 'vertical'
+      }
+    } as unknown as EventTarget
+
+    expect(isPointerOnViewportScrollbar({
+      clientX: 400,
+      viewportClientWidth: 400,
+      viewportOffsetWidth: 400,
+      viewportRight: 400,
+      eventPath: [customScrollbar]
+    })).toBe(true)
+  })
+
   it('keeps bottom-following panes pinned to live output after fit changes the viewport size', () => {
     expect(resolveFitViewportRestoreTarget({
       restoreViewport: true,
