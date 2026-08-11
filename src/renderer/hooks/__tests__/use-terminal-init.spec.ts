@@ -9,23 +9,41 @@ import { TerminalScrollMachine } from '../../utils/terminal-scroll-machine'
 const harness = vi.hoisted(() => ({
   terminals: [] as Array<Record<string, unknown>>,
   surfaces: [] as Array<Record<string, ReturnType<typeof vi.fn>>>,
+  viewports: [] as HTMLElement[],
+  scrollbars: [] as HTMLElement[],
+  scrollCallbacks: [] as Array<() => void>,
 }))
 
 vi.mock('@xterm/xterm', () => ({
-  Terminal: vi.fn(function TerminalMock() {
+  Terminal: vi.fn(function TerminalMock(options: { smoothScrollDuration?: number } = {}) {
+    const terminalElement = document.createElement('div')
+    const viewport = document.createElement('div')
+    const scrollbar = document.createElement('div')
+    viewport.className = 'xterm-scrollable-element'
+    scrollbar.className = 'scrollbar vertical'
+    viewport.append(scrollbar)
+    terminalElement.append(viewport)
     const terminal = {
       loadAddon: vi.fn(),
       write: vi.fn((_data: string, callback?: () => void) => callback?.()),
       attachCustomKeyEventHandler: vi.fn(),
-      onScroll: vi.fn(() => ({ dispose: vi.fn() })),
-      scrollToLine: vi.fn(),
+      onScroll: vi.fn((callback: () => void) => {
+        harness.scrollCallbacks.push(callback)
+        return { dispose: vi.fn() }
+      }),
+      scrollToLine: vi.fn((viewportY: number) => {
+        terminal.buffer.active.viewportY = viewportY
+      }),
       buffer: { active: { baseY: 0, viewportY: 0 } },
-      element: null,
+      options,
+      element: terminalElement,
       textarea: null,
       cols: 80,
       rows: 24,
     }
     harness.terminals.push(terminal)
+    harness.viewports.push(viewport)
+    harness.scrollbars.push(scrollbar)
     return terminal
   }),
 }))
@@ -113,6 +131,9 @@ describe('useTerminalInit session ownership', () => {
     vi.useFakeTimers()
     harness.terminals.length = 0
     harness.surfaces.length = 0
+    harness.viewports.length = 0
+    harness.scrollbars.length = 0
+    harness.scrollCallbacks.length = 0
     resetTerminalOutputDispatcherForTests()
   })
 
@@ -174,5 +195,62 @@ describe('useTerminalInit session ownership', () => {
 
     resumeAndFlush('same-id', tokenB)
     expect(receivedByB).toEqual(['B-live'])
+  })
+
+  it('preserves upward scrollbar intent when live output transiently reaches bottom', () => {
+    vi.stubGlobal('PointerEvent', MouseEvent)
+    vi.stubGlobal('electron', {
+      terminal: {
+        resize: vi.fn(),
+        write: vi.fn(),
+        getSnapshot: vi.fn(),
+      },
+      app: { openExternal: vi.fn() },
+    })
+
+    const params = makeParams(Symbol('scroll-drag'))
+    params.markUserViewportInteraction.mockImplementation((_durationMs, direction) => {
+      params.userViewportInteractingRef.current = true
+      params.scrollMachineRef.current.userScrollDirection = direction ?? null
+    })
+    params.clearUserViewportInteraction.mockImplementation(() => {
+      params.userViewportInteractingRef.current = false
+      params.scrollMachineRef.current.userScrollDirection = null
+    })
+
+    const { result } = renderHook(() => useTerminalInit(params))
+    act(() => result.current.initTerminal())
+
+    const terminal = harness.terminals[0] as {
+      buffer: { active: { baseY: number; viewportY: number } }
+      scrollToLine: ReturnType<typeof vi.fn>
+    }
+    terminal.buffer.active = { baseY: 100, viewportY: 40 }
+    params.scrollMachineRef.current.readingViewportIntent = {
+      viewportY: 40,
+      stickToBottom: false,
+    }
+
+    act(() => {
+      harness.scrollbars[0].dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 400,
+        clientY: 100,
+      }))
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 400,
+        clientY: 50,
+      }))
+    })
+
+    terminal.buffer.active.viewportY = 100
+    act(() => harness.scrollCallbacks[0]())
+
+    expect(params.scrollMachineRef.current.readingViewportIntent).toEqual({
+      viewportY: 40,
+      stickToBottom: false,
+    })
+    expect(terminal.scrollToLine).toHaveBeenLastCalledWith(40)
   })
 })

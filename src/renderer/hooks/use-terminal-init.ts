@@ -309,6 +309,7 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
     ) as HTMLElement | null
     if (viewportElement) {
       const viewportListeners: ViewportEventListener[] = []
+      let scrollbarDragLastClientY: number | null = null
       const addViewportListener = (
         target: EventTarget,
         type: string,
@@ -337,10 +338,30 @@ export function useTerminalInit(params: UseTerminalInitParams): UseTerminalInitR
           eventPath: event.composedPath()
         })) return
 
+        scrollbarDragLastClientY = event.clientY
         markUserViewportInteraction(USER_SCROLL_DRAG_GRACE)
       })
-      addViewportListener(window, 'pointerup', clearUserViewportInteraction)
-      addViewportListener(window, 'pointercancel', clearUserViewportInteraction)
+      addViewportListener(window, 'pointermove', (event) => {
+        if (!(event instanceof PointerEvent) || scrollbarDragLastClientY === null) return
+
+        const deltaY = event.clientY - scrollbarDragLastClientY
+        scrollbarDragLastClientY = event.clientY
+        if (deltaY === 0) return
+
+        // Capture drag direction before xterm handles the same pointermove and
+        // emits scroll events. This lets syncScrollPosition distinguish an
+        // upward thumb drag from a transient write-induced jump to live bottom.
+        markUserViewportInteraction(
+          USER_SCROLL_DRAG_GRACE,
+          deltaY > 0 ? 'down' : 'up'
+        )
+      }, true)
+      const clearScrollbarDrag = () => {
+        scrollbarDragLastClientY = null
+        clearUserViewportInteraction()
+      }
+      addViewportListener(window, 'pointerup', clearScrollbarDrag)
+      addViewportListener(window, 'pointercancel', clearScrollbarDrag)
       addViewportListener(viewportElement, 'touchstart', () => markUserViewportInteraction(USER_SCROLL_DRAG_GRACE))
       addViewportListener(viewportElement, 'touchend', clearUserViewportInteraction)
       addViewportListener(viewportElement, 'touchcancel', clearUserViewportInteraction)

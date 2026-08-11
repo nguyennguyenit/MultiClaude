@@ -105,6 +105,86 @@ test.describe('Terminal Scrollback', () => {
     expect(Math.abs((draggedThumbBox?.y ?? 0) - bottomTrackBox.y)).toBeLessThan(2)
   })
 
+  test('keeps an upward custom-scrollbar drag monotonic while output streams', async ({ window }) => {
+    const [project] = mockProjects
+    await injectMockProject(window, [project])
+    await window.waitForTimeout(WAIT_TIMES.STANDARD)
+    await addTerminal(window)
+
+    const terminalId = await getActiveTerminalId(window)
+    expect(terminalId).toBeTruthy()
+    if (!terminalId) throw new Error('Expected an active terminal')
+
+    await window.waitForSelector(`[data-terminal-id="${terminalId}"] .xterm-scrollable-element`)
+    await window.evaluate((id) => {
+      const appWindow = window as typeof window & {
+        electron: { terminal: { write: (terminalId: string, data: string) => void } }
+      }
+      const lineEnding = navigator.userAgent.includes('Windows') ? '\r' : '\n'
+      const command = `node -e "let i=0; const timer=setInterval(() => { for(let j=0;j<20;j++) console.log(i*20+j); if(++i===160) clearInterval(timer) }, 40)"${lineEnding}`
+      appWindow.electron.terminal.write(id, command)
+    }, terminalId)
+
+    await expect.poll(async () => {
+      return (await getTerminalDebugSnapshot(window, terminalId))?.baseY ?? 0
+    }, { timeout: 5_000 }).toBeGreaterThan(150)
+
+    const scrollbar = window.locator(
+      `[data-terminal-id="${terminalId}"] .xterm-scrollable-element > .scrollbar.vertical`
+    )
+    const thumb = scrollbar.locator('.slider')
+    await expect(thumb).toBeVisible()
+
+    const trackBox = await scrollbar.boundingBox()
+    const thumbBox = await thumb.boundingBox()
+    if (!trackBox || !thumbBox) throw new Error('Expected scrollbar geometry')
+
+    const pointerX = thumbBox.x + thumbBox.width / 2
+    const startY = thumbBox.y + thumbBox.height / 2
+    const endY = trackBox.y + thumbBox.height / 2
+    const viewportSamplesPromise = window.evaluate(async (id) => {
+      const debugWindow = window as typeof window & {
+        __TERMINAL_DEBUG__?: Record<string, { getSnapshot: () => TerminalDebugSnapshot }>
+      }
+      const samples: TerminalDebugSnapshot[] = []
+      const startedAt = performance.now()
+      while (performance.now() - startedAt < 1_000) {
+        const snapshot = debugWindow.__TERMINAL_DEBUG__?.[id]?.getSnapshot()
+        if (snapshot) samples.push(snapshot)
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      }
+      return samples
+    }, terminalId)
+
+    await window.mouse.move(pointerX, startY)
+    await window.mouse.down()
+    for (let step = 1; step <= 12; step += 1) {
+      const pointerY = startY + ((endY - startY) * step) / 12
+      await window.mouse.move(pointerX, pointerY)
+      await window.waitForTimeout(50)
+    }
+    await window.mouse.up()
+
+    const viewportSamples = await viewportSamplesPromise
+    const firstReadingIndex = viewportSamples.findIndex(
+      sample => sample.baseY - sample.viewportY > 20
+    )
+    expect(firstReadingIndex).toBeGreaterThanOrEqual(0)
+
+    const returnedToBottom = viewportSamples
+      .slice(firstReadingIndex + 1)
+      .find(sample => sample.baseY - sample.viewportY <= 5)
+    expect(
+      returnedToBottom,
+      `Expected upward drag to stay away from live bottom: ${viewportSamples
+        .map(sample => `${sample.viewportY}/${sample.baseY}`)
+        .join(', ')}`
+    ).toBeUndefined()
+
+    const finalSnapshot = await getTerminalDebugSnapshot(window, terminalId)
+    expect(finalSnapshot?.readingViewportIntent?.stickToBottom).toBe(false)
+  })
+
   test('keeps the reading position while the active terminal streams output', async ({ window }) => {
     const [project] = mockProjects
     await injectMockProject(window, [project])
