@@ -14,6 +14,7 @@ import {
 } from '@shared/constants'
 import type { Terminal, TerminalSession, WindowsShell, AgentType, AgentProvider, ShellInfo, WslInfo, CreateTerminalOptions } from '@shared/types'
 import type { TerminalOutputChunk, TerminalSnapshot } from '@shared/types'
+import { isPrimaryDeviceAttributesResponse } from '@shared/utils/terminal-protocol'
 import { Utf8TailBuffer } from '@shared/utils/utf8-tail'
 import { detectMacosShells } from './macos-shell-detector'
 import { detectWsl } from './wsl-detector'
@@ -91,6 +92,25 @@ export class TerminalManager extends EventEmitter {
         term.suspended = false
         // Emit event so renderer can refresh if needed
         this.emit('terminal-resumed', { terminalId: term.id })
+      }
+    })
+  }
+
+  /**
+   * Let the canonical headless terminal answer DA1 even before the renderer
+   * mounts. Otherwise the parser consumes the query while snapshot
+   * serialization drops it, so the shell never sees a response.
+   */
+  private attachHeadlessDeviceAttributesResponder(term: PTYProcess, headlessTerm: HeadlessTerminal): void {
+    headlessTerm.onData((data) => {
+      // Keep color, cursor-position, and other optional replies owned by the
+      // themed renderer. Only DA1 is required before that renderer can mount.
+      if (!isPrimaryDeviceAttributesResponse(data)) return
+      if (term.destroying || term.suspended || this.systemSuspended) return
+      try {
+        term.pty.write(data)
+      } catch (error) {
+        console.error(`[terminal-manager] Protocol response failed for ${term.id}:`, (error as Error).message)
       }
     })
   }
@@ -528,6 +548,7 @@ export class TerminalManager extends EventEmitter {
       headlessTerm.loadAddon(serializeAddon as unknown as Parameters<typeof headlessTerm.loadAddon>[0])
       termProcess.headlessTerm = headlessTerm
       termProcess.serializeAddon = serializeAddon
+      this.attachHeadlessDeviceAttributesResponder(termProcess, headlessTerm)
     } catch (err) {
       // Non-fatal: headless terminal failed to initialize. PTY continues without snapshot support.
       console.error(`[terminal-manager] Failed to init headless terminal for ${id}:`, (err as Error).message)
@@ -603,6 +624,10 @@ export class TerminalManager extends EventEmitter {
       console.debug(`[terminal-manager] Skipping write on destroying terminal: ${id}`)
       return false
     }
+    // The canonical headless terminal owns DA1 so startup does not depend on
+    // renderer timing. Ignore only that duplicate; optional replies remain
+    // renderer-owned because they can depend on the active theme and viewport.
+    if (term.headlessTerm && isPrimaryDeviceAttributesResponse(data)) return true
     try {
       this.processInputForAgentDetection(term, data)
       term.pty.write(data)
@@ -792,6 +817,7 @@ export class TerminalManager extends EventEmitter {
       try { proc.headlessTerm.dispose() } catch { /* ignore */ }
       proc.headlessTerm = freshTerm
       proc.serializeAddon = freshAddon
+      this.attachHeadlessDeviceAttributesResponder(proc, freshTerm)
     })
     proc.mutationQueue = rebuild.catch((err) => {
       console.warn('[terminal-manager] rebuildHeadless failed', {

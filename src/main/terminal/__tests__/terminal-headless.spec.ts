@@ -89,6 +89,28 @@ describe('TerminalManager headless mirror', () => {
     expect(snapshot).toContain('hello')
   })
 
+  it('returns primary device attributes generated during headless startup', async () => {
+    const term = manager.create()
+
+    mockPty.__emitData('\x1b[0c')
+    await manager.flushHeadless(term.id)
+
+    expect(mockPty.write).toHaveBeenCalledWith('\x1b[?1;2c')
+  })
+
+  it('keeps the device-attributes responder after rebuilding the headless mirror', async () => {
+    const term = manager.create()
+    mockPty.__emitData('before rebuild\r\n')
+    await manager.flushHeadless(term.id)
+    await manager.rebuildHeadless(term.id)
+    mockPty.write.mockClear()
+
+    mockPty.__emitData('\x1b[0c')
+    await manager.flushHeadless(term.id)
+
+    expect(mockPty.write).toHaveBeenCalledWith('\x1b[?1;2c')
+  })
+
   it('resizes headless Terminal in canonical mutation order when PTY is resized', async () => {
     const term = manager.create()
     const proc = (manager as unknown as { terminals: Map<string, { headlessTerm: import('@xterm/headless').Terminal }> })

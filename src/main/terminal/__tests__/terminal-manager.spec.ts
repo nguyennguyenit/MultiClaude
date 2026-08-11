@@ -112,6 +112,38 @@ describe('TerminalManager', () => {
       expect(mockPty.write).toHaveBeenCalledWith('test')
     })
 
+    it('suppresses duplicate renderer device-attributes replies while headless owns them', () => {
+      const term = manager.create()
+
+      const result = manager.write(term.id, '\x1b[?1;2c')
+
+      expect(result).toBe(true)
+      expect(mockPty.write).not.toHaveBeenCalled()
+    })
+
+    it('keeps optional protocol replies owned by the renderer', () => {
+      const term = manager.create()
+
+      const result = manager.write(term.id, '\x1b]11;rgb:1a1a/1b1b/2626\x1b\\')
+
+      expect(result).toBe(true)
+      expect(mockPty.write).toHaveBeenCalledWith('\x1b]11;rgb:1a1a/1b1b/2626\x1b\\')
+    })
+
+    it('forwards renderer protocol replies when the headless backend is unavailable', () => {
+      const term = manager.create()
+      const proc = (manager as unknown as {
+        terminals: Map<string, { headlessTerm?: { dispose: () => void } }>
+      }).terminals.get(term.id)!
+      proc.headlessTerm?.dispose()
+      proc.headlessTerm = undefined
+
+      const result = manager.write(term.id, '\x1b[?1;2c')
+
+      expect(result).toBe(true)
+      expect(mockPty.write).toHaveBeenCalledWith('\x1b[?1;2c')
+    })
+
     it('marks a terminal as Claude mode when the user launches claude manually', () => {
       const term = manager.create()
 
